@@ -1,6 +1,8 @@
 # Hifumi OS
 This is the OS for 2024 OS Competition, HIT team **ᕕ(◠ڼ◠)ᕗ旺仔**.  
 Based on rCore-Tutorial-v3 ch6(file system) branch, as adding tests to file system is simpler.
+** To clone this repo FULLY(with submodules), run `git clone --recursive https://github.com/KevinLiu485/HifumiOS.git`**  
+If you forget to clone recursively, run `git submodule init` and `git submodule update` to clone submodule seperately.
 # Team members & Tasks (暂定)
 - Kevin Liu: Kernel
 - 蒋蒋: IO, Linux src
@@ -20,7 +22,7 @@ HifumiOS
 |  \\简易文件系统, 跑测例更方便
 |--os
 |  \\Kernel
-|--testsuits-for-oskernel
+|--testsuits-for-oskernel(submodule)
 |  \\比赛官方测例仓库作为submodule, 有独立git
 |--user
    \\rCore用户测例
@@ -32,7 +34,7 @@ HifumiOS
 - After that, continue developing on your branch until all tests passed. Push your local to Github periodically by run `git push`.
 - Finally, merge main with your branch by: 
   - `git pull`.
-  - `git checkout main`, otherwise **main** will fall behind your branch.
+  - `git checkout master`, otherwise **main** will fall behind your branch.
   - `git merge <your-branch-name>`. You may need to resolve conflicts.
 # Naming instructions
 Generally, stay the same with existing name style.
@@ -41,5 +43,6 @@ Generally, stay the same with existing name style.
 - For a brief commit, run `git commit -am 'Commit message'`. `-a` stage all changes and `-m` accepts a brief commit message.
 - Make sure that `Cargo.lock` is not included by `.gitignore`, i.e. always track `Cargo.lock`, as `cargo` may break this rule.
 > However, `Cargo.lock` can sometimes be a merge conflict
+- If you forget to clone submodule recursively, run `git submodule init` and `git submodule update` to clone submodule seperately.
 # Relative repositories
 - 资料仓库：https://github.com/KevinLiu485/OS-Competition-Material/tree/main
