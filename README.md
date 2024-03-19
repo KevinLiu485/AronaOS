@@ -1,5 +1,6 @@
 # Hifumi OS
-This is the OS for 2024 OS Competition, HIT team **ᕕ(◠ڼ◠)ᕗ旺仔**.
+This is the OS for 2024 OS Competition, HIT team **ᕕ(◠ڼ◠)ᕗ旺仔**.  
+Based on rCore-Tutorial-v3 ch6(file system) branch, as adding tests to file system is simpler.
 # Team members & Tasks (暂定)
 - Kevin Liu: Kernel
 - 蒋蒋: IO, Linux src
