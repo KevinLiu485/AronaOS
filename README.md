@@ -5,7 +5,7 @@ Based on rCore-Tutorial-v3 ch6(file system) branch, as adding tests to file syst
 If you forget to clone recursively, run `git submodule init` and `git submodule update` to clone submodule seperately.
 # Team members & Tasks (暂定)
 - Kevin Liu: Kernel
-- 蒋蒋: IO, Linux src
+- 降星驰: IO, Linux src
 - lxh: Kernel
 # Developing instructions
 - DO Write good commit messages
