@@ -13,6 +13,13 @@ If you forget to clone recursively, run `git submodule init` and `git submodule 
   - 首先，编写测试描述功能需求，测试预期失败。
   - 然后，编写初始代码（不用考虑性能和精简）完成功能并使测试通过。可能在过程中会进一步细化功能，增加测试。
   - 最后，重构代码（对于rust，尽量用函数式编程风格），使其更好地符合设计原则，仍然保持测试通过。
+
+# 敏捷开发宣言
+- 个体和互动 高于 流程和工具
+- 工作的软件 高于 详尽的文档
+- 客户合作 高于 合同谈判
+- 响应变化 高于 遵循计划
+
 # Repository structure
 ```
 HifumiOS
