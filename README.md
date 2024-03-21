@@ -1,7 +1,7 @@
-# Hifumi OS
+# ARONA OS
 This is the OS for 2024 OS Competition, HIT team **ᕕ(◠ڼ◠)ᕗ旺仔**.  
 Based on rCore-Tutorial-v3 ch6(file system) branch, as adding tests to file system is simpler.  
-**To clone this repo FULLY(with submodules), run `git clone --recursive https://github.com/KevinLiu485/HifumiOS.git`**  
+**To clone this repo FULLY(with submodules), run `git clone --recursive https://github.com/KevinLiu485/AronaOS.git`**  
 If you forget to clone recursively, run `git submodule init` and `git submodule update` to clone submodule seperately.
 # Team members & Tasks (暂定)
 - Kevin Liu: Kernel
