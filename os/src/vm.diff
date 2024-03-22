@@ -1,0 +1,910 @@
+diff --git a/os/Cargo.toml b/os/Cargo.toml
+index 9c2a7d30..b6a0de29 100644
+--- a/os/Cargo.toml
++++ b/os/Cargo.toml
+@@ -17,3 +17,7 @@ sbi-rt = { version = "0.0.2", features = ["legacy"] }
+ 
+ [profile.release]
+ debug = true
++
++[features]
++default = []
++huge_page = [] 
+diff --git a/os/Makefile b/os/Makefile
+index 460f6f22..4185f05d 100644
+--- a/os/Makefile
++++ b/os/Makefile
+@@ -1,6 +1,7 @@
+ # Building
+ TARGET := riscv64gc-unknown-none-elf
+-MODE := release
++#MODE := release
++MODE := debug
+ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
+ KERNEL_BIN := $(KERNEL_ELF).bin
+ DISASM_TMP := target/$(TARGET)/$(MODE)/asm
+@@ -14,6 +15,9 @@ BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+ ifeq ($(MODE), release)
+ 	MODE_ARG := --release
+ endif
++ifeq ($(MODE), debug)
++    MODE_ARG := 
++endif 
+ 
+ # KERNEL ENTRY
+ KERNEL_ENTRY_PA := 0x80200000
+diff --git a/os/src/boards/qemu.rs b/os/src/boards/qemu.rs
+index f1f4e563..a4f08c88 100644
+--- a/os/src/boards/qemu.rs
++++ b/os/src/boards/qemu.rs
+@@ -1,7 +1,10 @@
+ //! Constants used in rCore for qemu
+ 
++use crate::config::KERNEL_BASE;
++
+ pub const CLOCK_FREQ: usize = 12500000;
+-pub const MEMORY_END: usize = 0x8800_0000;
++//pub const MEMORY_END: usize = 0x8800_0000;
++pub const MEMORY_END: usize = KERNEL_BASE + 0x9f00_0000;
+ 
+ pub const MMIO: &[(usize, usize)] = &[
+     (0x0010_0000, 0x00_2000), // VIRT_TEST/RTC  in virt machine
+diff --git a/os/src/config.rs b/os/src/config.rs
+index 8c3c88fe..3e05c504 100644
+--- a/os/src/config.rs
++++ b/os/src/config.rs
+@@ -5,12 +5,14 @@ pub const KERNEL_STACK_SIZE: usize = 4096 * 2;
+ pub const KERNEL_HEAP_SIZE: usize = 0x30_0000;
+ pub const PAGE_SIZE: usize = 0x1000;
+ pub const PAGE_SIZE_BITS: usize = 0xc;
++pub const KERNEL_BASE: usize = 0xffff_ffc0_0000_0000;
++pub const USER_MAX_VA: usize = 0x0000_003f_ffff_ffff;
++pub const KERNEL_MAX_VA: usize = usize::MAX;
+ 
+-pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
+-pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
++pub const TRAP_CONTEXT: usize = USER_MAX_VA - PAGE_SIZE + 1;
+ /// Return (bottom, top) of a kernel stack in kernel space.
+ pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
+-    let top = TRAMPOLINE - app_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
++    let top = KERNEL_MAX_VA - app_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
+     let bottom = top - KERNEL_STACK_SIZE;
+     (bottom, top)
+ }
+diff --git a/os/src/entry.asm b/os/src/entry.asm
+deleted file mode 100644
+index 3a9990f9..00000000
+--- a/os/src/entry.asm
++++ /dev/null
+@@ -1,12 +0,0 @@
+-    .section .text.entry
+-    .globl _start
+-_start:
+-    la sp, boot_stack_top
+-    call rust_main
+-
+-    .section .bss.stack
+-    .globl boot_stack_lower_bound
+-boot_stack_lower_bound:
+-    .space 4096 * 16
+-    .globl boot_stack_top
+-boot_stack_top:
+\ No newline at end of file
+diff --git a/os/src/linker-qemu.ld b/os/src/linker-qemu.ld
+index 5baafbd0..1f108fb5 100644
+--- a/os/src/linker-qemu.ld
++++ b/os/src/linker-qemu.ld
+@@ -1,6 +1,7 @@
+ OUTPUT_ARCH(riscv)
+ ENTRY(_start)
+-BASE_ADDRESS = 0x80200000;
++/* BASE_ADDRESS = 0x80200000; */
++BASE_ADDRESS = 0xffffffc080200000;
+ 
+ SECTIONS
+ {
+diff --git a/os/src/main.rs b/os/src/main.rs
+index 80165901..2d70b0d2 100644
+--- a/os/src/main.rs
++++ b/os/src/main.rs
+@@ -16,7 +16,6 @@
+ //! userspace.
+ 
+ #![deny(missing_docs)]
+-#![deny(warnings)]
+ #![no_std]
+ #![no_main]
+ #![feature(panic_info_message)]
+@@ -43,7 +42,10 @@ pub mod task;
+ mod timer;
+ pub mod trap;
+ 
+-core::arch::global_asm!(include_str!("entry.asm"));
++use core::arch::asm;
++use config::KERNEL_BASE;
++
++core::arch::global_asm!(include_str!("entry.S"));
+ core::arch::global_asm!(include_str!("link_app.S"));
+ 
+ /// clear BSS segment
+@@ -58,6 +60,19 @@ fn clear_bss() {
+     }
+ }
+ 
++#[no_mangle]
++/// add KERNEL_BASE to sp and rust_main entry address
++pub fn fake_main(hart_id: usize) {
++    unsafe {
++        asm!("add sp, sp, {}", in(reg) KERNEL_BASE);
++        asm!("la t0, rust_main");
++        asm!("add t0, t0, {}", in(reg) KERNEL_BASE);
++        asm!("mv a0, {}", in(reg) hart_id);
++        asm!("jalr zero, 0(t0)");
++    }
++}
++
++
+ #[no_mangle]
+ /// the rust entry-point of os
+ pub fn rust_main() -> ! {
+diff --git a/os/src/mm/address.rs b/os/src/mm/address.rs
+index a438c254..4e721418 100644
+--- a/os/src/mm/address.rs
++++ b/os/src/mm/address.rs
+@@ -1,7 +1,7 @@
+ //! Implementation of physical and virtual address and page number.
+ 
+ use super::PageTableEntry;
+-use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
++use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS, KERNEL_BASE};
+ use core::fmt::{self, Debug, Formatter};
+ 
+ /// physical address
+@@ -11,6 +11,10 @@ const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
+ const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
+ 
+ /// Definitions
++
++#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
++pub struct KernelAddr(pub usize);
++
+ #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+ pub struct PhysAddr(pub usize);
+ 
+@@ -27,6 +31,11 @@ pub struct PhysPageNum(pub usize);
+ pub struct VirtPageNum(pub usize);
+ 
+ /// Debugging
++impl Debug for KernelAddr {
++    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
++        f.write_fmt(format_args!("KA:{:#x}", self.0))
++    }
++}
+ 
+ impl Debug for VirtAddr {
+     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+@@ -53,6 +62,13 @@ impl Debug for PhysPageNum {
+ /// T -> usize: T.0
+ /// usize -> T: usize.into()
+ 
++impl From<usize> for KernelAddr {
++   fn from(v: usize) -> Self {
++    /* check validity */
++        assert!(v > KERNEL_BASE);
++        Self(v)
++   } 
++}
+ impl From<usize> for PhysAddr {
+     fn from(v: usize) -> Self {
+         Self(v & ((1 << PA_WIDTH_SV39) - 1))
+@@ -151,12 +167,37 @@ impl From<PhysAddr> for PhysPageNum {
+         v.floor()
+     }
+ }
++
++impl From<PhysAddr> for KernelAddr {
++    fn from(pa: PhysAddr) -> Self {
++        Self(pa.0 + KERNEL_BASE) 
++    } 
++}
++
++impl From<KernelAddr> for PhysAddr {
++    fn from(ka: KernelAddr) -> Self {
++        Self(ka.0 - KERNEL_BASE)
++    } 
++}
++
+ impl From<PhysPageNum> for PhysAddr {
+     fn from(v: PhysPageNum) -> Self {
+         Self(v.0 << PAGE_SIZE_BITS)
+     }
+ }
+ 
++impl From<PhysPageNum> for KernelAddr {
++    fn from(ppn: PhysPageNum) -> Self {
++        Self((ppn.0 << PAGE_SIZE_BITS) + KERNEL_BASE)
++    } 
++}
++
++impl From<KernelAddr> for PhysPageNum {
++    fn from(ka: KernelAddr) -> Self {
++        PhysAddr(ka.0 - KERNEL_BASE).floor()
++    } 
++}
++
+ impl VirtPageNum {
+     pub fn indexes(&self) -> [usize; 3] {
+         let mut vpn = self.0;
+@@ -171,16 +212,16 @@ impl VirtPageNum {
+ 
+ impl PhysPageNum {
+     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
+-        let pa: PhysAddr = (*self).into();
+-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
++        let ka: KernelAddr = (*self).into();
++        unsafe { core::slice::from_raw_parts_mut(ka.0 as *mut PageTableEntry, 512) }
+     }
+     pub fn get_bytes_array(&self) -> &'static mut [u8] {
+-        let pa: PhysAddr = (*self).into();
+-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
++        let ka: KernelAddr = (*self).into();
++        unsafe { core::slice::from_raw_parts_mut(ka.0 as *mut u8, 4096) }
+     }
+     pub fn get_mut<T>(&self) -> &'static mut T {
+-        let pa: PhysAddr = (*self).into();
+-        unsafe { (pa.0 as *mut T).as_mut().unwrap() }
++        let ka: KernelAddr = (*self).into();
++        unsafe { (ka.0 as *mut T).as_mut().unwrap() }
+     }
+ }
+ 
+diff --git a/os/src/mm/frame_allocator.rs b/os/src/mm/frame_allocator.rs
+index 7818ba83..7f54be3f 100644
+--- a/os/src/mm/frame_allocator.rs
++++ b/os/src/mm/frame_allocator.rs
+@@ -1,7 +1,7 @@
+ //! Implementation of [`FrameAllocator`] which
+ //! controls all the frames in the operating system.
+ 
+-use super::{PhysAddr, PhysPageNum};
++use super::{PhysAddr, PhysPageNum, KernelAddr};
+ use crate::config::MEMORY_END;
+ use crate::sync::UPSafeCell;
+ use alloc::vec::Vec;
+@@ -98,8 +98,8 @@ pub fn init_frame_allocator() {
+         fn ekernel();
+     }
+     FRAME_ALLOCATOR.exclusive_access().init(
+-        PhysAddr::from(ekernel as usize).ceil(),
+-        PhysAddr::from(MEMORY_END).floor(),
++        PhysAddr::from(KernelAddr::from(ekernel as usize)).ceil(),
++        PhysAddr::from(KernelAddr::from(MEMORY_END)).floor(),
+     );
+ }
+ 
+@@ -121,13 +121,13 @@ fn frame_dealloc(ppn: PhysPageNum) {
+ pub fn frame_allocator_test() {
+     let mut v: Vec<FrameTracker> = Vec::new();
+     for i in 0..5 {
+-        let frame = frame_alloc().unwrap();
++        let frame = frame_alloc().expect("fail to alloc a frame");
+         println!("{:?}", frame);
+         v.push(frame);
+     }
+     v.clear();
+     for i in 0..5 {
+-        let frame = frame_alloc().unwrap();
++        let frame = frame_alloc().expect("fail to alloc a frame");
+         println!("{:?}", frame);
+         v.push(frame);
+     }
+diff --git a/os/src/mm/memory_set.rs b/os/src/mm/memory_set.rs
+index a6a0fdbc..c65147bd 100644
+--- a/os/src/mm/memory_set.rs
++++ b/os/src/mm/memory_set.rs
+@@ -4,7 +4,8 @@ use super::{frame_alloc, FrameTracker};
+ use super::{PTEFlags, PageTable, PageTableEntry};
+ use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+ use super::{StepByOne, VPNRange};
+-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
++use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, PAGE_SIZE_BITS, USER_MAX_VA, TRAP_CONTEXT, USER_STACK_SIZE};
++use crate::mm::address::KernelAddr;
+ use crate::sync::UPSafeCell;
+ use alloc::collections::BTreeMap;
+ use alloc::sync::Arc;
+@@ -32,19 +33,38 @@ lazy_static! {
+         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
+ }
+ 
++/* 
++pub static mut KERNEL_SPACE: Option<MemorySet> = None;
++
++pub fn init_kernel_space() {
++    unsafe {
++        KERNEL_SPACE = Some(MemorySet::new_kernel());
++    }
++}
++*/
++
+ /// memory set structure, controls virtual-memory space
+ pub struct MemorySet {
+-    page_table: PageTable,
++    pub page_table: PageTable,
+     areas: Vec<MapArea>,
+ }
+ 
+ impl MemorySet {
+     pub fn new_bare() -> Self {
++        println!("  call new_bare");
+         Self {
+             page_table: PageTable::new(),
+             areas: Vec::new(),
+         }
+     }
++    //Create an empty `MemorySpace` but owns the global kernel mapping
++    pub fn new_from_global() -> Self {
++        let page_table = PageTable::from_global();
++        Self {
++            page_table,
++            areas: Vec::new(),
++        }
++    }
+     pub fn token(&self) -> usize {
+         self.page_table.token()
+     }
+@@ -67,6 +87,7 @@ impl MemorySet {
+         }
+         self.areas.push(map_area);
+     }
++    /* 
+     /// Mention that trampoline is not collected by areas.
+     fn map_trampoline(&mut self) {
+         self.page_table.map(
+@@ -75,11 +96,14 @@ impl MemorySet {
+             PTEFlags::R | PTEFlags::X,
+         );
+     }
++    */
+     /// Without kernel stacks.
+     pub fn new_kernel() -> Self {
++        println!("start to init KERNEL_SPACE");
+         let mut memory_set = Self::new_bare();
++        println!("call new_bare in new_kernel");
+         // map trampoline
+-        memory_set.map_trampoline();
++        //memory_set.map_trampoline();
+         // map kernel sections
+         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
+@@ -89,21 +113,21 @@ impl MemorySet {
+             sbss_with_stack as usize, ebss as usize
+         );
+         println!("mapping .text section");
+-        memory_set.push(
+-            MapArea::new(
++        let text = MapArea::new(
+                 (stext as usize).into(),
+                 (etext as usize).into(),
+-                MapType::Identical,
++                MapType::Linear,
+                 MapPermission::R | MapPermission::X,
+-            ),
+-            None,
++        );
++        memory_set.push(
++            text ,None
+         );
+         println!("mapping .rodata section");
+         memory_set.push(
+             MapArea::new(
+                 (srodata as usize).into(),
+                 (erodata as usize).into(),
+-                MapType::Identical,
++                MapType::Linear,
+                 MapPermission::R,
+             ),
+             None,
+@@ -113,7 +137,7 @@ impl MemorySet {
+             MapArea::new(
+                 (sdata as usize).into(),
+                 (edata as usize).into(),
+-                MapType::Identical,
++                MapType::Linear,
+                 MapPermission::R | MapPermission::W,
+             ),
+             None,
+@@ -123,7 +147,7 @@ impl MemorySet {
+             MapArea::new(
+                 (sbss_with_stack as usize).into(),
+                 (ebss as usize).into(),
+-                MapType::Identical,
++                MapType::Linear,
+                 MapPermission::R | MapPermission::W,
+             ),
+             None,
+@@ -133,7 +157,7 @@ impl MemorySet {
+             MapArea::new(
+                 (ekernel as usize).into(),
+                 MEMORY_END.into(),
+-                MapType::Identical,
++                MapType::Linear,
+                 MapPermission::R | MapPermission::W,
+             ),
+             None,
+@@ -142,22 +166,25 @@ impl MemorySet {
+         for pair in MMIO {
+             memory_set.push(
+                 MapArea::new(
+-                    (*pair).0.into(),
+-                    ((*pair).0 + (*pair).1).into(),
+-                    MapType::Identical,
++                   ((*pair).0 + KERNEL_BASE).into(),
++                    (((*pair).0 + (*pair).1) + KERNEL_BASE).into(),
++                    MapType::Linear,
+                     MapPermission::R | MapPermission::W,
+                 ),
+                 None,
+             );
+         }
++        println!("finish to init KERNEL_SPACE");
+         memory_set
+     }
+     /// Include sections in elf and trampoline and TrapContext and user stack,
+     /// also returns user_sp and entry point.
+     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
+-        let mut memory_set = Self::new_bare();
++        println!("  call from_elf");
++        let mut memory_set = Self::new_from_global();
++        println!("  return to from_elf after new_from_global");
+         // map trampoline
+-        memory_set.map_trampoline();
++        //memory_set.map_trampoline();
+         // map program headers of elf, with U flag
+         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+         let elf_header = elf.header;
+@@ -214,11 +241,11 @@ impl MemorySet {
+             ),
+             None,
+         );
+-        // map TrapContext
++        // map TrapContext to USRER_MAX_VA
+         memory_set.push(
+             MapArea::new(
+                 TRAP_CONTEXT.into(),
+-                TRAMPOLINE.into(),
++                USER_MAX_VA.into(),
+                 MapType::Framed,
+                 MapPermission::R | MapPermission::W,
+             ),
+@@ -303,8 +330,14 @@ impl MapArea {
+                 ppn = frame.ppn;
+                 self.data_frames.insert(vpn, frame);
+             }
++            MapType::Linear => {
++                //println!("in linear branch in map_one");
++                ppn = PhysPageNum(vpn.0 - 0x4000000);
++                //println!("get the {:?} accroding to {:?}", ppn, vpn);
++            }
+         }
+         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
++        //println!("          call page_table::map() on {:?} with {:?}", vpn, ppn);
+         page_table.map(vpn, ppn, pte_flags);
+     }
+     #[allow(unused)]
+@@ -316,6 +349,7 @@ impl MapArea {
+     }
+     pub fn map(&mut self, page_table: &mut PageTable) {
+         for vpn in self.vpn_range {
++            //println!("      call map_one on {:?}", vpn);
+             self.map_one(page_table, vpn);
+         }
+     }
+@@ -368,6 +402,8 @@ impl MapArea {
+ pub enum MapType {
+     Identical,
+     Framed,
++    /* linear mapping for kernel: vpn = ppn + KERNEL_BASE */
++    Linear,
+ }
+ 
+ bitflags! {
+@@ -383,9 +419,15 @@ bitflags! {
+ #[allow(unused)]
+ pub fn remap_test() {
+     let mut kernel_space = KERNEL_SPACE.exclusive_access();
++    /* 
+     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
+     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
+     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
++    */
++    let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
++    let mid_rodata: VirtAddr =
++        (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
++    let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
+     assert!(!kernel_space
+         .page_table
+         .translate(mid_text.floor())
+diff --git a/os/src/mm/mod.rs b/os/src/mm/mod.rs
+index e0fd13c7..291d6f71 100644
+--- a/os/src/mm/mod.rs
++++ b/os/src/mm/mod.rs
+@@ -12,17 +12,31 @@ mod heap_allocator;
+ mod memory_set;
+ mod page_table;
+ 
+-pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
++pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernelAddr};
+ use address::{StepByOne, VPNRange};
+ pub use frame_allocator::{frame_alloc, FrameTracker};
+ pub use memory_set::remap_test;
+ pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
+-pub use page_table::{translated_byte_buffer, PageTableEntry};
++pub use page_table::PageTableEntry;
+ use page_table::{PTEFlags, PageTable};
+ 
++use crate::mm::frame_allocator::frame_allocator_test;
++use crate::mm::heap_allocator::heap_test;
++
+ /// initiate heap allocator, frame allocator and kernel space
+ pub fn init() {
+     heap_allocator::init_heap();
++    //heap_test();
+     frame_allocator::init_frame_allocator();
+-    KERNEL_SPACE.exclusive_access().activate();
++    //frame_allocator_test();
++    
++    let kernel_space = KERNEL_SPACE.exclusive_access();
++    println!("get mut ref to KERNEL_SPACE");
++    kernel_space.activate();
++    /*
++    unsafe {
++        KERNEL_SPACE.as_ref().unwrap().activate();
++    }
++    */
++    println!("kerel_space and write satp");
+ }
+diff --git a/os/src/mm/page_table.rs b/os/src/mm/page_table.rs
+index eb37634b..981b6c55 100644
+--- a/os/src/mm/page_table.rs
++++ b/os/src/mm/page_table.rs
+@@ -1,9 +1,14 @@
+ //! Implementation of [`PageTableEntry`] and [`PageTable`].
+ 
++use crate::config::{KERNEL_BASE, PAGE_SIZE_BITS};
++
+ use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+ use alloc::vec;
+ use alloc::vec::Vec;
+ use bitflags::*;
++use riscv::register::satp;
++use core::arch::asm;
++use super::memory_set::KERNEL_SPACE;
+ 
+ bitflags! {
+     /// page table entry flags
+@@ -16,6 +21,7 @@ bitflags! {
+         const G = 1 << 5;
+         const A = 1 << 6;
+         const D = 1 << 7;
++        /* todo: add COW and hugepage flag bit */
+     }
+ }
+ 
+@@ -64,10 +70,43 @@ pub struct PageTable {
+ /// Assume that it won't oom when creating/mapping.
+ impl PageTable {
+     pub fn new() -> Self {
++        println!("  call pagetable::new()");
++        let frame = frame_alloc().expect("fail to alloc a frame");
++        println!("  alloc a frame successfully");
++        PageTable {
++            root_ppn: frame.ppn,
++            frames: vec![frame],
++        }
++    }
++    /* Create a pagetable from global kernel pagetble(only copy level 1)*/
++    pub fn from_global() -> Self {
+         let frame = frame_alloc().unwrap();
++        let global_root_ppn =
++            (KERNEL_SPACE
++                .exclusive_access()
++                .page_table
++                )
++            .root_ppn;
++        // Map kernel space
++        // Note that we just need shallow copy here
++        let kernel_start_vpn = VirtPageNum::from(KERNEL_BASE >> PAGE_SIZE_BITS);
++        let level_1_index = kernel_start_vpn.indexes()[0];
++        frame.ppn.get_pte_array()[level_1_index..]
++            .copy_from_slice(&global_root_ppn.get_pte_array()[level_1_index..]);
++
++        // the new pagetable only owns the ownership of its own root ppn
+         PageTable {
+             root_ppn: frame.ppn,
+             frames: vec![frame],
++        } 
++    }
++
++    pub fn activate(&self) {
++        let satp = self.token();
++        unsafe {
++            satp::write(satp);
++            /* perf: can only flust TLB with according ASID */
++            asm!("sfence.vma");
+         }
+     }
+     /// Temporarily used to get arguments from user space.
+@@ -115,6 +154,7 @@ impl PageTable {
+     }
+     #[allow(unused)]
+     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
++        //println!("try to map vpn: {:?} with ppn: {:?}", vpn, ppn);
+         let pte = self.find_pte_create(vpn).unwrap();
+         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
+         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+@@ -133,6 +173,7 @@ impl PageTable {
+     }
+ }
+ 
++/* 
+ /// translate a pointer to a mutable u8 Vec through page table
+ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
+     let page_table = PageTable::from_token(token);
+@@ -155,3 +196,4 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
+     }
+     v
+ }
++*/
+\ No newline at end of file
+diff --git a/os/src/sync/up.rs b/os/src/sync/up.rs
+index e8ba20c8..7dc0a460 100644
+--- a/os/src/sync/up.rs
++++ b/os/src/sync/up.rs
+@@ -1,6 +1,7 @@
+ //! Uniprocessor interior mutability primitives
+ 
+ use core::cell::{RefCell, RefMut};
++use crate::println;
+ 
+ /// Wrap a static data structure inside it so that we are
+ /// able to access it without any `unsafe`.
+@@ -26,6 +27,10 @@ impl<T> UPSafeCell<T> {
+     }
+     /// Exclusive access inner data in UPSafeCell. Panic if the data has been borrowed.
+     pub fn exclusive_access(&self) -> RefMut<'_, T> {
+-        self.inner.borrow_mut()
++        //self.inner.borrow_mut()
++        match self.inner.try_borrow_mut() {
++            Ok(mut_ref) => mut_ref,
++            Err(_) => panic!("failed to acquire exclusive access"),
++        }
+     }
+ }
+diff --git a/os/src/syscall/fs.rs b/os/src/syscall/fs.rs
+index 2fe02bc6..986e2f9b 100644
+--- a/os/src/syscall/fs.rs
++++ b/os/src/syscall/fs.rs
+@@ -1,7 +1,6 @@
+ //! File and filesystem-related syscalls
+ 
+-use crate::mm::translated_byte_buffer;
+-use crate::task::current_user_token;
++//use crate::task::current_user_token;
+ 
+ const FD_STDOUT: usize = 1;
+ 
+@@ -9,10 +8,9 @@ const FD_STDOUT: usize = 1;
+ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
+     match fd {
+         FD_STDOUT => {
+-            let buffers = translated_byte_buffer(current_user_token(), buf, len);
+-            for buffer in buffers {
+-                print!("{}", core::str::from_utf8(buffer).unwrap());
+-            }
++            let slice = unsafe { core::slice::from_raw_parts(buf, len) };
++            let str = core::str::from_utf8(slice).unwrap();
++            print!("{}", str);
+             len as isize
+         }
+         _ => {
+diff --git a/os/src/task/mod.rs b/os/src/task/mod.rs
+index f80440e4..638b5a97 100644
+--- a/os/src/task/mod.rs
++++ b/os/src/task/mod.rs
+@@ -59,6 +59,7 @@ lazy_static! {
+         for i in 0..num_app {
+             tasks.push(TaskControlBlock::new(get_app_data(i), i));
+         }
++        println!("after get_app_data");
+         TaskManager {
+             num_app,
+             inner: unsafe {
+diff --git a/os/src/task/task.rs b/os/src/task/task.rs
+index 6c87ddd8..19a9fd03 100644
+--- a/os/src/task/task.rs
++++ b/os/src/task/task.rs
+@@ -25,10 +25,13 @@ impl TaskControlBlock {
+     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
+         // memory_set with elf program headers/trampoline/trap context/user stack
+         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
++         
++        println!("return to TCB::new() after from_elf");
+         let trap_cx_ppn = memory_set
+             .translate(VirtAddr::from(TRAP_CONTEXT).into())
+-            .unwrap()
++            .expect("fail to get trap_cx_ppn")
+             .ppn();
++        println!("  trap_cx_ppn {:?}", trap_cx_ppn);
+         let task_status = TaskStatus::Ready;
+         // map a kernel-stack in kernel space
+         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(app_id);
+diff --git a/os/src/trap/mod.rs b/os/src/trap/mod.rs
+index 4a11dc0e..7934f98c 100644
+--- a/os/src/trap/mod.rs
++++ b/os/src/trap/mod.rs
+@@ -13,7 +13,7 @@
+ //! to [`syscall()`].
+ mod context;
+ 
+-use crate::config::{TRAMPOLINE, TRAP_CONTEXT};
++use crate::config::TRAP_CONTEXT;
+ use crate::syscall::syscall;
+ use crate::task::{
+     current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
+@@ -28,6 +28,10 @@ use riscv::register::{
+ 
+ global_asm!(include_str!("trap.S"));
+ 
++extern "C" {
++    fn __trap_from_user();
++}
++
+ /// initialize CSR `stvec` as the entry of `__alltraps`
+ pub fn init() {
+     set_kernel_trap_entry();
+@@ -41,7 +45,7 @@ fn set_kernel_trap_entry() {
+ 
+ fn set_user_trap_entry() {
+     unsafe {
+-        stvec::write(TRAMPOLINE as usize, TrapMode::Direct);
++        stvec::write(__trap_from_user as usize, TrapMode::Direct);
+     }
+ }
+ 
+@@ -99,10 +103,9 @@ pub fn trap_return() -> ! {
+     let trap_cx_ptr = TRAP_CONTEXT;
+     let user_satp = current_user_token();
+     extern "C" {
+-        fn __alltraps();
+-        fn __restore();
++        fn __return_to_user();
+     }
+-    let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
++    let restore_va = __return_to_user as usize;
+     unsafe {
+         asm!(
+             "fence.i",
+diff --git a/os/src/trap/trap.S b/os/src/trap/trap.S
+index c0e2d153..63966b0e 100644
+--- a/os/src/trap/trap.S
++++ b/os/src/trap/trap.S
+@@ -6,20 +6,19 @@
+     ld x\n, \n*8(sp)
+ .endm
+     .section .text.trampoline
+-    .globl __alltraps
+-    .globl __restore
++    .globl __trap_from_user
++    .globl __return_to_user
+     .align 2
+-__alltraps:
++# user -> kernel
++__trap_from_user:
+     csrrw sp, sscratch, sp
+-    # now sp->*TrapContext in user space, sscratch->user stack
++    # now sp->*TrapContext in kernel space, sscratch->user stack
+     # save other general purpose registers
+     sd x1, 1*8(sp)
+     # skip sp(x2), we will save it later
+-    sd x3, 3*8(sp)
+-    # skip tp(x4), application does not use it
+-    # save x5~x31
+-    .set n, 5
+-    .rept 27
++    # save x3~x31 (x4 is tp)
++    .set n, 3
++    .rept 29
+         SAVE_GP %n
+         .set n, n+1
+     .endr
+@@ -31,39 +30,69 @@ __alltraps:
+     # read user stack from sscratch and save it in TrapContext
+     csrr t2, sscratch
+     sd t2, 2*8(sp)
+-    # load kernel_satp into t0
+-    ld t0, 34*8(sp)
+-    # load trap_handler into t1
+-    ld t1, 36*8(sp)
+-    # move to kernel_sp
+-    ld sp, 35*8(sp)
+-    # switch to kernel space
+-    csrw satp, t0
+-    sfence.vma
+-    # jump to trap_handler
+-    jr t1
+ 
+-__restore:
++    # # move to kernel_sp
++    # load kernel ra
++    ld ra, 35*8(sp)
++    # load callee-saved regs
++    ld s0, 36*8(sp)
++    ld s1, 37*8(sp)
++    ld s2, 38*8(sp)
++    ld s3, 39*8(sp)
++    ld s4, 40*8(sp)
++    ld s5, 41*8(sp)
++    ld s6, 42*8(sp)
++    ld s7, 43*8(sp)
++    ld s8, 44*8(sp)
++    ld s9, 45*8(sp)
++    ld s10, 46*8(sp)
++    ld s11, 47*8(sp)
++    # load kernel fp
++    ld fp, 48*8(sp)
++    ld tp, 49*8(sp)
++    ld sp, 34*8(sp)
++    # return to kernel ra
++    ret  
++
++# kernel -> user
++__return_to_user:
+     # a0: *TrapContext in user space(Constant); a1: user space token
+     # switch to user space
+-    csrw satp, a1
+-    sfence.vma
++
++    # let sscratch store the trap context's address
+     csrw sscratch, a0
++    # save kernel callee-saved regs
++    sd sp, 34*8(a0)
++    sd ra, 35*8(a0)
++    sd s0, 36*8(a0)
++    sd s1, 37*8(a0)
++    sd s2, 38*8(a0)
++    sd s3, 39*8(a0)
++    sd s4, 40*8(a0)
++    sd s5, 41*8(a0)
++    sd s6, 42*8(a0)
++    sd s7, 43*8(a0)
++    sd s8, 44*8(a0)
++    sd s9, 45*8(a0)
++    sd s10, 46*8(a0)
++    sd s11, 47*8(a0)
++    sd fp, 48*8(a0)
++    sd tp, 49*8(a0)
++
+     mv sp, a0
+-    # now sp points to TrapContext in user space, start restoring based on it
++    # now sp points to TrapContext in kernel space, start restoring based on it
+     # restore sstatus/sepc
+     ld t0, 32*8(sp)
+     ld t1, 33*8(sp)
+     csrw sstatus, t0
+     csrw sepc, t1
+-    # restore general purpose registers except x0/sp/tp
++    # restore general purpose registers except x0/sp/
+     ld x1, 1*8(sp)
+-    ld x3, 3*8(sp)
+-    .set n, 5
+-    .rept 27
++    .set n, 3
++    .rept 29
+         LOAD_GP %n
+         .set n, n+1
+     .endr
+     # back to user stack
+     ld sp, 2*8(sp)
+-    sret
++    sret
+\ No newline at end of file

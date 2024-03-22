@@ -5,25 +5,39 @@
 //! map area and memory set, is implemented here.
 //!
 //! Every task or process has a memory_set to control its virtual memory.
+
 mod address;
 mod frame_allocator;
 mod heap_allocator;
 mod memory_set;
 mod page_table;
 
-use address::VPNRange;
-pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernelAddr};
+pub use address::{StepByOne, VPNRange};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::remap_test;
-pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-use page_table::PTEFlags;
-pub use page_table::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
-};
+pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
+pub use page_table::PageTableEntry;
+pub use page_table::{PTEFlags, PageTable};
+
+use crate::mm::frame_allocator::frame_allocator_test;
+use crate::mm::heap_allocator::heap_test;
+
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
+    heap_test();
     frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.exclusive_access().activate();
+    frame_allocator_test();
+    
+    let kernel_space = KERNEL_SPACE.exclusive_access();
+    println!("get mut ref to KERNEL_SPACE");
+    kernel_space.activate();
+    /*
+    unsafe {
+        KERNEL_SPACE.as_ref().unwrap().activate();
+    }
+    */
+    remap_test();
+    println!("kerel_space and write satp");
 }

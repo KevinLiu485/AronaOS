@@ -19,7 +19,6 @@
 //! userspace.
 
 #![deny(missing_docs)]
-#![deny(warnings)]
 #![allow(unused_imports)]
 #![no_std]
 #![no_main]
@@ -49,8 +48,23 @@ pub mod timer;
 pub mod trap;
 
 use core::arch::global_asm;
+use config::KERNEL_BASE;
+use core::arch::asm;
 
-global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("entry.S"));
+
+#[no_mangle]
+/// add KERNEL_BASE to sp and rust_main entry address
+pub fn fake_main(hart_id: usize) {
+    unsafe {
+        asm!("add sp, sp, {}", in(reg) KERNEL_BASE);
+        asm!("la t0, rust_main");
+        asm!("add t0, t0, {}", in(reg) KERNEL_BASE);
+        asm!("mv a0, {}", in(reg) hart_id);
+        asm!("jalr zero, 0(t0)");
+    }
+}
+
 /// clear BSS segment
 fn clear_bss() {
     extern "C" {
