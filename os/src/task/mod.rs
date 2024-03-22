@@ -1,23 +1,13 @@
-//! Task management implementation
-//!
-//! Everything about task management, like starting and switching tasks is
-//! implemented here.
-//!
-//! A single global instance of [`TaskManager`] called `TASK_MANAGER` controls
-//! all the tasks in the whole operating system.
-//!
-//! A single global instance of [`Processor`] called `PROCESSOR` monitors running
-//! task(s) for each core.
-//!
-//! A single global instance of [`PidAllocator`] called `PID_ALLOCATOR` allocates
-//! pid for user apps.
-//!
-//! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
-//! might not be what you expect.
+//! 这里基本是关于和切换任务
+//! [`TaskManager`] （单例）控制着所有的系统task （目前还没有对应的线程进程抽象）
+//! [`U7Hart`] （单例）监听着核上面运行的任务。 todo：之后用hart来替代
+//! [`PidAllocator`]（单例）分配所有的 pid
+//! __switch负责切换（控制流的改变） todo: 之后变成异步切换。
+
 mod context;
 mod manager;
 mod pid;
-mod processor;
+pub(crate) mod processor;
 mod switch;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
@@ -36,9 +26,11 @@ pub use manager::add_task;
 pub use pid::{pid_alloc, KernelStack, PidAllocator, PidHandle};
 pub use processor::{
     current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
-    Processor,
+    U7Hart,
 };
-/// Suspend the current 'Running' task and run the next task in task list.
+use crate::task::processor::new_local_hart;
+
+/// 暂停当前任务，然后跑任务列表的下一个任务
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
     let task = take_current_task().unwrap();
@@ -122,3 +114,7 @@ lazy_static! {
 pub fn add_initproc() {
     add_task(INITPROC.clone());
 }
+
+// pub unsafe fn hart_init(hart_id: usize) {
+//     new_local_hart(hart_id);
+// }

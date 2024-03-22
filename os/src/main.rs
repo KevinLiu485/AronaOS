@@ -1,22 +1,12 @@
-//! The main module and entrypoint
-//!
-//! Various facilities of the kernels are implemented as submodules. The most
-//! important ones are:
-//!
-//! - [`trap`]: Handles all cases of switching from userspace to the kernel
-//! - [`task`]: Task management
-//! - [`syscall`]: System call handling and implementation
-//! - [`mm`]: Address map using SV39
-//! - [`sync`]: Wrap a static data structure inside it so that we are able to access it without any `unsafe`.
+//! main函数，以及程序的进入点，先跑entry.S之后就是rust_main.rs todo:（之前可能有opensbi相关的东西？）
+//! 之后调用 [`task::run_tasks()`] 这也是第一次进入userspace
+//! 各类功能在以下的子模块被实现
+//! - [`trap`] :解决用户空间和内核空间的切换
+//! - [`task`] :管理任务
+//! - [`syscall`]: System call 的处理和实现
+//! - [`mm`]: SV39 的 vm 管理
+//! - [`sync`]: 包装所有的static data structure，这样我们就不需要用unsafe访问他们
 //! - [`fs`]: Separate user from file system with some structures
-//!
-//! The operating system also starts in this module. Kernel code starts
-//! executing from `entry.asm`, after which [`rust_main()`] is called to
-//! initialize various pieces of functionality. (See its source code for
-//! details.)
-//!
-//! We then call [`task::run_tasks()`] and for the first time go to
-//! userspace.
 
 #![deny(missing_docs)]
 #![deny(warnings)]
@@ -50,7 +40,13 @@ pub mod trap;
 
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};
+use riscv::interrupt::Mutex;
+use riscv::register::satp;
+use crate::mm::KERNEL_SPACE;
+use crate::task::processor::new_local_hart;
 
+
+// todo: 为什么跑os前要clear_bss
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
 fn clear_bss() {
@@ -75,10 +71,13 @@ pub fn rust_main(hart_id: usize) -> ! {
         .is_ok()
     {
         clear_bss();
-        println!("[kernel] Hello, world!");
+        println!("[kernel] cpu:{} Hello, world!", hart_id);
+
 
         mm::init();
         mm::remap_test();
+
+        new_local_hart(hart_id);
 
         trap::init();
 
@@ -103,19 +102,12 @@ pub fn rust_main(hart_id: usize) -> ! {
         //todo: 先loop着，后续再加支持
         // 以及sbi相关的东西可能需要相关的引入。
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
-        // while(started == 0){} //
-        // __sync_synchronize(); // 内存屏障
-        //
-        //
-        // kvminithart();    // turn on paging
-        // trapinithart();   // install kernel trap vector
-        // plicinithart();   // ask PLIC for device interrupts
-        //
-        //
-        // // barrier
-        // while !INIT_FINISHED.load(Ordering::SeqCst) {}
-        // trap::init();
-        println!("cpu: {}", hart_id);
+
+        trap::init();
+        KERNEL_SPACE.exclusive_access().activate();
+        
+        println!("cpu: {} start!", hart_id);
+        
         loop {
         }
     }

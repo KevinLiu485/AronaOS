@@ -1,23 +1,30 @@
-//!Implementation of [`Processor`] and Intersection of control flow
+//![`U7Hart`] and Intersection of control flow
+//! 用于进程调度，维护进程的处理器状态
+
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
+use core::arch::asm;
 use lazy_static::*;
-///Processor management structure
-pub struct Processor {
+
+/// 每个CPU核心对应的抽象
+pub struct U7Hart {
+    hart_id: usize, // 每个CPU对应的id号
+
     ///The task currently executing on the current processor
     current: Option<Arc<TaskControlBlock>>,
     ///The basic control flow of each core, helping to select and switch process
     idle_task_cx: TaskContext,
 }
 
-impl Processor {
+impl U7Hart {
     ///Create an empty Processor
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
+            hart_id: 0,
             current: None,
             idle_task_cx: TaskContext::zero_init(),
         }
@@ -36,14 +43,33 @@ impl Processor {
     }
 }
 
-lazy_static! {
-    pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
+const HART_NUM: usize = 4;
+pub static mut U7HARTS: [U7Hart; HART_NUM] = [U7HART; HART_NUM];
+const U7HART: U7Hart = U7Hart::new();
+
+/// 把对应的静态引用的id初始化，new之后 tp放的就是对应的hart_addr的地址，直接可以拿来用
+pub fn new_local_hart(hart_id: usize) {
+    unsafe {
+        U7HARTS[hart_id].hart_id = hart_id;
+        asm!("mv tp, {}", in(reg) &U7HARTS[hart_id] as *const _ as usize);
+    }
 }
+
+/// tp里面装的地址，看[`new_local_hart`]
+pub fn get_local_hart() -> &'static mut U7Hart {
+    unsafe {
+        let tp: usize;
+        asm!("mv {}, tp", out(reg) tp);
+        &mut *(tp as *mut U7Hart)
+    }
+}
+
 ///The main part of process execution and scheduling
 ///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
 pub fn run_tasks() {
     loop {
-        let mut processor = PROCESSOR.exclusive_access();
+        let processor = get_local_hart();
+
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -54,20 +80,22 @@ pub fn run_tasks() {
             // release coming task TCB manually
             processor.current = Some(task);
             // release processor manually
-            drop(processor);
+
+            // drop(processor);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         }
+
     }
 }
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().take_current()
+    get_local_hart().take_current()
 }
 ///Get running task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().current()
+    get_local_hart().current()
 }
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
@@ -84,9 +112,9 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 }
 ///Return to idle control flow for new scheduling
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    let mut processor = PROCESSOR.exclusive_access();
+    let processor = get_local_hart();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-    drop(processor);
+    // drop(processor);
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }

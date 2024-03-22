@@ -1,4 +1,6 @@
-//!Implementation of [`TaskControlBlock`]
+//! [`TaskControlBlock`]
+
+use alloc::boxed::Box;
 use super::TaskContext;
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT;
@@ -10,25 +12,32 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{Context, Poll};
 
+/// 从设计模式上来讲分为了可变和不可变两种
 pub struct TaskControlBlock {
     // immutable
-    pub pid: PidHandle,
-    pub kernel_stack: KernelStack,
+    pub pid: PidHandle, // 进程标识符
+    pub kernel_stack: KernelStack, // todo： 这里的kernel stack以后会消失
+
     // mutable
     inner: UPSafeCell<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
-    pub trap_cx_ppn: PhysPageNum,
-    pub base_size: usize,
-    pub task_cx: TaskContext,
-    pub task_status: TaskStatus,
-    pub memory_set: MemorySet,
-    pub parent: Option<Weak<TaskControlBlock>>,
-    pub children: Vec<Arc<TaskControlBlock>>,
-    pub exit_code: i32,
+    pub trap_cx_ppn: PhysPageNum, //  指出了应用地址空间中的 Trap 上下文被放在的物理页帧的物理页号。
+    pub base_size: usize, // 应用数据仅有可能出现在应用地址空间低于 base_size 字节的区域中。借助它我们可以清楚的知道应用有多少数据驻留在内存中
+    pub task_cx: TaskContext, // ra， sp，12个s寄存器（因为自己是被调用者，switch本身还是函数调用）
+    pub task_status: TaskStatus, // 维护当前进程的执行状态。
+    pub exit_code: i32, // 退出码 exit_code todo: 后期也许可以合到zombie里面
+
+    pub memory_set: MemorySet, // 表示应用地址空间
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+
+    pub parent: Option<Weak<TaskControlBlock>>, // 指向当前进程的父进程（如果存在的话）。
+    pub children: Vec<Arc<TaskControlBlock>>, // 当前进程所有子进程的任务控制块
 }
 
 impl TaskControlBlockInner {
@@ -93,6 +102,7 @@ impl TaskControlBlock {
                 })
             },
         };
+
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
@@ -183,6 +193,48 @@ impl TaskControlBlock {
         self.pid.0
     }
 }
+
+//
+//
+// /// The outermost future, i.e. the future that wraps
+// /// one thread's task future(doing some env context changes e.g.
+// /// pagetable switching)
+// pub struct UserTaskFuture<F: Future + Send + 'static> {
+//     task_ctx: Box<LocalContext>,
+//     task_future: F,
+// }
+//
+// pub struct LocalContext {
+//     /// If no user task now(i.e. kernel thread is running), then None
+//     user_task_ctx: Option<UserTaskContext>,
+//     env: EnvContext,
+// }
+//
+// impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
+//     type Output = F::Output;
+//
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         // There are 2 cases that are safe:
+//         // 1. the outermost future itself is unpin
+//         // 2. the outermost future isn't unpin but we make sure that it won't be moved
+//         // SAFETY: although getting the mut ref of a pin type is unsafe,
+//         // we only need to change the task_ctx, which is ok
+//         let this = unsafe { self.get_unchecked_mut() };
+//         // let this = self.get_mut();
+//         let hart = processor::local_hart();
+//         hart.push_task(&mut this.task_ctx);
+//
+//         // run the `threadloop`
+//         // SAFETY:
+//         // the task future(i.e. threadloop) won't be moved.
+//         // One way to avoid unsafe is to wrap the task_future in
+//         // a Mutex<Pin<Box<>>>>, which requires locking for every polling
+//         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
+//         hart.pop_task(&mut this.task_ctx);
+//
+//         ret
+//     }
+// }
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
