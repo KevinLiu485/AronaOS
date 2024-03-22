@@ -4,8 +4,7 @@ use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use lazy_static::*;
 
-/// [`TaskManager`]
-/// [`TaskControlBlock`] 的双端队列，thread-safe
+/// [`TaskManager`] [`TaskControlBlock`] 的双端队列，thread-safe
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
 }

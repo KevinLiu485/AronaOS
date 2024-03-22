@@ -8,7 +8,9 @@ use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use core::arch::asm;
+use core::mem::size_of;
 use lazy_static::*;
+use crate::config::PAGE_SIZE;
 
 /// 每个CPU核心对应的抽象
 pub struct U7Hart {
@@ -43,19 +45,23 @@ impl U7Hart {
     }
 }
 
-const HART_NUM: usize = 4;
-pub static mut U7HARTS: [U7Hart; HART_NUM] = [U7HART; HART_NUM];
-const U7HART: U7Hart = U7Hart::new();
+// const HART_NUM: usize = 4;
 
 /// 把对应的静态引用的id初始化，new之后 tp放的就是对应的hart_addr的地址，直接可以拿来用
 pub fn new_local_hart(hart_id: usize) {
     unsafe {
-        U7HARTS[hart_id].hart_id = hart_id;
-        asm!("mv tp, {}", in(reg) &U7HARTS[hart_id] as *const _ as usize);
+        let sp: usize;
+        // unsafe {
+        asm!("mv {}, sp", out(reg) sp);
+        // }
+        let s = ((sp & !(PAGE_SIZE - 1)) - 3 * PAGE_SIZE) as *mut U7Hart; // todo :目前是硬编码
+
+        (*s).hart_id = hart_id;
+        asm!("mv tp, {}", in(reg) &s as *const _ as usize);
     }
 }
 
-/// tp里面装的地址，看[`new_local_hart`]
+/// tp里面装的每个CPU对应OS结构体的地址，看[`new_local_hart`]
 pub fn get_local_hart() -> &'static mut U7Hart {
     unsafe {
         let tp: usize;

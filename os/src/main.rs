@@ -77,7 +77,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         mm::init();
         mm::remap_test();
 
-        new_local_hart(hart_id);
 
         trap::init();
 
@@ -85,6 +84,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         fs::list_apps();
+        new_local_hart(hart_id);
 
         task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
