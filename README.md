@@ -39,7 +39,18 @@ HifumiOS
   - `git pull`.
   - `git checkout master`, otherwise **main** will fall behind your branch.
   - `git merge <your-branch-name>`. You may need to resolve conflicts.
-# Naming instructions
+# Coding Style
+## Comment instructions
+`//`: 代码行注释  
+`/* ... */`: 代码块注释  
+`///`: API(pub)文档, 建议使用markdown  
+`//!`: crate/ mod文档  
+详见 https://course.rs/basic/comment.html  
+## Logging instructions
+***TODO***
+## Kernel testing instructions
+Use `#[cfg(feature = "kernel_test")]` to enable.
+## Naming instructions
 Generally, stay the same with existing name style.
 # Git tips
 - For a mistaken commit, run `git reset --soft HEAD~1`, it will revert your last commit and preserve your changes.  
