@@ -51,13 +51,10 @@ impl U7Hart {
 pub fn new_local_hart(hart_id: usize) {
     unsafe {
         let sp: usize;
-        // unsafe {
         asm!("mv {}, sp", out(reg) sp);
-        // }
-        let s = ((sp & !(PAGE_SIZE - 1)) - 3 * PAGE_SIZE) as *mut U7Hart; // todo :目前是硬编码
-
+        let s = ((sp & !(PAGE_SIZE - 1)) - 15 * PAGE_SIZE) as *mut U7Hart; // todo :目前是硬编码
         (*s).hart_id = hart_id;
-        asm!("mv tp, {}", in(reg) &s as *const _ as usize);
+        asm!("mv tp, {}", in(reg) s as *const _ as usize);
     }
 }
 

@@ -29,7 +29,7 @@ impl TaskManager {
 
 lazy_static! {
     pub static ref TASK_MANAGER: UPSafeCell<TaskManager> =
-        unsafe { UPSafeCell::new(TaskManager::new()) };
+        unsafe { UPSafeCell::new(TaskManager::new())};
 }
 
 /// 添加任务的一个抽象层

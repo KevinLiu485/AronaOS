@@ -71,12 +71,8 @@ pub fn rust_main(hart_id: usize) -> ! {
         .is_ok()
     {
         clear_bss();
-        println!("[kernel] cpu:{} Hello, world!", hart_id);
-
-
         mm::init();
         mm::remap_test();
-
 
         trap::init();
 
@@ -84,33 +80,33 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         fs::list_apps();
-        new_local_hart(hart_id);
 
-        task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
         for i in 0..4 {
             if i == hart_id {
                 continue;
             }
             let status = sbi_call((0x48534d, 0), i, 0x80200000, 0);
-            println!("[kernel] start to wake up hart {}... status {}", i, status);
+            println!("[kernel] {} start to wake up hart {}... status {}", hart_id, i, status);
         }
-
-        task::run_tasks();
-        panic!("Unreachable in rust_main!");
+        println!("[kernel] cpu:{} Hello, world!", hart_id);
     } else {
-        //todo: 先loop着，后续再加支持
-        // 以及sbi相关的东西可能需要相关的引入。
+        //todo: 先loop着，后续再加支持, 以及sbi相关的东西可能需要相关的引入。
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
-
         trap::init();
         KERNEL_SPACE.exclusive_access().activate();
-        
         println!("cpu: {} start!", hart_id);
-        
-        loop {
-        }
     }
+
+    new_local_hart(hart_id);
+
+    if hart_id == 0 {
+        task::add_initproc();
+        task::run_tasks();
+    } else {
+        loop {}
+    }
+    panic!("run task should not reach!")
 }
 
 #[inline(always)]
