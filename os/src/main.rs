@@ -80,6 +80,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         fs::list_apps();
+        task::add_initproc();
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
         for i in 0..4 {
@@ -92,7 +93,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("[kernel] cpu:{} Hello, world!", hart_id);
     } else {
         //todo: 先loop着，后续再加支持, 以及sbi相关的东西可能需要相关的引入。
-        while !INIT_FINISHED.load(Ordering::SeqCst) {}
+        while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句吧。不过还是先留着。
         trap::init();
         KERNEL_SPACE.exclusive_access().activate();
         println!("cpu: {} start!", hart_id);
@@ -101,7 +102,6 @@ pub fn rust_main(hart_id: usize) -> ! {
     new_local_hart(hart_id);
 
     if hart_id == 0 {
-        task::add_initproc();
         task::run_tasks();
     } else {
         loop {}
