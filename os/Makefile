@@ -6,6 +6,8 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 APPS := ../user/src/bin/*
+LOG := ERROR
+KERNEL_FEATURES := kernel_tests
 
 # BOARD
 BOARD := qemu
@@ -51,7 +53,7 @@ $(APPS):
 kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build --release
+	@LOG=$(LOG) cargo build --release --features "$(KERNEL_FEATURES)"
 	@rm src/linker.ld
 
 clean:

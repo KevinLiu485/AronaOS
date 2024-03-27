@@ -41,15 +41,37 @@ HifumiOS
   - `git merge <your-branch-name>`. You may need to resolve conflicts.
 # Coding Style
 ## Comment instructions
-`//`: 代码行注释  
-`/* ... */`: 代码块注释  
-`///`: API(pub)文档, 建议使用markdown  
-`//!`: crate/ mod文档  
+- `//`: 代码行注释  
+- `/* ... */`: 代码块注释  
+- `///`: API(pub)文档, 建议使用markdown  
+- `//!`: crate/ mod文档  
 详见 https://course.rs/basic/comment.html  
 ## Logging instructions
-***TODO***
+Use logging marcos to replace `println!` everything in kernel!
+> e.g. `error!("CPU {} fail to start!", cpu_number);`  
+
+Run `make <rule> LOG=<LOG_LEVEL>` to change logging level.  
+Default logging level is `LOG=ERROR`.  
+Logging levels are: `ERROR -> WARN -> INFO -> DEBUG -> TRACE`, from brief to verbose.  
+When you enable the verbose one, briefer ones are enabled automatically.
+Here are logging level rules:
+- `println!`: Used when kernel module starts.  
+>e.g. logging system starts, kernel memory mapping starts
+- `error!`: Used when error happens in kernel and syscall. Enabled in default.
+>e.g. hart initialization failure
+- `warn!`: *Not scheduled yet*
+- `info!`: Used when kernel module prints working status. 
+>e.g. memory mapping info, block device loading info.   
+- `debug!`: **Feel free to use it when you are debugging your module!**
+- `trace!`: Used when syscall is called.
 ## Kernel testing instructions
-Use `#[cfg(feature = "kernel_test")]` to enable.
+Always wrapp kernel tests in `#[cfg(feature = "kernel_tests")]{ ... }`.  
+Default features are `kernel_tests`.  
+Run `make <rule> --features '<feature_1> <feature_2> <...>'` to enable feature.  
+## Conditional Compilation
+- Add `<your_feature> = []` in `os/Cargo.toml` under `[features]` section.  
+- Wrap your code with `#cfg[(feature = "your_feature")]{ ... }`.  
+- Modify variable `KERNEL_FEATURES` in `os/Makefile` to conditionally enable your feature.
 ## Naming instructions
 Generally, stay the same with existing name style.
 # Git tips
