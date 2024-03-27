@@ -115,6 +115,3 @@ pub fn add_initproc() {
     add_task(INITPROC.clone());
 }
 
-// pub unsafe fn hart_init(hart_id: usize) {
-//     new_local_hart(hart_id);
-// }

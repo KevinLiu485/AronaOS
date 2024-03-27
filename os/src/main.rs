@@ -15,6 +15,8 @@
 #![no_main]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![feature(negative_impls)]
+#![feature(const_trait_impl)]
 
 extern crate alloc;
 
@@ -45,8 +47,6 @@ use riscv::register::satp;
 use crate::mm::KERNEL_SPACE;
 use crate::task::processor::new_local_hart;
 
-
-// todo: 为什么跑os前要clear_bss
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
 fn clear_bss() {
@@ -71,6 +71,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         .is_ok()
     {
         clear_bss();
+
         mm::init();
         mm::remap_test();
 
@@ -83,29 +84,31 @@ pub fn rust_main(hart_id: usize) -> ! {
         task::add_initproc();
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
+
+        println!("[kernel] cpu:{} Hello, world!", hart_id);
         for i in 0..4 {
-            if i == hart_id {
-                continue;
-            }
+            if i == hart_id { continue }
             let status = sbi_call((0x48534d, 0), i, 0x80200000, 0);
             println!("[kernel] {} start to wake up hart {}... status {}", hart_id, i, status);
         }
-        println!("[kernel] cpu:{} Hello, world!", hart_id);
+
     } else {
         //todo: 先loop着，后续再加支持, 以及sbi相关的东西可能需要相关的引入。
         while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句吧。不过还是先留着。
         trap::init();
-        KERNEL_SPACE.exclusive_access().activate();
+        KERNEL_SPACE.lock().activate();
+
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
         println!("cpu: {} start!", hart_id);
     }
-
     new_local_hart(hart_id);
-
     if hart_id == 0 {
         task::run_tasks();
     } else {
         loop {}
     }
+
     panic!("run task should not reach!")
 }
 

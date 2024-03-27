@@ -108,7 +108,7 @@ impl TaskControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
+            KERNEL_SPACE.lock().token(),
             kernel_stack_top,
             trap_handler as usize,
         );
@@ -132,7 +132,7 @@ impl TaskControlBlock {
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
+            KERNEL_SPACE.lock().token(),
             self.kernel_stack.get_top(),
             trap_handler as usize,
         );
@@ -193,48 +193,6 @@ impl TaskControlBlock {
         self.pid.0
     }
 }
-
-//
-//
-// /// The outermost future, i.e. the future that wraps
-// /// one thread's task future(doing some env context changes e.g.
-// /// pagetable switching)
-// pub struct UserTaskFuture<F: Future + Send + 'static> {
-//     task_ctx: Box<LocalContext>,
-//     task_future: F,
-// }
-//
-// pub struct LocalContext {
-//     /// If no user task now(i.e. kernel thread is running), then None
-//     user_task_ctx: Option<UserTaskContext>,
-//     env: EnvContext,
-// }
-//
-// impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
-//     type Output = F::Output;
-//
-//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         // There are 2 cases that are safe:
-//         // 1. the outermost future itself is unpin
-//         // 2. the outermost future isn't unpin but we make sure that it won't be moved
-//         // SAFETY: although getting the mut ref of a pin type is unsafe,
-//         // we only need to change the task_ctx, which is ok
-//         let this = unsafe { self.get_unchecked_mut() };
-//         // let this = self.get_mut();
-//         let hart = processor::local_hart();
-//         hart.push_task(&mut this.task_ctx);
-//
-//         // run the `threadloop`
-//         // SAFETY:
-//         // the task future(i.e. threadloop) won't be moved.
-//         // One way to avoid unsafe is to wrap the task_future in
-//         // a Mutex<Pin<Box<>>>>, which requires locking for every polling
-//         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
-//         hart.pop_task(&mut this.task_ctx);
-//
-//         ret
-//     }
-// }
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {

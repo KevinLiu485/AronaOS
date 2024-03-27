@@ -71,25 +71,27 @@ pub fn get_local_hart() -> &'static mut U7Hart {
 ///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
 pub fn run_tasks() {
     loop {
+        // 得到对应的CPU
         let processor = get_local_hart();
 
         if let Some(task) = fetch_task() {
+
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
+
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
+
             // release coming task TCB manually
             processor.current = Some(task);
-            // release processor manually
 
-            // drop(processor);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         }
-
     }
 }
 ///Take the current task,leaving a None in its place
@@ -117,7 +119,6 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     let processor = get_local_hart();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-    // drop(processor);
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }

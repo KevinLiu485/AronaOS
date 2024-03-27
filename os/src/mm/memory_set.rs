@@ -4,7 +4,7 @@ use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
-use crate::sync::UPSafeCell;
+use crate::sync::{SpinNoIrqLock, UPSafeCell};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -27,14 +27,15 @@ extern "C" {
 
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
-    pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
-        Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
+    pub static ref KERNEL_SPACE: SpinNoIrqLock<MemorySet> =
+        SpinNoIrqLock::new(MemorySet::new_kernel());
 }
 ///Get kernelspace root ppn
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.exclusive_access().token()
+    KERNEL_SPACE.lock().token()
 }
-/// memory set structure, controls virtual-memory space
+
+/// memory set structure, 控制虚拟内存的空间
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
@@ -96,6 +97,7 @@ impl MemorySet {
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_trampoline();
+
         // map kernel sections
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
@@ -104,6 +106,7 @@ impl MemorySet {
             ".bss [{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
+
         println!("mapping .text section");
         memory_set.push(
             MapArea::new(
@@ -270,7 +273,6 @@ impl MemorySet {
     }
     ///Remove all `MapArea`
     pub fn recycle_data_pages(&mut self) {
-        //*self = Self::new_bare();
         self.areas.clear();
     }
 }
@@ -385,7 +387,7 @@ bitflags! {
 #[allow(unused)]
 ///Check PageTable running correctly
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    let mut kernel_space = KERNEL_SPACE.lock();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
     let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
