@@ -25,6 +25,7 @@
 #![no_main]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![feature(error_in_core)]
 
 extern crate alloc;
 
@@ -40,6 +41,7 @@ mod config;
 mod drivers;
 pub mod fs;
 pub mod lang_items;
+pub mod logging;
 pub mod mm;
 pub mod sbi;
 pub mod sync;
@@ -68,6 +70,7 @@ fn clear_bss() {
 pub fn rust_main() -> ! {
     clear_bss();
     println!("[kernel] Hello, world!");
+    logging::init();
     mm::init();
     mm::remap_test();
     trap::init();
