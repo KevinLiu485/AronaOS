@@ -8,15 +8,21 @@ FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 APPS := ../user/src/bin/*
 LOG := ERROR
 KERNEL_FEATURES := kernel_tests
+KTEST :=
 
 # BOARD
 BOARD := qemu
-SBI ?= rustsbi
+SBI ?= opensbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 
 # Building mode argument
 ifeq ($(MODE), release)
 	MODE_ARG := --release
+endif
+
+# kernel test ability
+ifeq ($(KTEST), false)
+	KERNEL_FEATURES :=
 endif
 
 # KERNEL ENTRY
@@ -53,7 +59,11 @@ $(APPS):
 kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
-	@LOG=$(LOG) cargo build --release --features "$(KERNEL_FEATURES)"
+ifeq ($(KERNEL_FEATURES), )
+	LOG=$(LOG) cargo build --release
+else 
+	LOG=$(LOG) cargo build --release --features "$(KERNEL_FEATURES)"
+endif
 	@rm src/linker.ld
 
 clean:

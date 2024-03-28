@@ -18,7 +18,7 @@ If you forget to clone recursively, run `git submodule init` and `git submodule 
   - 根据敏捷开发原则，Code Review大于一切。
 # Repository structure
 ```
-HifumiOS
+AronaOS
 |--bootloader
 |  \\rustsbi
 |--easy-fs, easy-fs-fuse
@@ -65,9 +65,9 @@ Here are logging level rules:
 - `debug!`: **Feel free to use it when you are debugging your module!**
 - `trace!`: Used when syscall is called.
 ## Kernel testing instructions
+Run `make <rule> KTEST=false` to disable feature `kernel_tests`.  
 Always wrapp kernel tests in `#[cfg(feature = "kernel_tests")]{ ... }`.  
-Default features are `kernel_tests`.  
-Run `make <rule> --features '<feature_1> <feature_2> <...>'` to enable feature.  
+By default, feature `kernel_tests` is enabled.
 ## Conditional Compilation
 - Add `<your_feature> = []` in `os/Cargo.toml` under `[features]` section.  
 - Wrap your code with `#cfg[(feature = "your_feature")]{ ... }`.  
@@ -80,5 +80,9 @@ Generally, stay the same with existing name style.
 - Make sure that `Cargo.lock` is not included by `.gitignore`, i.e. always track `Cargo.lock`, as `cargo` may break this rule.
 > However, `Cargo.lock` can sometimes be a merge conflict
 - If you forget to clone submodule recursively, run `git submodule init` and `git submodule update` to clone submodule seperately.
+# Makefile args
+- `SBI`: To switch between `rustsbi` and `opensbi`, run `make <rule> SBI=<rustsbi/opensbi>`. By default, AronaOS will run on `rustsbi`.
+- `LOG`: see [logging instructions](#logging-instructions).
+- `KTEST` see [Kernel testing instructions](#kernel-testing-instructions).
 # Relative repositories
 - 资料仓库：https://github.com/KevinLiu485/OS-Competition-Material/tree/main

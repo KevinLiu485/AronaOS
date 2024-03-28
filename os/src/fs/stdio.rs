@@ -21,7 +21,8 @@ impl File for Stdin {
         let mut c: usize;
         loop {
             c = console_getchar();
-            if c == 0 {
+            // opensbi returns usize::MAX if no char available
+            if c == usize::MAX {
                 suspend_current_and_run_next();
                 continue;
             } else {
