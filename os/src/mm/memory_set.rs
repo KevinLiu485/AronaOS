@@ -33,6 +33,10 @@ lazy_static! {
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
 
+pub fn kernel_token() -> usize {
+    KERNEL_SPACE.exclusive_access().token()
+}
+
 /* 
 pub static mut KERNEL_SPACE: Option<MemorySet> = None;
 
@@ -180,9 +184,7 @@ impl MemorySet {
     /// Include sections in elf and trampoline and TrapContext and user stack,
     /// also returns user_sp and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
-        println!("  call from_elf");
         let mut memory_set = Self::new_from_global();
-        println!("  return to from_elf after new_from_global");
         // map trampoline
         //memory_set.map_trampoline();
         // map program headers of elf, with U flag
@@ -257,6 +259,31 @@ impl MemorySet {
             elf.header.pt2.entry_point() as usize,
         )
     }
+    pub fn from_existed_user(user_space: &Self) -> Self {
+        // let mut memory_space = Self::new_bare();
+        let mut memory_space = Self::new_from_global();
+        // copy data sections/trap_context/user_stack
+        for area in user_space.areas.iter() {
+            let mut new_area = MapArea::from_another(area);
+            // memory_space.push(new_area, None);
+            // copy data from another space
+            for vpn in area.vpn_range {
+                if let Some(ppn) = user_space.translate(vpn) {
+                    let src_ppn = ppn.ppn();
+                    let dst_ppn = memory_space.translate(vpn).unwrap().ppn();
+                    dst_ppn.get_bytes_array().copy_from_slice(src_ppn.get_bytes_array());
+                }
+                // let src_ppn = user_space.translate(vpn).unwrap().ppn();
+                // let dst_ppn = memory_space.translate(vpn).unwrap().ppn();
+                // dst_ppn
+                //     .get_bytes_array()
+                //     .copy_from_slice(src_ppn.get_bytes_array());
+            }
+            memory_space.push(new_area, None);
+        }
+        memory_space
+    }
+
     pub fn activate(&self) {
         let satp = self.page_table.token();
         unsafe {
@@ -266,6 +293,21 @@ impl MemorySet {
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
+    }
+    pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
+        if let Some((idx, area)) = self
+            .areas
+            .iter_mut()
+            .enumerate()
+            .find(|(_, area)| area.vpn_range.get_start() == start_vpn)
+        {
+            area.unmap(&mut self.page_table);
+            self.areas.remove(idx);
+        }
+    }
+    pub fn recycle_data_pages(&mut self) {
+        //*self = Self::new_bare();
+        self.areas.clear();
     }
     #[allow(unused)]
     pub fn shrink_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
@@ -322,8 +364,9 @@ impl MapArea {
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
+            // todo: no page's maptype is Identical
             MapType::Identical => {
-                ppn = PhysPageNum(vpn.0);
+                unreachable!();
             }
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
@@ -351,6 +394,14 @@ impl MapArea {
         for vpn in self.vpn_range {
             //println!("      call map_one on {:?}", vpn);
             self.map_one(page_table, vpn);
+        }
+    }
+    pub fn from_another(another: &MapArea) -> Self {
+        Self {
+            vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
+            data_frames: BTreeMap::new(),
+            map_type: another.map_type,
+            map_perm: another.map_perm,
         }
     }
     #[allow(unused)]

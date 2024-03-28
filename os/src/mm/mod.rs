@@ -16,9 +16,10 @@ pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernelAddr};
 pub use address::{StepByOne, VPNRange};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::remap_test;
-pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
+pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE, kernel_token};
 pub use page_table::PageTableEntry;
 pub use page_table::{PTEFlags, PageTable};
+pub use page_table::UserBuffer;
 
 use crate::mm::frame_allocator::frame_allocator_test;
 use crate::mm::heap_allocator::heap_test;

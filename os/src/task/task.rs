@@ -10,17 +10,19 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::cell::SyncUnsafeCell;
 
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
     pub kernel_stack: KernelStack,
     // mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    pub inner: SyncUnsafeCell<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
-    pub trap_cx_ppn: PhysPageNum,
+    //pub trap_cx_ppn: PhysPageNum,
+    pub trap_cx: TrapContext,
     pub base_size: usize,
     pub task_cx: TaskContext,
     pub task_status: TaskStatus,
@@ -32,9 +34,16 @@ pub struct TaskControlBlockInner {
 }
 
 impl TaskControlBlockInner {
+    /* Todo: 先注释掉看看哪些地方要修改, 没必要通过函数去调用 
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.get_mut()
     }
+    */
+    /* 
+    pub fn get_trap_cx(&self) -> &'static mut TrapContext {
+        &mut self.trap_cx
+    }
+    */
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
@@ -55,26 +64,38 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
+    /* 
     pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
         self.inner.exclusive_access()
+    }
+    */
+    // warn: no promise to exclusive_access
+    pub fn get_uncheck_inner(&self) -> &mut TaskControlBlockInner{
+        unsafe { &mut (*self.inner.get()) }
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
         let kernel_stack_top = kernel_stack.get_top();
+
+        // prepare TrapContext in user space
+        let trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.exclusive_access().token(),
+            kernel_stack_top,
+            trap_handler as usize,
+        );
+
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
             inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx_ppn,
+                SyncUnsafeCell::new(TaskControlBlockInner {
+                    trap_cx,
                     base_size: user_sp,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
@@ -93,31 +114,15 @@ impl TaskControlBlock {
                 })
             },
         };
-        // prepare TrapContext in user space
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
-            kernel_stack_top,
-            trap_handler as usize,
-        );
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
-
-        // **** access current TCB exclusively
-        let mut inner = self.inner_exclusive_access();
+        // warn:  safety? no exclussive access 
+        let mut inner = self.get_uncheck_inner();
         // substitute memory_set
         inner.memory_set = memory_set;
-        // update trap_cx ppn
-        inner.trap_cx_ppn = trap_cx_ppn;
         // initialize trap_cx
         let trap_cx = TrapContext::app_init_context(
             entry_point,
@@ -126,18 +131,20 @@ impl TaskControlBlock {
             self.kernel_stack.get_top(),
             trap_handler as usize,
         );
-        *inner.get_trap_cx() = trap_cx;
+        inner.trap_cx = trap_cx;
         // **** release current PCB
     }
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
         // ---- hold parent PCB lock
-        let mut parent_inner = self.inner_exclusive_access();
+        let mut parent_inner = self.get_uncheck_inner();
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        /*
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
+        */
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
@@ -151,12 +158,14 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+        let mut trap_cx = self.get_uncheck_inner().trap_cx;
+        trap_cx.kernel_sp = kernel_stack_top;
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
             inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx_ppn,
+                SyncUnsafeCell::new(TaskControlBlockInner {
+                    trap_cx,
                     base_size: parent_inner.base_size,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
@@ -172,8 +181,6 @@ impl TaskControlBlock {
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        trap_cx.kernel_sp = kernel_stack_top;
         // return
         task_control_block
         // **** release child PCB
