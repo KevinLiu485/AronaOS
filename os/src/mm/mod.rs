@@ -20,6 +20,7 @@ pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE, kernel_token};
 pub use page_table::PageTableEntry;
 pub use page_table::{PTEFlags, PageTable};
 pub use page_table::UserBuffer;
+pub use page_table::{translated_str, translated_refmut};
 
 use crate::mm::frame_allocator::frame_allocator_test;
 use crate::mm::heap_allocator::heap_test;
@@ -27,18 +28,10 @@ use crate::mm::heap_allocator::heap_test;
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
-    heap_test();
+    //heap_test();
     frame_allocator::init_frame_allocator();
-    frame_allocator_test();
+    //frame_allocator_test();
     
     let kernel_space = KERNEL_SPACE.exclusive_access();
-    println!("get mut ref to KERNEL_SPACE");
     kernel_space.activate();
-    /*
-    unsafe {
-        KERNEL_SPACE.as_ref().unwrap().activate();
-    }
-    */
-    remap_test();
-    println!("kerel_space and write satp");
 }

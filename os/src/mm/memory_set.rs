@@ -33,6 +33,7 @@ lazy_static! {
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
 
+///
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.exclusive_access().token()
 }
@@ -49,19 +50,20 @@ pub fn init_kernel_space() {
 
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
+    ///
     pub page_table: PageTable,
     areas: Vec<MapArea>,
 }
 
 impl MemorySet {
+    ///
     pub fn new_bare() -> Self {
-        println!("  call new_bare");
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
         }
     }
-    //Create an empty `MemorySpace` but owns the global kernel mapping
+    /// Create an empty `MemorySpace` but owns the global kernel mapping
     pub fn new_from_global() -> Self {
         let page_table = PageTable::from_global();
         Self {
@@ -69,6 +71,7 @@ impl MemorySet {
             areas: Vec::new(),
         }
     }
+    ///
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
@@ -178,7 +181,6 @@ impl MemorySet {
                 None,
             );
         }
-        println!("finish to init KERNEL_SPACE");
         memory_set
     }
     /// Include sections in elf and trampoline and TrapContext and user stack,
@@ -259,6 +261,7 @@ impl MemorySet {
             elf.header.pt2.entry_point() as usize,
         )
     }
+    /// call from fork
     pub fn from_existed_user(user_space: &Self) -> Self {
         // let mut memory_space = Self::new_bare();
         let mut memory_space = Self::new_from_global();
@@ -284,6 +287,7 @@ impl MemorySet {
         memory_space
     }
 
+    ///
     pub fn activate(&self) {
         let satp = self.page_table.token();
         unsafe {
@@ -291,9 +295,11 @@ impl MemorySet {
             asm!("sfence.vma");
         }
     }
+    ///
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
+    ///
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
             .areas
@@ -305,10 +311,12 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    ///
     pub fn recycle_data_pages(&mut self) {
         //*self = Self::new_bare();
         self.areas.clear();
     }
+    ///
     #[allow(unused)]
     pub fn shrink_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
         if let Some(area) = self
@@ -322,6 +330,7 @@ impl MemorySet {
             false
         }
     }
+    ///
     #[allow(unused)]
     pub fn append_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
         if let Some(area) = self
@@ -460,13 +469,18 @@ pub enum MapType {
 bitflags! {
     /// map permission corresponding to that in pte: `R W X U`
     pub struct MapPermission: u8 {
+        ///
         const R = 1 << 1;
+        ///
         const W = 1 << 2;
+        ///
         const X = 1 << 3;
+        ///
         const U = 1 << 4;
     }
 }
 
+///
 #[allow(unused)]
 pub fn remap_test() {
     let mut kernel_space = KERNEL_SPACE.exclusive_access();

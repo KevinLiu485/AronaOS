@@ -1,10 +1,12 @@
 //! File and filesystem-related syscalls
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
-use crate::task::{current_task, current_user_token};
+//use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+//use crate::task::{current_task, current_user_token};
+use crate::task::current_task;
+use crate::mm::translated_str;
 
-pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
-    let token = current_user_token();
+pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
+    //let token = current_user_token();
     let task = current_task().unwrap();
     let inner = task.get_uncheck_inner();
     if fd >= inner.fd_table.len() {
@@ -17,14 +19,18 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         let file = file.clone();
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-        file.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+        let buf = unsafe {
+            core::slice::from_raw_parts(buf as *const u8, len)
+        };
+        //file.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+        file.write(buf) as isize
     } else {
         -1
     }
 }
 
-pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
-    let token = current_user_token();
+pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
+    //let token = current_user_token();
     let task = current_task().unwrap();
     let inner = task.get_uncheck_inner();
     if fd >= inner.fd_table.len() {
@@ -37,7 +43,9 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
-        file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+        //file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
+        let mut buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+        file.read(buf) as isize
     } else {
         -1
     }
@@ -45,8 +53,8 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 
 pub fn sys_open(path: *const u8, flags: u32) -> isize {
     let task = current_task().unwrap();
-    let token = current_user_token();
-    let path = translated_str(token, path);
+    //let token = current_user_token();
+    let path = translated_str(path);
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.get_uncheck_inner();
         let fd = inner.alloc_fd();

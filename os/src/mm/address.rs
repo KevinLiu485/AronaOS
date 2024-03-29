@@ -15,6 +15,7 @@ const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct KernelAddr(pub usize);
 
+/// physical page address
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
 
@@ -115,9 +116,11 @@ impl From<VirtPageNum> for usize {
 }
 
 impl VirtAddr {
+    /// Alignment
     pub fn floor(&self) -> VirtPageNum {
         VirtPageNum(self.0 / PAGE_SIZE)
     }
+    /// Alignment
     pub fn ceil(&self) -> VirtPageNum {
         if self.0 == 0 {
             VirtPageNum(0)
@@ -125,9 +128,11 @@ impl VirtAddr {
             VirtPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
         }
     }
+    /// vpo
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
+    /// is_aligned?
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
@@ -144,9 +149,11 @@ impl From<VirtPageNum> for VirtAddr {
     }
 }
 impl PhysAddr {
+    /// alignment
     pub fn floor(&self) -> PhysPageNum {
         PhysPageNum(self.0 / PAGE_SIZE)
     }
+    /// alignment
     pub fn ceil(&self) -> PhysPageNum {
         if self.0 == 0 {
             PhysPageNum(0)
@@ -154,13 +161,16 @@ impl PhysAddr {
             PhysPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
         }
     }
+    /// ppo
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
+    /// is_aligned
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
 }
+
 impl From<PhysAddr> for PhysPageNum {
     fn from(v: PhysAddr) -> Self {
         assert_eq!(v.page_offset(), 0);
@@ -199,6 +209,7 @@ impl From<KernelAddr> for PhysPageNum {
 }
 
 impl VirtPageNum {
+    /// vpn -> 9 + 9 + 9
     pub fn indexes(&self) -> [usize; 3] {
         let mut vpn = self.0;
         let mut idx = [0usize; 3];
@@ -211,21 +222,38 @@ impl VirtPageNum {
 }
 
 impl PhysPageNum {
+    ///
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let ka: KernelAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(ka.0 as *mut PageTableEntry, 512) }
     }
+    ///
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
         let ka: KernelAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(ka.0 as *mut u8, 4096) }
     }
+    ///
     pub fn get_mut<T>(&self) -> &'static mut T {
         let ka: KernelAddr = (*self).into();
         unsafe { (ka.0 as *mut T).as_mut().unwrap() }
     }
 }
 
+
+impl PhysAddr {
+    ///Get reference to `PhysAddr` value
+    pub fn get_ref<T>(&self) -> &'static T {
+        unsafe { (self.0 as *const T).as_ref().unwrap() }
+    }
+    ///Get mutable reference to `PhysAddr` value
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+}
+
+///
 pub trait StepByOne {
+    ///
     fn step(&mut self);
 }
 impl StepByOne for VirtPageNum {

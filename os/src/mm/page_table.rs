@@ -9,17 +9,26 @@ use bitflags::*;
 use riscv::register::satp;
 use core::arch::asm;
 use super::memory_set::KERNEL_SPACE;
+use alloc::string::String;
 
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        ///
         const V = 1 << 0;
+        ///
         const R = 1 << 1;
+        ///
         const W = 1 << 2;
+        ///
         const X = 1 << 3;
+        ///
         const U = 1 << 4;
+        ///
         const G = 1 << 5;
+        ///
         const A = 1 << 6;
+        ///
         const D = 1 << 7;
         /* todo: add COW and hugepage flag bit */
     }
@@ -29,33 +38,42 @@ bitflags! {
 #[repr(C)]
 /// page table entry structure
 pub struct PageTableEntry {
+    ///
     pub bits: usize,
 }
 
 impl PageTableEntry {
+    ///
     pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
         PageTableEntry {
             bits: ppn.0 << 10 | flags.bits as usize,
         }
     }
+    ///
     pub fn empty() -> Self {
         PageTableEntry { bits: 0 }
     }
+    ///
     pub fn ppn(&self) -> PhysPageNum {
         (self.bits >> 10 & ((1usize << 44) - 1)).into()
     }
+    ///
     pub fn flags(&self) -> PTEFlags {
         PTEFlags::from_bits(self.bits as u8).unwrap()
     }
+    ///
     pub fn is_valid(&self) -> bool {
         (self.flags() & PTEFlags::V) != PTEFlags::empty()
     }
+    ///
     pub fn readable(&self) -> bool {
         (self.flags() & PTEFlags::R) != PTEFlags::empty()
     }
+    ///
     pub fn writable(&self) -> bool {
         (self.flags() & PTEFlags::W) != PTEFlags::empty()
     }
+    ///
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
@@ -69,6 +87,7 @@ pub struct PageTable {
 
 /// Assume that it won't oom when creating/mapping.
 impl PageTable {
+    ///
     pub fn new() -> Self {
         println!("  call pagetable::new()");
         let frame = frame_alloc().expect("fail to alloc a frame");
@@ -78,7 +97,7 @@ impl PageTable {
             frames: vec![frame],
         }
     }
-    /* Create a pagetable from global kernel pagetble(only copy level 1)*/
+    /// Create a pagetable from global kernel pagetble(only copy level 1)
     pub fn from_global() -> Self {
         let frame = frame_alloc().unwrap();
         let global_root_ppn =
@@ -101,6 +120,7 @@ impl PageTable {
         } 
     }
 
+    ///
     pub fn activate(&self) {
         let satp = self.token();
         unsafe {
@@ -152,6 +172,7 @@ impl PageTable {
         }
         result
     }
+    ///
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         //println!("try to map vpn: {:?} with ppn: {:?}", vpn, ppn);
@@ -159,15 +180,18 @@ impl PageTable {
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
+    ///
     #[allow(unused)]
     pub fn unmap(&mut self, vpn: VirtPageNum) {
         let pte = self.find_pte(vpn).unwrap();
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
         *pte = PageTableEntry::empty();
     }
+    ///
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
+    ///
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
@@ -191,6 +215,10 @@ pub struct UserBuffer {
 }
 
 impl UserBuffer {
+    ///
+    pub fn new_bare() -> Self {
+        Self { buffers: Vec::new() }
+    }
     ///Create a `UserBuffer` by parameter
     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
         Self { buffers }
@@ -265,3 +293,27 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 */
+
+/// Translate a pointer to a muable u8 Vec end with `\0` through page table to a `String`
+pub fn translated_str(ptr: *const u8) -> String {
+    let mut string = String::new();
+    loop {
+        let ch: u8 = unsafe { *ptr };
+        if ch == 0 {
+            break;
+        }
+        string.push(ch as char);
+        unsafe { ptr.add(1) };
+    }
+    string
+}
+
+///Translate a generic through page table and return a mutable reference
+pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    let page_table = PageTable::from_token(token);
+    let va = ptr as usize;
+    page_table
+        .translate_va(VirtAddr::from(va))
+        .unwrap()
+        .get_mut()
+}

@@ -10,10 +10,12 @@ use lazy_static::*;
 
 /// manage a frame which has the same lifecycle as the tracker
 pub struct FrameTracker {
-    pub ppn: PhysPageNum,
+    ///
+    pub ppn: PhysPageNum, 
 }
 
 impl FrameTracker {
+    /// constructor
     pub fn new(ppn: PhysPageNum) -> Self {
         // page cleaning
         let bytes_array = ppn.get_bytes_array();

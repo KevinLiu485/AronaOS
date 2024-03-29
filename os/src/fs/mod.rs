@@ -10,9 +10,9 @@ pub trait File: Send + Sync {
     /// If writable
     fn writable(&self) -> bool;
     /// Read file to `UserBuffer`
-    fn read(&self, buf: UserBuffer) -> usize;
+    fn read(&self, buf: &mut [u8]) -> usize;
     /// Write `UserBuffer` to file
-    fn write(&self, buf: UserBuffer) -> usize;
+    fn write(&self, buf: &[u8]) -> usize;
 }
 
 pub use inode::{list_apps, open_file, OSInode, OpenFlags};
