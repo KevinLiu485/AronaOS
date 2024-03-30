@@ -127,28 +127,14 @@ impl File for OSInode {
     fn writable(&self) -> bool {
         self.writable
     }
-    fn read(&self, mut buf: UserBuffer) -> usize {
+    fn read(&self, mut buf: &mut[u8]) -> usize {
         let mut inner = self.inner.exclusive_access();
-        let mut total_read_size = 0usize;
-        for slice in buf.buffers.iter_mut() {
-            let read_size = inner.inode.read_at(inner.offset, *slice);
-            if read_size == 0 {
-                break;
-            }
-            inner.offset += read_size;
-            total_read_size += read_size;
-        }
-        total_read_size
+        let read_size = inner.inode.read_at(inner.offset, buf);
+        read_size
     }
-    fn write(&self, buf: UserBuffer) -> usize {
+    fn write(&self, buf: &[u8]) -> usize {
         let mut inner = self.inner.exclusive_access();
-        let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
-            let write_size = inner.inode.write_at(inner.offset, *slice);
-            assert_eq!(write_size, slice.len());
-            inner.offset += write_size;
-            total_write_size += write_size;
-        }
-        total_write_size
+        let write_size = inner.inode.write_at(inner.offset, buf);
+        write_size
     }
 }
