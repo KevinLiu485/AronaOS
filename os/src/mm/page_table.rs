@@ -297,13 +297,14 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 /// Translate a pointer to a muable u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(ptr: *const u8) -> String {
     let mut string = String::new();
+    let mut ptr = ptr;
     loop {
         let ch: u8 = unsafe { *ptr };
         if ch == 0 {
             break;
         }
         string.push(ch as char);
-        unsafe { ptr.add(1) };
+        ptr = unsafe { ptr.add(1) };
     }
     string
 }
