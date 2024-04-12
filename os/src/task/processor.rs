@@ -19,6 +19,7 @@ impl Processor {
     pub fn new() -> Self {
         Self {
             current: None,
+            // current: Some(Arc::new(TaskControlBlock::new_bare())),
             // idle_task_cx: TaskContext::zero_init(),
         }
     }
@@ -35,10 +36,10 @@ impl Processor {
         self.current.as_ref().map(Arc::clone)
     }
     /// Switch task context, including pagetable
-    pub fn switch_task(&mut self, task: &mut Arc<TaskControlBlock>) {
+    pub fn switch_task(&mut self, task: &mut Option<Arc<TaskControlBlock>>) {
         // pagetable is set accroding to `TaskControlBlock`, only need to switch `TaskControlBlock`
         // switch `TaskControlBlock`
-        core::mem::swap(self.current.as_mut().unwrap(), task);
+        core::mem::swap(&mut self.current, task);
     }
     // pub fn pop_task(&mut self, task: &mut Arc<TaskControlBlock>) {
     //     core::mem::swap(self.current.as_mut().unwrap(), task);
@@ -73,9 +74,9 @@ lazy_static! {
 // }
 
 /// Switch task context, including pagetable
-pub fn switch_task(task: &mut Arc<TaskControlBlock>) {
-    let mut processor = PROCESSOR.exclusive_access();
-    processor.switch_task(task);
+pub fn switch_task(task: &mut Option<Arc<TaskControlBlock>>) {
+    // let mut processor = PROCESSOR.exclusive_access();
+    PROCESSOR.exclusive_access().switch_task(task);
 }
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {

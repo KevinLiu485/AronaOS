@@ -15,11 +15,10 @@ mod context;
 
 use crate::config::{TRAMPOLINE, TRAP_CONTEXT};
 use crate::syscall::syscall;
-use crate::task::{
-    current_trap_cx, current_user_token, exit_current, yield_task
-};
+use crate::task::{current_trap_cx, current_user_token, exit_current, yield_task};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
+use log::debug;
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
@@ -56,6 +55,7 @@ pub fn enable_timer_interrupt() {
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
 pub async fn trap_handler() {
+    debug!("trap_handler(): enter");
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -111,6 +111,7 @@ pub async fn trap_handler() {
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return() {
+    debug!("trap_return(): enter");
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT;
     let user_satp = current_user_token();

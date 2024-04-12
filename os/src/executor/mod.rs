@@ -2,11 +2,12 @@ use core::future::Future;
 
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
+use log::debug;
 
 use crate::mutex::SpinNoIrqLock;
 
 struct TaskQueue {
-  queue: SpinNoIrqLock<Option<VecDeque<Runnable>>>,
+    queue: SpinNoIrqLock<Option<VecDeque<Runnable>>>,
 }
 
 impl TaskQueue {
@@ -22,6 +23,7 @@ impl TaskQueue {
         let mut lock = self.queue.lock();
         lock.as_mut().unwrap().push_back(runnable);
     }
+    #[allow(unused)]
     pub fn push_preempt(&self, runnable: Runnable) {
         self.queue.lock().as_mut().unwrap().push_front(runnable);
     }
@@ -42,16 +44,17 @@ where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
+    #[allow(unused_variables)]
     let schedule = move |runnable: Runnable, info: ScheduleInfo| {
-        // TASK_QUEUE.push(runnable);
-        if info.woken_while_running {
-            // i.e `yield_now()`
-            // log::error!("yield now");
-            TASK_QUEUE.push(runnable);
-        } else {
-            // i.e. woken up by some signal
-            TASK_QUEUE.push_preempt(runnable);
-        }
+        TASK_QUEUE.push(runnable);
+        // if info.woken_while_running {
+        //     // i.e `yield_now()`
+        //     // log::error!("yield now");
+        //     TASK_QUEUE.push(runnable);
+        // } else {
+        //     // i.e. woken up by some signal
+        //     TASK_QUEUE.push_preempt(runnable);
+        // }
     };
     async_task::spawn(future, WithInfo(schedule))
 }
@@ -74,8 +77,10 @@ pub fn run_until_idle() -> usize {
 
 #[allow(unused)]
 pub fn run_forever() -> ! {
+    debug!("run_forever(): entered");
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
+            debug!("run_forever(): fetch a task");
             task.run();
         }
     }

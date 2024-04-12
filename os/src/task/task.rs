@@ -58,6 +58,25 @@ impl TaskControlBlock {
     pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
         self.inner.exclusive_access()
     }
+    /// Create a wen meaningless TaskControlBlock
+    pub fn new_bare() -> Self {
+        TaskControlBlock {
+            pid: PidHandle(usize::MAX),
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn: PhysPageNum(0),
+                    base_size: 0,
+                    task_cx: TaskContext::goto_trap_return(0),
+                    task_status: TaskStatus::Zombie,
+                    memory_set: MemorySet::new_bare(),
+                    parent: None,
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: Vec::new(),
+                })
+            },
+        }
+    }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);

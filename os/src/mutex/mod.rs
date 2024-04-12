@@ -1,3 +1,4 @@
+//! Mutex support
 use riscv::register::sstatus;
 
 use self::spin_mutex::SpinMutex;
