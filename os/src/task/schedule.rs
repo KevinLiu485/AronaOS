@@ -8,11 +8,13 @@ use core::{
 use alloc::sync::Arc;
 use log::{debug, info};
 
-use crate::{executor, task::current_task, trap::{trap_handler, trap_return}};
-
-use super::{
-    processor::switch_task, task::TaskControlBlock
+use crate::{
+    executor,
+    task::current_task,
+    trap::{trap_handler, trap_return},
 };
+
+use super::{processor::switch_task, task::TaskControlBlock};
 
 /// A future that yields the current thread when firstly polled
 pub struct YieldFuture(pub bool);
@@ -34,7 +36,7 @@ impl Future for YieldFuture {
 
 /// A future that runs a user task
 pub struct UserTaskFuture<F: Future + Send + 'static> {
-    task_ctx: Arc<TaskControlBlock>,
+    task_ctx: Option<Arc<TaskControlBlock>>,
     task_future: F,
 }
 
@@ -42,7 +44,7 @@ impl<F: Future + Send + 'static> UserTaskFuture<F> {
     /// Create a new `UserTaskFuture`
     pub fn new(task_control_block: Arc<TaskControlBlock>, task_future: F) -> Self {
         Self {
-            task_ctx: task_control_block.clone(),
+            task_ctx: Some(task_control_block.clone()),
             task_future,
         }
     }
@@ -110,7 +112,7 @@ pub fn spawn_thread(task_control_block: Arc<TaskControlBlock>) {
 // }
 
 pub async fn thread_loop(task: Arc<TaskControlBlock>) {
-    info!("thread_loop(): pid = {}", task.getpid());
+    debug!("thread_loop(): pid = {}", task.getpid());
     // thread.set_waker(async_utils::take_waker().await);
     // debug!(
     //     "into thread loop, sepc {:#x}, trap cx addr {:#x}",
@@ -122,9 +124,12 @@ pub async fn thread_loop(task: Arc<TaskControlBlock>) {
 
         // next time when user traps into kernel, it will come back here
         trap_handler().await;
-
+        debug!("thread_loop(): back from trap_handler");
         if task.is_zombie() {
-            info!("process terminated, pid = {}", current_task().unwrap().getpid());
+            info!(
+                "process terminated, pid = {}",
+                current_task().unwrap().getpid()
+            );
             break;
         }
     }

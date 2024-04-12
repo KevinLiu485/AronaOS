@@ -15,7 +15,7 @@
 //! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
 //! might not be what you expect.
 mod context;
-mod manager;
+// mod manager;
 mod pid;
 mod processor;
 pub mod schedule;
