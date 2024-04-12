@@ -44,8 +44,11 @@ pub fn init() {
         Some("TRACE") => LevelFilter::Trace,
         _ => LevelFilter::Off,
     });
-    println!("[kernel] logger initialized with LOG={:?}", option_env!("LOG"));
-    // #[cfg(feature = "kernel_tests")] 
+    println!(
+        "[kernel] logger initialized with LOG={:?}",
+        option_env!("LOG")
+    );
+    // #[cfg(feature = "kernel_tests")]
     // {
     //     println!("[test] logging test starts");
     //     log::error!("log::error!");

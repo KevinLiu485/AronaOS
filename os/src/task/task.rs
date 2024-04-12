@@ -14,7 +14,7 @@ use core::cell::RefMut;
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
-    pub kernel_stack: KernelStack,
+    // pub kernel_stack: KernelStack,
     // mutable
     inner: UPSafeCell<TaskControlBlockInner>,
 }
@@ -71,7 +71,7 @@ impl TaskControlBlock {
         let kernel_stack_top = kernel_stack.get_top();
         let task_control_block = Self {
             pid: pid_handle,
-            kernel_stack,
+            // kernel_stack,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -99,7 +99,7 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
-            kernel_stack_top,
+            // kernel_stack_top,
             trap_handler as usize,
         );
         task_control_block
@@ -123,7 +123,7 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
-            self.kernel_stack.get_top(),
+            // self.kernel_stack.get_top(),
             trap_handler as usize,
         );
         *inner.get_trap_cx() = trap_cx;
@@ -153,7 +153,7 @@ impl TaskControlBlock {
         }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            kernel_stack,
+            // kernel_stack,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -172,8 +172,8 @@ impl TaskControlBlock {
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        trap_cx.kernel_sp = kernel_stack_top;
+        // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        // trap_cx.kernel_sp = kernel_stack_top;
         // return
         task_control_block
         // **** release child PCB
@@ -181,6 +181,9 @@ impl TaskControlBlock {
     }
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+    pub fn is_zombie(&self) -> bool {
+        self.inner_exclusive_access().is_zombie()
     }
 }
 

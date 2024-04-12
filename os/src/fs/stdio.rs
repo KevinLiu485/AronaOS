@@ -2,7 +2,8 @@
 use super::File;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
-use crate::task::suspend_current_and_run_next;
+use crate::task::yield_task;
+// use crate::task::suspend_current_and_run_next;
 ///Standard input
 pub struct Stdin;
 ///Standard output
@@ -23,7 +24,8 @@ impl File for Stdin {
             c = console_getchar();
             // opensbi returns usize::MAX if no char available
             if c == usize::MAX {
-                suspend_current_and_run_next();
+                // suspend_current_and_run_next();
+                // yield_task().await;
                 continue;
             } else {
                 break;

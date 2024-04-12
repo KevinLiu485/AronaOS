@@ -26,6 +26,7 @@
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 #![feature(error_in_core)]
+#![feature(negative_impls)]
 
 extern crate alloc;
 
@@ -39,10 +40,12 @@ mod board;
 mod console;
 mod config;
 mod drivers;
+mod executor;
 pub mod fs;
 pub mod lang_items;
 pub mod logging;
 pub mod mm;
+pub mod mutex;
 pub mod sbi;
 pub mod sync;
 pub mod syscall;
@@ -73,11 +76,17 @@ pub fn rust_main() -> ! {
     logging::init();
     mm::init();
     mm::remap_test();
+    executor::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     fs::list_apps();
     task::add_initproc();
-    task::run_tasks();
-    panic!("Unreachable in rust_main!");
+    // task::schedule::spawn_kernel_thread(async move {
+    //     task::add_initproc();
+    // });
+
+    executor::run_forever();
+    // task::run_tasks();
+    // panic!("Unreachable in rust_main!");
 }
