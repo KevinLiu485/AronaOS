@@ -59,6 +59,7 @@ $(APPS):
 kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
+	@cargo fmt
 ifeq ($(KERNEL_FEATURES), )
 	LOG=$(LOG) cargo build --release
 else 
