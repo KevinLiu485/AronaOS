@@ -6,17 +6,22 @@ use riscv::register::sstatus::{self, Sstatus, SPP};
 ///trap context structure containing sstatus, sepc and registers
 pub struct TrapContext {
     /// general regs[0..31]
+    /* 0 */
     pub x: [usize; 32],
     /// CSR sstatus      
+    /* 32 */
     pub sstatus: Sstatus,
     /// CSR sepc
+    /* 33 */
     pub sepc: usize,
-    /// Addr of Page Table
+
+    /// kernel-to-user should save:
+    /// general regs[0..31]
+    /* 34 */
+    pub kernel_s: [usize; 32],
+    /// Addr of Page Table, should not be modified after init
+    /* 66 */
     pub kernel_satp: usize,
-    /// kernel stack
-    // pub kernel_sp: usize,
-    /// Addr of trap_handler function
-    pub trap_handler: usize,
 }
 
 impl TrapContext {
@@ -25,13 +30,7 @@ impl TrapContext {
         self.x[2] = sp;
     }
     ///init app context
-    pub fn app_init_context(
-        entry: usize,
-        sp: usize,
-        kernel_satp: usize,
-        // kernel_sp: usize,
-        trap_handler: usize,
-    ) -> Self {
+    pub fn app_init_context(entry: usize, sp: usize, kernel_satp: usize) -> Self {
         let mut sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
@@ -39,9 +38,8 @@ impl TrapContext {
             x: [0; 32],
             sstatus,
             sepc: entry,
+            kernel_s: [0; 32],
             kernel_satp,
-            // kernel_sp,
-            trap_handler,
         };
         cx.set_sp(sp);
         cx

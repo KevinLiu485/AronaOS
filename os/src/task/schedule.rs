@@ -63,33 +63,6 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
     }
 }
 
-// pub struct KernelTaskFuture<F: Future<Output = ()> + Send + 'static> {
-//     task_ctx: Arc<TaskControlBlock>,
-//     task_future: F,
-// }
-
-// impl<F: Future<Output = ()> + Send + 'static> KernelTaskFuture<F> {
-//     pub fn new(task: F) -> Self {
-//         Self {
-//             task_ctx: Arc::new(),
-//             task_future: task,
-//         }
-//     }
-// }
-
-// impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
-//     type Output = F::Output;
-
-//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         let this = unsafe { self.get_unchecked_mut() };
-//         push_kernel_task();
-//         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
-//         pop_kernel_task();
-
-//         ret
-//     }
-// }
-
 /// Yield the current thread (and the scheduler will switch to next thread)
 pub async fn yield_task() {
     YieldFuture(false).await;
@@ -103,28 +76,14 @@ pub fn spawn_thread(task_control_block: Arc<TaskControlBlock>) {
     task.detach();
 }
 
-/// Spawn a new kernel thread(used for doing some kernel init work or timed tasks)
-// pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(kernel_thread: F) {
-//     let future = KernelTaskFuture::new(kernel_thread);
-//     let (runnable, task) = executor::spawn(future);
-//     runnable.schedule();
-//     task.detach();
-// }
-
+/// The main loop of a user thread
 pub async fn thread_loop(task: Arc<TaskControlBlock>) {
-    debug!("thread_loop(): pid = {}", task.getpid());
-    // thread.set_waker(async_utils::take_waker().await);
-    // debug!(
-    //     "into thread loop, sepc {:#x}, trap cx addr {:#x}",
-    //     current_task().trap_context_ref().sepc,
-    //     current_task().trap_context_ref() as *const TrapContext as usize
-    // );
     loop {
         trap_return();
 
         // next time when user traps into kernel, it will come back here
         trap_handler().await;
-        debug!("thread_loop(): back from trap_handler");
+        // debug!("thread_loop(): back from trap_handler");
         if task.is_zombie() {
             info!(
                 "process terminated, pid = {}",

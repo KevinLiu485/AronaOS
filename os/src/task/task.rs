@@ -1,6 +1,5 @@
 //!Implementation of [`TaskControlBlock`]
-use super::TaskContext;
-use super::{pid_alloc, KernelStack, PidHandle};
+use super::{pid_alloc, PidHandle};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
@@ -14,7 +13,6 @@ use core::cell::RefMut;
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
-    // pub kernel_stack: KernelStack,
     // mutable
     inner: UPSafeCell<TaskControlBlockInner>,
 }
@@ -22,7 +20,6 @@ pub struct TaskControlBlock {
 pub struct TaskControlBlockInner {
     pub trap_cx_ppn: PhysPageNum,
     pub base_size: usize,
-    pub task_cx: TaskContext,
     pub task_status: TaskStatus,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<TaskControlBlock>>,
@@ -66,7 +63,6 @@ impl TaskControlBlock {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn: PhysPageNum(0),
                     base_size: 0,
-                    task_cx: TaskContext::goto_trap_return(0),
                     task_status: TaskStatus::Zombie,
                     memory_set: MemorySet::new_bare(),
                     parent: None,
@@ -86,16 +82,12 @@ impl TaskControlBlock {
             .ppn();
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
-        let kernel_stack = KernelStack::new(&pid_handle);
-        let kernel_stack_top = kernel_stack.get_top();
         let task_control_block = Self {
             pid: pid_handle,
-            // kernel_stack,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: user_sp,
-                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
                     parent: None,
@@ -118,8 +110,6 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
-            // kernel_stack_top,
-            trap_handler as usize,
         );
         task_control_block
     }
@@ -142,8 +132,6 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
-            // self.kernel_stack.get_top(),
-            trap_handler as usize,
         );
         *inner.get_trap_cx() = trap_cx;
         // **** release current PCB
@@ -157,10 +145,8 @@ impl TaskControlBlock {
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-        // alloc a pid and a kernel stack in kernel space
+        // alloc a pid
         let pid_handle = pid_alloc();
-        let kernel_stack = KernelStack::new(&pid_handle);
-        let kernel_stack_top = kernel_stack.get_top();
         // copy fd table
         let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
         for fd in parent_inner.fd_table.iter() {
@@ -172,12 +158,10 @@ impl TaskControlBlock {
         }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            // kernel_stack,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: parent_inner.base_size,
-                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
                     parent: Some(Arc::downgrade(self)),
@@ -190,12 +174,8 @@ impl TaskControlBlock {
         // add child
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
-        // **** access child PCB exclusively
-        // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        // trap_cx.kernel_sp = kernel_stack_top;
         // return
         task_control_block
-        // **** release child PCB
         // ---- release parent PCB
     }
     pub fn getpid(&self) -> usize {

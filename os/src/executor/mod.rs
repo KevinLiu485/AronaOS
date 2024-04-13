@@ -47,14 +47,6 @@ where
     #[allow(unused_variables)]
     let schedule = move |runnable: Runnable, info: ScheduleInfo| {
         TASK_QUEUE.push(runnable);
-        // if info.woken_while_running {
-        //     // i.e `yield_now()`
-        //     // log::error!("yield now");
-        //     TASK_QUEUE.push(runnable);
-        // } else {
-        //     // i.e. woken up by some signal
-        //     TASK_QUEUE.push_preempt(runnable);
-        // }
     };
     async_task::spawn(future, WithInfo(schedule))
 }
@@ -80,7 +72,7 @@ pub fn run_forever() -> ! {
     debug!("run_forever(): entered");
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
-            debug!("run_forever(): fetch a task");
+            // debug!("run_forever(): fetch a task");
             task.run();
         }
     }

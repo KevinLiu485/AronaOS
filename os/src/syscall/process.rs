@@ -5,9 +5,9 @@ use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
 use alloc::sync::Arc;
 
-pub fn sys_exit(exit_code: i32) -> ! {
+pub fn sys_exit(exit_code: i32) -> isize {
     exit_current(exit_code);
-    panic!("Unreachable in sys_exit!");
+    0
 }
 
 pub async fn sys_yield() -> isize {
@@ -33,7 +33,6 @@ pub fn sys_fork() -> isize {
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
     // add new task to scheduler
-    // add_task(new_task);
     spawn_thread(new_task);
     new_pid as isize
 }
