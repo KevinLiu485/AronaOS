@@ -87,4 +87,4 @@ Generally, stay the same with existing name style.
 # Relative repositories
 - 资料仓库：https://github.com/KevinLiu485/OS-Competition-Material/tree/main
 # Figure of A.R.O.N.A OS
-![A.R.O.N.A](./Arona.png "A.R.O.N.A")
+![A.R.O.N.A](./Arona_wide.png "A.R.O.N.A")
