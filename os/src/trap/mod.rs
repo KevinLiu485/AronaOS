@@ -55,7 +55,7 @@ pub fn enable_timer_interrupt() {
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
 pub async fn trap_handler() {
-    debug!("trap_handler(): enter");
+    // debug!("trap_handler(): enter");
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -102,8 +102,6 @@ pub async fn trap_handler() {
             );
         }
     }
-    //println!("before trap_return");
-    // trap_return();
 }
 
 #[no_mangle]
@@ -111,7 +109,7 @@ pub async fn trap_handler() {
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return() {
-    debug!("trap_return(): enter");
+    // debug!("trap_return(): enter");
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT;
     let user_satp = current_user_token();
@@ -119,15 +117,18 @@ pub fn trap_return() {
         fn __trap_from_user();
         fn __return_to_user();
     }
-    let restore_va = __return_to_user as usize - __trap_from_user as usize + TRAMPOLINE;
+    let return_to_user_va = __return_to_user as usize - __trap_from_user as usize + TRAMPOLINE;
     unsafe {
+        // i-cache is indexed by virtual address possiblly, so we have to flush it with `fence.i`
         asm!(
             "fence.i",
-            "jr {restore_va}",
-            restore_va = in(reg) restore_va,
+            // jump to restore_va, set next instruction addr to ra
+            // to stimulate `__return_to_user(trap_cx_ptr, user_satp);` in asm
+            // cannot call __return_to_user() directly, as it will not goto the TRAMPOLINE one
+            "jalr ra, {return_to_user_va}, 0",
+            return_to_user_va = in(reg) return_to_user_va,
             in("a0") trap_cx_ptr,
             in("a1") user_satp,
-            // options(noreturn)
         );
     }
 }
