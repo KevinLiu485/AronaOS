@@ -10,7 +10,7 @@ use log::{debug, info};
 
 use crate::{
     executor,
-    task::current_task,
+    task::{current_task, task::TaskStatus},
     trap::{trap_handler, trap_return},
 };
 
@@ -55,9 +55,30 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
+
+        // switch status
+        // let task = current_task().unwrap();
+        // let mut inner = task.inner_exclusive_access();
+        // assert!(
+        //     inner.get_status() == TaskStatus::Ready,
+        //     "UserTaskFuture::poll(): Wrong status, expected Ready"
+        // );
+        // inner.task_status = TaskStatus::Running;
+        // drop(inner);
+        // drop(task);
+
         switch_task(&mut this.task_ctx.clone());
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
         switch_task(&mut this.task_ctx.clone());
+
+        // switch status
+        // let task = current_task().unwrap();
+        // let mut inner = task.inner_exclusive_access();
+        // assert!(
+        //     inner.get_status() == TaskStatus::Running,
+        //     "UserTaskFuture::poll(): Wrong status, expected Running"
+        // );
+        // inner.task_status = TaskStatus::Ready;
 
         ret
     }
