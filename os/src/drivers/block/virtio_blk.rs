@@ -7,10 +7,11 @@ use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
-use crate::config::KERNEL_BASE;
+use crate::config::{KERNEL_BASE, PAGE_SIZE};
 
 #[allow(unused)]
 const VIRTIO0: usize = 0x10001000 + KERNEL_BASE;
+// const VIRTIO0: usize = 0x10001000;
 
 pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<'static, VirtioHal>>);
 
@@ -76,9 +77,10 @@ impl Hal for VirtioHal {
     }
 
     fn virt_to_phys(vaddr: usize) -> usize {
-        PageTable::from_token(kernel_token())
-            .translate_va(VirtAddr::from(vaddr))
-            .unwrap()
-            .0
+        // PageTable::from_token(kernel_token())
+        //     .translate_va(VirtAddr::from(vaddr))
+        //     .unwrap()
+        //     .0
+        vaddr - KERNEL_BASE
     }
 }

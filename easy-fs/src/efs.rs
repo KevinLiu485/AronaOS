@@ -84,6 +84,8 @@ impl EasyFileSystem {
     /// Open a block device as a filesystem
     pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<Mutex<Self>> {
         // read SuperBlock
+        let mut buf = [0u8; BLOCK_SZ];
+        block_device.read_block(0, &mut buf);
         get_block_cache(0, Arc::clone(&block_device))
             .lock()
             .read(0, |super_block: &SuperBlock| {

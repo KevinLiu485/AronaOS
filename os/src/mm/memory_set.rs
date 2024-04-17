@@ -171,6 +171,7 @@ impl MemorySet {
         );
         println!("mapping memory-mapped registers");
         for pair in MMIO {
+            println!("start_va: {:#x}, end_va: {:#x}", (*pair).0, (*pair).0 + (*pair).1);
             memory_set.push(
                 MapArea::new(
                    ((*pair).0 + KERNEL_BASE).into(),
