@@ -41,6 +41,7 @@ mod console;
 mod config;
 mod drivers;
 mod executor;
+pub mod fat32;
 pub mod fs;
 pub mod lang_items;
 pub mod logging;
@@ -80,6 +81,7 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
+    fat32::init();
     fs::list_apps();
     task::add_initproc();
     // task::schedule::spawn_kernel_thread(async move {
