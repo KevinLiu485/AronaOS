@@ -4,7 +4,10 @@ MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
-FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
+USER_ELF_SRC := ../user/target/$(TARGET)/$(MODE)
+FS_IMG_SRC := ../fs-img-src
+FS_IMG_ROOT := ../fs-img-src/root
+FS_IMG := $(FS_IMG_SRC)/fs.img
 APPS := ../user/src/bin/*
 LOG := ERROR
 KERNEL_FEATURES := kernel_tests
@@ -49,12 +52,32 @@ env:
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-fs-img: $(APPS)
+build-user: 
 	@cd ../user && make build TEST=$(TEST)
-	@rm -f $(FS_IMG)
-	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/
 
-$(APPS):
+build-fs-root: build-user
+	@rm -rf $(FS_IMG_ROOT)
+	@mkdir -p $(FS_IMG_ROOT)
+	@find $(USER_ELF_SRC) -maxdepth 1 -type f ! -name '*.*' -exec cp {} $(FS_IMG_ROOT) \;
+
+fs-img: build-fs-root
+	@rm -rf $(FS_IMG)
+	@mkdir -p $(FS_IMG_SRC)
+	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+#	@dd if=/dev/zero of=$(FS_IMG) count=1363148 bs=1K
+	@mkfs.vfat -F 32 $(FS_IMG)
+	@mkdir -p mnt
+	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
+	@cp -r $(FS_IMG_ROOT)/* mnt
+	@sudo umount -v mnt
+	@rm -rf mnt
+	@sudo chmod -R 777 $(FS_IMG_SRC)
+	@echo "finish pack fs-img"
+
+# fs-img: $(APPS)
+# 	@cd ../user && make build TEST=$(TEST)
+# 	@rm -f $(FS_IMG)
+# 	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/
 
 kernel:
 	@echo Platform: $(BOARD)
