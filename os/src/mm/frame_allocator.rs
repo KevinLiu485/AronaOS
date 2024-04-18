@@ -42,6 +42,7 @@ trait FrameAllocator {
     fn new() -> Self;
     fn alloc(&mut self) -> Option<PhysPageNum>;
     fn dealloc(&mut self, ppn: PhysPageNum);
+    fn alloc_contig(&mut self, num: usize) -> Vec<PhysPageNum>;
 }
 
 /// an implementation for frame allocator
@@ -84,6 +85,19 @@ impl FrameAllocator for StackFrameAllocator {
         // recycle
         self.recycled.push(ppn);
     }
+    fn alloc_contig(&mut self, num: usize) -> Vec<PhysPageNum> {
+        let mut ret = Vec::with_capacity(num);
+        for _ in 0..num {
+            if self.current == self.end {
+                // println!("cannot alloc! current {:#x}", self.current);
+                panic!("cannot alloc! current {:#x}", self.current)
+            } else {
+                self.current += 1;
+                ret.push((self.current - 1).into());
+            }
+        }
+        ret
+    }
 }
 
 type FrameAllocatorImpl = StackFrameAllocator;
@@ -116,6 +130,16 @@ pub fn frame_alloc() -> Option<FrameTracker> {
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {
     FRAME_ALLOCATOR.exclusive_access().dealloc(ppn);
+}
+
+/// allocate a set of contiguous frame
+pub fn frame_alloc_contig(num: usize) -> Vec<FrameTracker> {
+    FRAME_ALLOCATOR
+        .exclusive_access()
+        .alloc_contig(num)
+        .iter()
+        .map(|p| FrameTracker::new(*p))
+        .collect()
 }
 
 #[allow(unused)]
