@@ -42,14 +42,6 @@ impl BlockDevice for VirtIOBlock {
 }
 
 impl VirtIOBlock {
-    // #[allow(unused)]
-    // pub fn new() -> Self {
-    //     unsafe {
-    //         Self(UPSafeCell::new(
-    //             VirtIOBlk::<VirtioHal>::new(&mut *(VIRTIO0 as *mut VirtIOHeader)).unwrap(),
-    //         ))
-    //     }
-    // }
     pub fn new() -> Self {
         unsafe {
             let header = &mut *(VIRTIO0 as *mut VirtIOHeader);
@@ -119,17 +111,6 @@ unsafe impl Hal for VirtioHal {
             .translate_va(VirtAddr::from(buffer.as_ptr() as *const usize as usize))
             .unwrap()
             .0
-        // unsafe {
-        //     (*KERNEL_SPACE
-        //         .as_ref()
-        //         .expect("KERENL SPACE not init yet")
-        //         .page_table
-        //         .get())
-        //     .translate_va(VirtAddr::from(buffer.as_ptr() as *const usize as usize))
-        //     .unwrap()
-        //     .0
-        // }
-        // todo!()
     }
 
     unsafe fn unshare(
@@ -137,45 +118,5 @@ unsafe impl Hal for VirtioHal {
         _buffer: core::ptr::NonNull<[u8]>,
         _direction: virtio_drivers::BufferDirection,
     ) {
-        // todo!()
     }
 }
-
-// impl Hal for VirtioHal {
-// fn dma_alloc(pages: usize) -> usize {
-//     let mut ppn_base = PhysPageNum(0);
-//     for i in 0..pages {
-//         let frame = frame_alloc().unwrap();
-//         if i == pages - 1 {
-//             ppn_base = frame.ppn;
-//         }
-//         // assert_eq!(frame.ppn.0, ppn_base.0 + i);
-//         QUEUE_FRAMES.exclusive_access().push(frame);
-//     }
-//     let pa: PhysAddr = ppn_base.into();
-//     pa.0
-// }
-//
-// fn dma_dealloc(pa: usize, pages: usize) -> i32 {
-//     let pa = PhysAddr::from(pa);
-//     let mut ppn_base: PhysPageNum = pa.into();
-//     for _ in 0..pages {
-//         frame_dealloc(ppn_base);
-//         ppn_base.step();
-//     }
-//     0
-// }
-//
-// fn phys_to_virt(addr: usize) -> usize {
-//     addr + KERNEL_BASE
-//     // addr
-// }
-//
-// fn virt_to_phys(vaddr: usize) -> usize {
-//     PageTable::from_token(kernel_token())
-//         .translate_va(VirtAddr::from(vaddr))
-//         .unwrap()
-//         .0
-//     // vaddr - KERNEL_BASE
-// }
-// }

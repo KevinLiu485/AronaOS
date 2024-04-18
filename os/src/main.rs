@@ -88,7 +88,9 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    drivers::block::block_device_test();
+    /* fucking stupid bug!!! */
+    /* block_device_test() overwrites the file system! */
+    // drivers::block::block_device_test();
     fs::list_apps();
     task::add_initproc();
     task::run_tasks();
