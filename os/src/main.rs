@@ -53,7 +53,8 @@ pub mod task;
 pub mod timer;
 pub mod trap;
 
-use core::arch::global_asm;
+use crate::{config::KERNEL_BASE, drivers::block::block_device_test};
+use core::arch::{asm, global_asm};
 
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
@@ -65,6 +66,18 @@ fn clear_bss() {
     unsafe {
         core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
             .fill(0);
+    }
+}
+
+///
+#[no_mangle]
+pub fn fake_main(hart_id: usize) {
+    unsafe {
+        asm!("add sp, sp, {}", in(reg) KERNEL_BASE);
+        asm!("la t0, rust_main");
+        asm!("add t0, t0, {}", in(reg) KERNEL_BASE);
+        asm!("mv a0, {}", in(reg) hart_id);
+        asm!("jalr zero, 0(t0)");
     }
 }
 
@@ -80,6 +93,7 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
+    block_device_test();
     fs::list_apps();
     task::add_initproc();
     // task::schedule::spawn_kernel_thread(async move {

@@ -1,5 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{
+    frame_alloc, FrameTracker, KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum,
+};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -126,6 +128,7 @@ impl PageTable {
     #[allow(unused)]
     /// Create a mapping form `vpn` to `ppn`
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+        //println!("map vpn{:?} to ppn{:?}", vpn, ppn);
         let pte = self.find_pte_create(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
@@ -141,13 +144,13 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
-    /// Translate `VirtAddr` to `PhysAddr`
-    pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+    /// Translate `VirtAddr` to `KernelAddr`
+    pub fn translate_va(&self, va: VirtAddr) -> Option<KernelAddr> {
         self.find_pte(va.clone().floor()).map(|pte| {
-            let aligned_pa: PhysAddr = pte.ppn().into();
+            let aligned_ka: KernelAddr = pte.ppn().into();
             let offset = va.page_offset();
-            let aligned_pa_usize: usize = aligned_pa.into();
-            (aligned_pa_usize + offset).into()
+            let aligned_ka_usize: usize = aligned_ka.into();
+            (aligned_ka_usize + offset).into()
         })
     }
     /// Get root ppn
