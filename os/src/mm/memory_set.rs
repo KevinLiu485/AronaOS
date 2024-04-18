@@ -3,7 +3,10 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
+use crate::config::{
+    KERNEL_BASE, KERNEL_DIRECT_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT,
+    USER_STACK_SIZE,
+};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -25,14 +28,25 @@ extern "C" {
     fn strampoline();
 }
 
+/*
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
+*/
+/// kernel_space
+pub static mut KERNEL_SPACE: Option<MemorySet> = None;
+
+pub fn init_kernel_space() {
+    unsafe {
+        KERNEL_SPACE = Some(MemorySet::new_kernel());
+    }
+}
+
 ///Get kernelspace root ppn
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.exclusive_access().token()
+    unsafe { KERNEL_SPACE.as_ref().unwrap().token() }
 }
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
@@ -109,7 +123,7 @@ impl MemorySet {
             MapArea::new(
                 (stext as usize).into(),
                 (etext as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::X,
             ),
             None,
@@ -119,7 +133,7 @@ impl MemorySet {
             MapArea::new(
                 (srodata as usize).into(),
                 (erodata as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R,
             ),
             None,
@@ -129,7 +143,7 @@ impl MemorySet {
             MapArea::new(
                 (sdata as usize).into(),
                 (edata as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -139,7 +153,7 @@ impl MemorySet {
             MapArea::new(
                 (sbss_with_stack as usize).into(),
                 (ebss as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -149,7 +163,7 @@ impl MemorySet {
             MapArea::new(
                 (ekernel as usize).into(),
                 MEMORY_END.into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -158,9 +172,9 @@ impl MemorySet {
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(
-                    (*pair).0.into(),
-                    ((*pair).0 + (*pair).1).into(),
-                    MapType::Identical,
+                    ((*pair).0 + KERNEL_BASE).into(),
+                    ((*pair).0 + (*pair).1 + KERNEL_BASE).into(),
+                    MapType::Linear,
                     MapPermission::R | MapPermission::W,
                 ),
                 None,
@@ -309,8 +323,8 @@ impl MapArea {
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
-            MapType::Identical => {
-                ppn = PhysPageNum(vpn.0);
+            MapType::Linear => {
+                ppn = PhysPageNum(vpn.0 - 0x4000000);
             }
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
@@ -364,7 +378,7 @@ impl MapArea {
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
 pub enum MapType {
-    Identical,
+    Linear,
     Framed,
 }
 
@@ -385,10 +399,12 @@ bitflags! {
 #[allow(unused)]
 ///Check PageTable running correctly
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
-    let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
-    let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
-    let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+    //let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+    let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
+    let mid_rodata: VirtAddr =
+        (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
+    let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())

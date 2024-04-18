@@ -106,11 +106,9 @@ impl TaskControlBlock {
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
-        );
+        *trap_cx = TrapContext::app_init_context(entry_point, user_sp, unsafe {
+            KERNEL_SPACE.as_ref().unwrap().token()
+        });
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8]) {
@@ -128,11 +126,9 @@ impl TaskControlBlock {
         // update trap_cx ppn
         inner.trap_cx_ppn = trap_cx_ppn;
         // initialize trap_cx
-        let trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
-        );
+        let trap_cx = TrapContext::app_init_context(entry_point, user_sp, unsafe {
+            KERNEL_SPACE.as_ref().unwrap().token()
+        });
         *inner.get_trap_cx() = trap_cx;
         // **** release current PCB
     }
