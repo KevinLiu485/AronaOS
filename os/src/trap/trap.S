@@ -70,9 +70,6 @@ __trap_from_user:
     ld t0, 66*8(sp)
     # load sp
     ld sp, 36*8(sp)
-    # write satp
-    csrw satp, t0
-    sfence.vma
     ret # = jr ra
 
 # kernel -> user

@@ -8,6 +8,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use log::error;
 
 pub struct TaskControlBlock {
     // immutable
@@ -80,6 +81,7 @@ impl TaskControlBlock {
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        println!("  entry_point: {}", entry_point);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -118,6 +120,8 @@ impl TaskControlBlock {
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         // activate user space
         memory_set.activate();
+        error!("current page_table root_ppn: {:?}", crate::current_satp());
+
         let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         // **** access current TCB exclusively
@@ -132,8 +136,9 @@ impl TaskControlBlock {
         let mut parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
-        // activate user space
-        memory_set.activate();
+
+        //still parent's user space, not child
+        parent_inner.memory_set.activate();
         let trap_cx = parent_inner.trap_cx.clone();
         // alloc a pid
         let pid_handle = pid_alloc();

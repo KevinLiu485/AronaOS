@@ -8,6 +8,7 @@ use user_lib::{exec, fork, wait, yield_};
 
 #[no_mangle]
 fn main() -> i32 {
+    println!("Initproc in User mode");
     if fork() == 0 {
         exec("user_shell\0");
     } else {

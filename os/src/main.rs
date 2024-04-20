@@ -53,6 +53,9 @@ pub mod task;
 pub mod timer;
 pub mod trap;
 
+use log::error;
+
+use crate::mm::current_satp;
 use crate::{config::KERNEL_BASE, drivers::block::block_device_test};
 use core::arch::{asm, global_asm};
 
@@ -87,9 +90,12 @@ pub fn rust_main() -> ! {
     clear_bss();
     println!("[kernel] Hello, world!");
     logging::init();
+    error!("current satp: {:?}", current_satp());
     mm::init();
-    mm::remap_test();
-    mm::from_global_test();
+    error!("current satp: {:?}", current_satp());
+    //mm::remap_test();
+    //mm::from_global_test();
+    //mm::dump_test();
     executor::init();
     trap::init();
     trap::enable_timer_interrupt();
@@ -97,7 +103,7 @@ pub fn rust_main() -> ! {
     //block_device_test();
     fs::list_apps();
     task::add_initproc();
-    task::initproc_info();
+    //task::initproc_test();
     // task::schedule::spawn_kernel_thread(async move {
     //     task::add_initproc();
     // });
