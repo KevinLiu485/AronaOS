@@ -422,3 +422,10 @@ pub fn from_global_test() {
     assert!(!page_table.translate(mid_data.floor()).unwrap().executable(),);
     println!("from_global_test passed!");
 }
+
+#[allow(unused)]
+///
+pub fn dump_test() {
+    let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+    kernel_space.page_table.dump();
+}

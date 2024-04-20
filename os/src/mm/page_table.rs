@@ -8,6 +8,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use core::fmt::{self, Debug, Formatter};
+use riscv::register::satp;
 
 bitflags! {
     pub struct PTEFlags: u8 {
@@ -22,12 +24,55 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
+/// convert pte's flas to readable str
+impl PTEFlags {
+    pub fn readable_flags(&self) -> String {
+        let mut ret = String::new();
+        if *self & PTEFlags::V != PTEFlags::empty() {
+            ret.push_str("V");
+        }
+        if *self & PTEFlags::R != PTEFlags::empty() {
+            ret.push_str("R");
+        }
+        if *self & PTEFlags::W != PTEFlags::empty() {
+            ret.push_str("W");
+        }
+        if *self & PTEFlags::X != PTEFlags::empty() {
+            ret.push_str("X");
+        }
+        if *self & PTEFlags::U != PTEFlags::empty() {
+            ret.push_str("U");
+        }
+        if *self & PTEFlags::A != PTEFlags::empty() {
+            ret.push_str("A");
+        }
+        if *self & PTEFlags::D != PTEFlags::empty() {
+            ret.push_str("D");
+        }
+        ret
+    }
+}
+
 #[derive(Copy, Clone)]
 #[repr(C)]
 /// page table entry structure
 pub struct PageTableEntry {
     ///PTE
     pub bits: usize,
+}
+
+impl Debug for PageTableEntry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let ppn = self.bits >> 12;
+        let flags = self.bits & 0xFFF;
+
+        write!(
+            f,
+            "PageTableEntry {{ ppn: 0x{:X}, flags: 0x{:X} }}",
+            ppn, flags
+        )
+    }
 }
 
 impl PageTableEntry {
@@ -165,7 +210,8 @@ impl PageTable {
         result
     }
     /// Find phsical address by virtual address
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    /// Todo*: pub for debug
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -214,12 +260,38 @@ impl PageTable {
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
-    /// Dump page table
+    /// Dump page table and its child pagetable
     #[allow(unused)]
+    pub fn dump_all(&self) {
+        println!("pagetable at {:?}", self.root_ppn);
+        let pagetable = self.root_ppn.get_pte_array();
+        _dump(pagetable, 1);
+    }
+    #[allow(unused)]
+    /// dump only the given page table
     pub fn dump(&self) {
         println!("pagetable at {:?}", self.root_ppn);
-        let i = 0;
-        // Todo!
+        let pagetable = self.root_ppn.get_pte_array();
+        for (index, entry) in pagetable.iter().enumerate() {
+            if entry.is_valid() {
+                println!("{}: {:?}", index, entry);
+            }
+        }
+    }
+}
+#[allow(unused)]
+fn _dump(pagetable: &[PageTableEntry], level: usize) {
+    let prefix = "-".repeat(level);
+    if level > 3 {
+        return;
+    }
+
+    for (index, entry) in pagetable.iter().enumerate() {
+        if entry.is_valid() {
+            println!("{} Entry {}: {:?}", prefix, index, entry);
+            let next_level_table = entry.ppn().get_pte_array();
+            _dump(next_level_table, level + 1);
+        }
     }
 }
 /// Translate a pointer to a mutable u8 Vec through page table
@@ -338,4 +410,10 @@ impl Iterator for UserBufferIterator {
             Some(r)
         }
     }
+}
+
+#[allow(unused)]
+/// read current pagetable in satp
+pub fn current_satp() -> PhysPageNum {
+    satp::read().bits().into()
 }

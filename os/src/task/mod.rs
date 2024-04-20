@@ -21,7 +21,9 @@ pub mod schedule;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
+use crate::executor::init;
 use crate::fs::{open_file, OpenFlags};
+use crate::mm::{current_satp, VirtAddr};
 use crate::sbi::shutdown;
 use alloc::string;
 use alloc::sync::Arc;
@@ -87,9 +89,9 @@ lazy_static! {
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v: Vec<u8> = inode.read_all();
-        println!("elf_data_vec<u8>: {:?}", v);
-        elf_data_info(&v);
-        TaskControlBlock::new(v.as_slice())
+        let init_proc = TaskControlBlock::new(v.as_slice());
+        init_proc.inner.exclusive_access().memory_set.activate();
+        init_proc
     });
 }
 ///Add init process to the manager
@@ -97,16 +99,22 @@ pub fn add_initproc() {
     schedule::spawn_thread(INITPROC.clone());
 }
 
+#[allow(unused)]
 /// debug info about INITPROC TaskContorlBlock
-pub fn initproc_info() {
+pub fn initproc_test() {
     let init_proc = &INITPROC.inner.exclusive_access();
-    println!("Trap Context: ");
-    println!("{:?}", init_proc.trap_cx);
-    println!("{:?}", init_proc.memory_set.page_table.root_ppn);
+    let page_table = &init_proc.memory_set.page_table;
+    assert_eq!(page_table.root_ppn, current_satp());
+    let entry = init_proc.trap_cx.sepc;
+    let va: VirtAddr = entry.into();
+    let pte = page_table.find_pte(va.into()).unwrap();
+    println!("{:?}", pte);
+    println!("{}", pte.flags().readable_flags());
 }
 
 use alloc::string::String;
 
+#[allow(unused)]
 /// debug
 pub fn elf_data_info(v: &Vec<u8>) {
     let mut elf_data = String::new();
