@@ -35,6 +35,11 @@ pub struct VirtPageNum(pub usize);
 
 /// Debugging
 
+impl Debug for KernelAddr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("KA:{:#x}", self.0))
+    }
+}
 impl Debug for VirtAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("VA:{:#x}", self.0))
@@ -214,18 +219,17 @@ impl VirtPageNum {
     }
 }
 
-/* 不再有直接通过pa访问物理页帧的能力, 而是由ka
+// 不再有直接通过pa访问物理页帧的能力, 而是由ka负责
 impl PhysAddr {
     ///Get reference to `PhysAddr` value
     pub fn get_ref<T>(&self) -> &'static T {
-        unsafe { (self.0 as *const T).as_ref().unwrap() }
+        unsafe { (KernelAddr::from(self.0).0 as *const T).as_ref().unwrap() }
     }
     ///Get mutable reference to `PhysAddr` value
     pub fn get_mut<T>(&self) -> &'static mut T {
-        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+        unsafe { (KernelAddr::from(self.0).0 as *mut T).as_mut().unwrap() }
     }
 }
-*/
 
 impl KernelAddr {
     ///Get reference to `KernelAddr` value

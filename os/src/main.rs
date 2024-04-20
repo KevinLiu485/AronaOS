@@ -89,13 +89,15 @@ pub fn rust_main() -> ! {
     logging::init();
     mm::init();
     mm::remap_test();
+    mm::from_global_test();
     executor::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    block_device_test();
+    //block_device_test();
     fs::list_apps();
     task::add_initproc();
+    task::initproc_info();
     // task::schedule::spawn_kernel_thread(async move {
     //     task::add_initproc();
     // });

@@ -2,7 +2,7 @@
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 ///trap context structure containing sstatus, sepc and registers
 pub struct TrapContext {
     /// general regs[0..31]
@@ -43,5 +43,16 @@ impl TrapContext {
         };
         cx.set_sp(sp);
         cx
+    }
+    /// zero_init app context
+    pub fn zero_init() -> Self {
+        let sstatus = sstatus::read();
+        Self {
+            x: [0; 32],
+            sstatus,
+            sepc: 0,
+            kernel_s: [0; 32],
+            kernel_satp: 0,
+        }
     }
 }

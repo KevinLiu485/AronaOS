@@ -1,7 +1,9 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 use super::{
     frame_alloc, FrameTracker, KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum,
+    KERNEL_SPACE,
 };
+use crate::config::KERNEL_DIRECT_OFFSET;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -64,9 +66,12 @@ impl PageTableEntry {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
 }
+
+#[derive(Debug)]
 ///Record root ppn and has the same lifetime as 1 and 2 level `PageTableEntry`
 pub struct PageTable {
-    root_ppn: PhysPageNum,
+    /// Todo*: pub for debug
+    pub root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
 }
 
@@ -80,6 +85,58 @@ impl PageTable {
             frames: vec![frame],
         }
     }
+
+    /// Create a pagetable from kernel global pagetable
+    pub fn from_global() -> Self {
+        let frame = frame_alloc().unwrap();
+        let global_root_ppn = unsafe {
+            KERNEL_SPACE
+                .as_ref()
+                .expect("KERNEL SPACE not init yet")
+                .page_table
+                .root_ppn
+        };
+
+        // Map kernel space
+        // deep copy before page_fault handler implementation(Note that we just need shallow copy here)
+
+        // Todo*:优化, 先整个进行copy
+        //let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
+        //let level_1_index = kernel_start_vpn.indexes()[0];
+        let level_1_index = 0;
+
+        // Copy from root page table
+        let dst_1_table = &mut frame.ppn.get_pte_array()[level_1_index..];
+        let src_1_table = global_root_ppn.get_pte_array();
+        dst_1_table.copy_from_slice(&src_1_table[level_1_index..]);
+
+        // Copy valid entries in level 1 table
+        for (level_1_entry_index, entry) in dst_1_table.iter_mut().enumerate() {
+            if entry.is_valid() {
+                let source_level_2_table = &src_1_table[level_1_entry_index].ppn().get_pte_array();
+                let level_2_table = &mut entry.ppn().get_pte_array();
+                level_2_table.copy_from_slice(source_level_2_table);
+
+                // Copy valid entries in level 2 table
+                for (level_2_entry_index, entry) in level_2_table.iter_mut().enumerate() {
+                    if entry.is_valid() {
+                        let source_level_3_table = &source_level_2_table[level_2_entry_index]
+                            .ppn()
+                            .get_pte_array();
+                        let level_3_table = &mut entry.ppn().get_pte_array();
+                        level_3_table.copy_from_slice(source_level_3_table);
+                    }
+                }
+            }
+        }
+
+        // the new pagetable only owns the ownership of its own root ppn
+        PageTable {
+            root_ppn: frame.ppn,
+            frames: vec![frame],
+        }
+    }
+
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
@@ -144,18 +201,25 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
-    /// Translate `VirtAddr` to `KernelAddr`
-    pub fn translate_va(&self, va: VirtAddr) -> Option<KernelAddr> {
+    /// Translate `VirtAddr` to `PhysAddr`
+    pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
         self.find_pte(va.clone().floor()).map(|pte| {
-            let aligned_ka: KernelAddr = pte.ppn().into();
+            let aligned_pa: PhysAddr = pte.ppn().into();
             let offset = va.page_offset();
-            let aligned_ka_usize: usize = aligned_ka.into();
-            (aligned_ka_usize + offset).into()
+            let aligned_pa_usize: usize = aligned_pa.into();
+            (aligned_pa_usize + offset).into()
         })
     }
     /// Get root ppn
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
+    }
+    /// Dump page table
+    #[allow(unused)]
+    pub fn dump(&self) {
+        println!("pagetable at {:?}", self.root_ppn);
+        let i = 0;
+        // Todo!
     }
 }
 /// Translate a pointer to a mutable u8 Vec through page table
@@ -184,6 +248,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 /// Translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
+    page_table.dump();
     let mut string = String::new();
     let mut va = ptr as usize;
     loop {
