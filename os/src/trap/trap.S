@@ -79,8 +79,8 @@ __trap_from_user:
 __return_to_user:
     # a0: *TrapContext in user space(Constant); a1: user space token
     # switch to user space
-    csrw satp, a1
-    sfence.vma
+    # csrw satp, a1
+    # sfence.vma
     # ssratch: *TrapContext
     csrw sscratch, a0
     # save sp first

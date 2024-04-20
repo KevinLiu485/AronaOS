@@ -1,11 +1,10 @@
 //! Implementation of [`MapArea`] and [`MemorySet`].
-use super::{frame_alloc, FrameTracker};
+use super::{frame_alloc, page_table, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{
-    KERNEL_BASE, KERNEL_DIRECT_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT,
-    USER_STACK_SIZE,
+    KERNEL_BASE, KERNEL_DIRECT_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE,
 };
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
@@ -13,8 +12,10 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
+use riscv::addr::{page, Page};
 use riscv::register::satp;
 
+#[allow(unused)]
 extern "C" {
     fn stext();
     fn etext();
@@ -50,7 +51,8 @@ pub fn kernel_token() -> usize {
 }
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
-    page_table: PageTable,
+    /// page table
+    pub page_table: PageTable,
     areas: Vec<MapArea>,
 }
 
@@ -59,6 +61,14 @@ impl MemorySet {
     pub fn new_bare() -> Self {
         Self {
             page_table: PageTable::new(),
+            areas: Vec::new(),
+        }
+    }
+    /// Create a user `MemorySet` that owns the global kernel mapping
+    pub fn new_from_global() -> Self {
+        let page_table = PageTable::from_global();
+        Self {
+            page_table,
             areas: Vec::new(),
         }
     }
@@ -97,19 +107,9 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
-    /// Mention that trampoline is not collected by areas.
-    fn map_trampoline(&mut self) {
-        self.page_table.map(
-            VirtAddr::from(TRAMPOLINE).into(),
-            PhysAddr::from(strampoline as usize).into(),
-            PTEFlags::R | PTEFlags::X,
-        );
-    }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
         // map kernel sections
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
@@ -182,12 +182,10 @@ impl MemorySet {
         }
         memory_set
     }
-    /// Include sections in elf and trampoline and TrapContext and user stack,
+    /// Include sections in elf and user stack,
     /// also returns user_sp and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
-        let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
+        let mut memory_set = Self::new_from_global();
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
@@ -234,16 +232,6 @@ impl MemorySet {
             ),
             None,
         );
-        // map TrapContext
-        memory_set.push(
-            MapArea::new(
-                TRAP_CONTEXT.into(),
-                TRAMPOLINE.into(),
-                MapType::Framed,
-                MapPermission::R | MapPermission::W,
-            ),
-            None,
-        );
         (
             memory_set,
             user_stack_top,
@@ -252,9 +240,7 @@ impl MemorySet {
     }
     ///Clone a same `MemorySet`
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
-        let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
+        let mut memory_set = Self::new_from_global();
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
@@ -421,4 +407,18 @@ pub fn remap_test() {
         .unwrap()
         .executable(),);
     println!("remap_test passed!");
+}
+
+#[allow(unused)]
+/// Check PageTable from_global()running correctly
+pub fn from_global_test() {
+    let page_table = PageTable::from_global();
+    let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
+    let mid_rodata: VirtAddr =
+        (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
+    let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
+    assert!(!page_table.translate(mid_text.floor()).unwrap().writable(),);
+    assert!(!page_table.translate(mid_rodata.floor()).unwrap().writable(),);
+    assert!(!page_table.translate(mid_data.floor()).unwrap().executable(),);
+    println!("from_global_test passed!");
 }

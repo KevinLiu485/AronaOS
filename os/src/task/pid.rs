@@ -1,5 +1,5 @@
 //!Implementation of [`PidAllocator`]
-use crate::config::{PAGE_SIZE, TRAMPOLINE};
+use crate::config::PAGE_SIZE;
 use crate::mm::{MapPermission, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;

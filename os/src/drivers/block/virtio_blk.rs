@@ -72,7 +72,7 @@ impl Hal for VirtioHal {
     }
 
     fn phys_to_virt(addr: usize) -> usize {
-        addr
+        addr + KERNEL_BASE
     }
 
     fn virt_to_phys(vaddr: usize) -> usize {

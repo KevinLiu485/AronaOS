@@ -13,7 +13,6 @@
 //! to [`syscall()`].
 mod context;
 
-use crate::config::{TRAMPOLINE, TRAP_CONTEXT};
 use crate::syscall::syscall;
 use crate::task::{current_trap_cx, current_user_token, exit_current, yield_task};
 use crate::timer::set_next_trigger;
@@ -26,15 +25,17 @@ use riscv::register::{
 };
 
 global_asm!(include_str!("trap.S"));
+
+extern "C" {
+    fn __trap_from_kernel();
+    fn __trap_from_user();
+}
 /// initialize CSR `stvec` as the entry of `__alltraps`
 pub fn init() {
     set_kernel_trap_entry();
 }
 
 fn set_kernel_trap_entry() {
-    extern "C" {
-        fn __trap_from_kernel();
-    }
     unsafe {
         stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
     }
@@ -42,7 +43,7 @@ fn set_kernel_trap_entry() {
 
 fn set_user_trap_entry() {
     unsafe {
-        stvec::write(TRAMPOLINE as usize, TrapMode::Direct);
+        stvec::write(__trap_from_user as usize, TrapMode::Direct);
     }
 }
 /// enable timer interrupt in sie CSR
@@ -111,25 +112,13 @@ pub async fn trap_handler() {
 pub fn trap_return() {
     // debug!("trap_return(): enter");
     set_user_trap_entry();
-    let trap_cx_ptr = TRAP_CONTEXT;
-    let user_satp = current_user_token();
+    let cx = current_trap_cx();
+    //let user_satp = current_user_token();
     extern "C" {
-        fn __trap_from_user();
-        fn __return_to_user();
+        fn __return_to_user(cx: *mut TrapContext);
     }
-    let return_to_user_va = __return_to_user as usize - __trap_from_user as usize + TRAMPOLINE;
     unsafe {
-        // i-cache is indexed by virtual address possiblly, so we have to flush it with `fence.i`
-        asm!(
-            "fence.i",
-            // jump to restore_va, set next instruction addr to ra
-            // to stimulate `__return_to_user(trap_cx_ptr, user_satp);` in asm
-            // cannot call __return_to_user() directly, as it will not goto the TRAMPOLINE one
-            "jalr ra, {return_to_user_va}, 0",
-            return_to_user_va = in(reg) return_to_user_va,
-            in("a0") trap_cx_ptr,
-            in("a1") user_satp,
-        );
+        __return_to_user(cx);
     }
 }
 
