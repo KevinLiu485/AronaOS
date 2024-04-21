@@ -90,7 +90,7 @@ lazy_static! {
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v: Vec<u8> = inode.read_all();
         let init_proc = TaskControlBlock::new(v.as_slice());
-        init_proc.inner.exclusive_access().memory_set.activate();
+        //init_proc.inner.exclusive_access().memory_set.activate();
         init_proc
     });
 }

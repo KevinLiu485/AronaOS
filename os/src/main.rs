@@ -52,8 +52,10 @@ pub mod syscall;
 pub mod task;
 pub mod timer;
 pub mod trap;
+pub mod utils;
 
 use log::error;
+use riscv::register::sstatus;
 
 use crate::mm::current_satp;
 use crate::{config::KERNEL_BASE, drivers::block::block_device_test};
@@ -102,6 +104,10 @@ pub fn rust_main() -> ! {
     timer::set_next_trigger();
     //block_device_test();
     fs::list_apps();
+    // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+    unsafe {
+        sstatus::set_sum();
+    }
     task::add_initproc();
     //task::initproc_test();
     // task::schedule::spawn_kernel_thread(async move {

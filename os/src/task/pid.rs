@@ -43,6 +43,8 @@ lazy_static! {
     pub static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
         unsafe { UPSafeCell::new(PidAllocator::new()) };
 }
+
+#[derive(PartialEq)]
 ///Bind pid lifetime to `PidHandle`
 pub struct PidHandle(pub usize);
 
