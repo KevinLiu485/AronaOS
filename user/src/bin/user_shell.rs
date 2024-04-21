@@ -37,9 +37,9 @@ pub fn main() -> i32 {
                         }
                         unreachable!();
                     } else {
-                        println!("user_shell parent process wait for exit");
                         let mut exit_code: i32 = 0;
                         let exit_pid = waitpid(pid as usize, &mut exit_code);
+                        println!("pid: {}, exit_pid: {}", pid, exit_pid);
                         assert_eq!(pid, exit_pid);
                         println!("Shell: Process {} exited with code {}", pid, exit_code);
                     }
