@@ -317,44 +317,6 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 
-/// Translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
-pub fn translated_str(token: usize, ptr: *const u8) -> String {
-    let page_table = PageTable::from_token(token);
-    //page_table.dump();
-    let mut string = String::new();
-    let mut va = ptr as usize;
-    loop {
-        let ch: u8 = *(page_table
-            .translate_va(VirtAddr::from(va))
-            .unwrap()
-            .get_mut());
-        if ch == 0 {
-            break;
-        }
-        string.push(ch as char);
-        va += 1;
-    }
-    string
-}
-
-#[allow(unused)]
-///Translate a generic through page table and return a reference
-pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
-    let page_table = PageTable::from_token(token);
-    page_table
-        .translate_va(VirtAddr::from(ptr as usize))
-        .unwrap()
-        .get_ref()
-}
-///Translate a generic through page table and return a mutable reference
-pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
-    let page_table = PageTable::from_token(token);
-    let va = ptr as usize;
-    page_table
-        .translate_va(VirtAddr::from(va))
-        .unwrap()
-        .get_mut()
-}
 ///Array of u8 slice that user communicate with os
 pub struct UserBuffer {
     ///U8 vec
