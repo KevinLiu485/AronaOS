@@ -21,6 +21,7 @@ pub mod schedule;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
+use crate::error;
 use crate::executor::init;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{current_satp, VirtAddr};
@@ -44,6 +45,10 @@ pub const IDLE_PID: usize = 0;
 /// More exiting works will de done by its parent.
 pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
+    error!(
+        "exit task's pagetable: {:?}",
+        task.inner.exclusive_access().memory_set.page_table.root_ppn
+    );
 
     let pid = task.getpid();
     if pid == IDLE_PID {

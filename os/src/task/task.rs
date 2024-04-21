@@ -120,6 +120,8 @@ impl TaskControlBlock {
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         // activate user space
         memory_set.activate();
+        // Change processor local context's pagetable (quite important!!!)
+
         error!("current page_table root_ppn: {:?}", crate::current_satp());
 
         let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
@@ -128,7 +130,7 @@ impl TaskControlBlock {
         let mut inner = self.inner_exclusive_access();
         // substitute memory_set
         inner.memory_set = memory_set;
-        // update trap_cx ppn
+        // update trap_cx
         inner.trap_cx = trap_cx;
     }
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {

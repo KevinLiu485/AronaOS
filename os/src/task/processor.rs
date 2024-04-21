@@ -1,5 +1,6 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use super::TaskControlBlock;
+use crate::mm::PageTable;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;

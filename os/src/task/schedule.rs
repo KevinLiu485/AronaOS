@@ -6,7 +6,7 @@ use core::{
 };
 
 use alloc::sync::Arc;
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::{
     executor,
@@ -56,9 +56,14 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
         switch_task(&mut this.task_ctx.clone());
+        // run `threadloop`
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
+        if let Poll::Ready(_) = ret {
+            //Todo!:
+            warn!("task exit, thread_loop return poll::ready");
+            return ret;
+        }
         switch_task(&mut this.task_ctx.clone());
-
         ret
     }
 }
@@ -85,7 +90,7 @@ pub async fn thread_loop(task: Arc<TaskControlBlock>) {
         trap_handler().await;
         // debug!("thread_loop(): back from trap_handler");
         if task.is_zombie() {
-            info!(
+            warn!(
                 "process terminated, pid = {}",
                 current_task().unwrap().getpid()
             );
