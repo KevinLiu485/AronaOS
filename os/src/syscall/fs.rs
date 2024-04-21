@@ -1,7 +1,8 @@
 //! File and filesystem-related syscalls
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::mm::{translated_byte_buffer, UserBuffer};
 use crate::task::{current_task, current_user_token};
+use crate::utils::c_str_to_string;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
@@ -45,8 +46,9 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 
 pub fn sys_open(path: *const u8, flags: u32) -> isize {
     let task = current_task().unwrap();
-    let token = current_user_token();
-    let path = translated_str(token, path);
+    //let token = current_user_token();
+    //let path = translated_str(token, path);
+    let path = c_str_to_string(path);
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_exclusive_access();
         let fd = inner.alloc_fd();

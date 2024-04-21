@@ -1,5 +1,4 @@
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str};
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
