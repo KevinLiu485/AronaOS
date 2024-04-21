@@ -12,6 +12,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
+use log::error;
 use riscv::addr::{page, Page};
 use riscv::register::satp;
 
