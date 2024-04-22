@@ -1,10 +1,11 @@
 use crate::mutex::SpinLock;
 
+use super::block_dev::BlockDevice;
 // use super::block_dev::BlockDevice;
 use super::layout::{BLOCK_CACHE_SIZE, BLOCK_SIZE};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use easy_fs::BlockDevice;
+// use easy_fs::BlockDevice;
 use lazy_static::*;
 // use spin::Mutex;
 /// Cached block inside memory

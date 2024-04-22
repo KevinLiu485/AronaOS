@@ -4,16 +4,6 @@ pub const BLOCK_SIZE: usize = 512;
 /// Use a block cache of 16 blocks
 pub const BLOCK_CACHE_SIZE: usize = 16;
 
-pub struct FAT32FileSystem {
-    pub meta: FAT32Meta,
-}
-
-pub struct FAT32Meta {
-    pub reversed_region: Vec<FAT32Sector>,
-    pub fat_region: Vec<FAT32Sector>,
-    pub data_region: Vec<FAT32Sector>,
-}
-
 pub struct FAT32Sector {
     pub data: Vec<u8>,
 }
@@ -27,18 +17,18 @@ pub struct FAT32BootSector {
     pub BS_OEMName: [u8; 8], // usually "MSWIN4.1"
 
     // essential BPB
-    pub BPB_BytesPerSector: u16,        // must 512, ..., 4096, usually 512
-    pub BPB_SectorPerCluster: u8,       // must 1,2,4,...,128.
-    pub BPB_ReservedSectorCount: u16,   // usually 32 for FAT32
-    pub BPB_NumFATs: u8,                // usually 2 for FAT32
-    pub BPB_RootEntryCount: u16,        // must 0 for FAT32
-    pub BPB_TotSector16: u16,           // must 0 for FAT32
-    pub BPB_Media: u8,                  // usually 0xF8, ignore.
-    pub BPB_FATsize16: u16,             // must 0 for FAT32
-    pub BPB_SectorPerTrack: u16,        // use for interrupt 0x13, ignore.
-    pub BPB_NumHeads: u16,              // use for interrupt 0x13, ignore.
-    pub BPB_HiddSec: u32,               // Hidden Sector Count, ignore.
-    pub BPB_TotSector32: u32,           // Total Sector count, region 1, 2, 3, 4.
+    pub BPB_BytesPerSector: u16,      // must 512, ..., 4096, usually 512
+    pub BPB_SectorPerCluster: u8,     // must 1,2,4,...,128.
+    pub BPB_ReservedSectorCount: u16, // usually 32 for FAT32
+    pub BPB_NumFATs: u8,              // usually 2 for FAT32
+    pub BPB_RootEntryCount: u16,      // must 0 for FAT32
+    pub BPB_TotSector16: u16,         // must 0 for FAT32
+    pub BPB_Media: u8,                // usually 0xF8, ignore.
+    pub BPB_FATsize16: u16,           // must 0 for FAT32
+    pub BPB_SectorPerTrack: u16,      // use for interrupt 0x13, ignore.
+    pub BPB_NumHeads: u16,            // use for interrupt 0x13, ignore.
+    pub BPB_HiddSec: u32,             // Hidden Sector Count, ignore.
+    pub BPB_TotSector32: u32,         // Total Sector count, region 1, 2, 3, 4.
 
     // BPB For FAT32
     pub BPB_FATsize32: u32,     // ONE FAT Sector count.
@@ -59,31 +49,16 @@ pub struct FAT32BootSector {
 }
 
 impl FAT32BootSector {
-    // pub fn as_bytes(&self) -> &[u8] {
-    //     unsafe {
-    //         core::slice::from_raw_parts(
-    //             self as *const _ as *const u8,
-    //             core::mem::size_of::<FAT32BootSector>(),
-    //         )
-    //     }
-    // }
-    // pub fn as_bytes_mut(&mut self) -> &mut [u8] {
-    //     unsafe {
-    //         core::slice::from_raw_parts_mut(
-    //             self as *mut _ as *mut u8,
-    //             core::mem::size_of::<FAT32BootSector>(),
-    //         )
-    //     }
-    // }
     pub fn is_valid(&self) -> bool {
-        return self.BS_BootSig == 0x29 && self.BS_FileSysType == "FAT32   ".as_bytes();
+        self.BS_BootSig == 0x29
+            && self.BS_FileSysType == "FAT32   ".as_bytes()
+            && self.BPB_BytesPerSector == 512   // hardwired sector size for simplicity
     }
-    // pub fn from_raw_parts(data: &[u8]) -> FAT32BootSector {
-    //     unsafe { *(data.as_ptr() as *const FAT32BootSector) }
-    // }
 }
 
+#[repr(C, packed)] // make sure layout is packed and exactly the same as on disk(90 bytes)
 #[allow(non_snake_case)]
+#[derive(Clone, Copy, Debug)]
 pub struct FAT32FSInfoSector {
     pub FSI_LeadSig: u32,         // 0x41615252
     pub FSI_Reserved1: [u8; 480], // 0
@@ -92,6 +67,14 @@ pub struct FAT32FSInfoSector {
     pub FSI_Nxt_Free: u32,        // next free cluster
     pub FSI_Reserved2: [u8; 12],  // 0
     pub FSI_TrailSig: u32,        // 0xAA550000
+}
+
+impl FAT32FSInfoSector {
+    pub fn is_valid(&self) -> bool {
+        self.FSI_LeadSig == 0x41615252
+            && self.FSI_StrucSig == 0x61417272
+            && self.FSI_TrailSig == 0xAA550000
+    }
 }
 
 #[allow(non_snake_case)]
