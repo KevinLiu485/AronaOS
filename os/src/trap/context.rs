@@ -6,22 +6,21 @@ use riscv::register::sstatus::{self, Sstatus, SPP};
 ///trap context structure containing sstatus, sepc and registers
 pub struct TrapContext {
     /// general regs[0..31]
-    /* 0 */
     pub x: [usize; 32],
     /// CSR sstatus      
-    /* 32 */
-    pub sstatus: Sstatus,
+    pub sstatus: Sstatus, // 32
     /// CSR sepc
-    /* 33 */
-    pub sepc: usize,
-
+    pub sepc: usize, // 33
     /// kernel-to-user should save:
-    /// general regs[0..31]
-    /* 34 */
-    pub kernel_s: [usize; 32],
+    pub kernel_sp: usize, // 34
+    ///
+    pub kernel_ra: usize, // 35
+    ///
+    pub kernel_s: [usize; 12], // 36-47
+    ///
+    pub kernel_fp: usize, // 48
     /// Addr of Page Table, should not be modified after init
-    /* 66 */
-    pub kernel_satp: usize,
+    pub kernel_satp: usize, // 49
 }
 
 impl TrapContext {
@@ -38,7 +37,11 @@ impl TrapContext {
             x: [0; 32],
             sstatus,
             sepc: entry,
-            kernel_s: [0; 32],
+            // The following regs will be stored in __return_to_user
+            kernel_sp: 0,
+            kernel_ra: 0,
+            kernel_fp: 0,
+            kernel_s: [0; 12],
             kernel_satp,
         };
         cx.set_sp(sp);
@@ -51,7 +54,10 @@ impl TrapContext {
             x: [0; 32],
             sstatus,
             sepc: 0,
-            kernel_s: [0; 32],
+            kernel_sp: 0,
+            kernel_ra: 0,
+            kernel_fp: 0,
+            kernel_s: [0; 12],
             kernel_satp: 0,
         }
     }
