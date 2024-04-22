@@ -84,6 +84,7 @@ Generally, stay the same with existing name style.
 - `SBI`: To switch between `rustsbi` and `opensbi`, run `make <rule> SBI=<rustsbi/opensbi>`. By default, AronaOS will run on `rustsbi`.
 - `LOG`: see [logging instructions](#logging-instructions).
 - `KTEST` see [Kernel testing instructions](#kernel-testing-instructions).
+- `TEST_DIR` run with `TEST_DIR=../mnt/` (appendix `/` and prefix `../` are necessary) to pack files in `AronaOS/mnt` into easy-fs (sub-dirs not included).
 # Relative repositories
 - 资料仓库：https://github.com/KevinLiu485/OS-Competition-Material/tree/main
 # Figure of A.R.O.N.A OS

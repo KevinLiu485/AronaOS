@@ -19,7 +19,7 @@
 //! userspace.
 
 #![deny(missing_docs)]
-#![deny(warnings)]
+// #![deny(warnings)]
 #![allow(unused_imports)]
 #![no_std]
 #![no_main]
