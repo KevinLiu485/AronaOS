@@ -2,20 +2,24 @@
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mutex::{Spin, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
+use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering::Relaxed;
 use log::error;
 
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
+    pub is_zombie: AtomicBool,
     // mutable
-    // Todo*: temp pub for debug, need to be private
-    pub inner: UPSafeCell<TaskControlBlockInner>,
+    pub inner: SpinNoIrqLock<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
@@ -57,25 +61,21 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
-        self.inner.exclusive_access()
-    }
     /// Create a wen meaningless TaskControlBlock
     pub fn new_bare() -> Self {
         TaskControlBlock {
             pid: PidHandle(usize::MAX),
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx: TrapContext::zero_init(),
-                    base_size: 0,
-                    task_status: TaskStatus::Zombie,
-                    memory_set: MemorySet::new_bare(),
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: Vec::new(),
-                })
-            },
+            is_zombie: Default::default(),
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+                trap_cx: TrapContext::zero_init(),
+                base_size: 0,
+                task_status: TaskStatus::Zombie,
+                memory_set: MemorySet::new_bare(),
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: Vec::new(),
+            }),
         }
     }
     pub fn new(elf_data: &[u8]) -> Self {
@@ -84,33 +84,34 @@ impl TaskControlBlock {
         println!("  entry_point: {}", entry_point);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
-        // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        // let trap_cx = task_control_block.inner.lock().get_trap_cx();
         // *trap_cx = TrapContext::app_init_context(entry_point, user_sp, unsafe {
         //     KERNEL_SPACE.as_ref().unwrap().token()
         // });
-        let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
+
+        let kernel_satp = KERNEL_SPACE.lock().token();
+
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         let task_control_block = Self {
             pid: pid_handle,
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx,
-                    base_size: user_sp,
-                    task_status: TaskStatus::Ready,
-                    memory_set,
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: vec![
-                        // 0 -> stdin
-                        Some(Arc::new(Stdin)),
-                        // 1 -> stdout
-                        Some(Arc::new(Stdout)),
-                        // 2 -> stderr
-                        Some(Arc::new(Stdout)),
-                    ],
-                })
-            },
+            is_zombie: Default::default(),
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+                trap_cx,
+                base_size: user_sp,
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: vec![
+                    // 0 -> stdin
+                    Some(Arc::new(Stdin)),
+                    // 1 -> stdout
+                    Some(Arc::new(Stdout)),
+                    // 2 -> stderr
+                    Some(Arc::new(Stdout)),
+                ],
+            }),
         };
         // prepare TrapContext in user space
         task_control_block
@@ -124,10 +125,10 @@ impl TaskControlBlock {
 
         error!("current page_table root_ppn: {:?}", crate::current_satp());
 
-        let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
+        let kernel_satp = KERNEL_SPACE.lock().token();
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         // **** access current TCB exclusively
-        let mut inner = self.inner_exclusive_access();
+        let mut inner = self.inner.lock();
         // substitute memory_set
         inner.memory_set = memory_set;
         // update trap_cx
@@ -135,7 +136,7 @@ impl TaskControlBlock {
     }
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
         // ---- hold parent PCB lock
-        let mut parent_inner = self.inner_exclusive_access();
+        let mut parent_inner = self.inner.lock();
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
 
@@ -155,18 +156,17 @@ impl TaskControlBlock {
         }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx,
-                    base_size: parent_inner.base_size,
-                    task_status: TaskStatus::Ready,
-                    memory_set,
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: new_fd_table,
-                })
-            },
+            is_zombie: Default::default(),
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+                trap_cx,
+                base_size: parent_inner.base_size,
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: new_fd_table,
+            }),
         });
         // add child
         parent_inner.children.push(task_control_block.clone());
@@ -179,7 +179,19 @@ impl TaskControlBlock {
         self.pid.0
     }
     pub fn is_zombie(&self) -> bool {
-        self.inner_exclusive_access().is_zombie()
+        self.is_zombie.load(Relaxed)
+    }
+}
+
+impl TaskControlBlock {
+    /// for debug purpose
+    pub fn print_all_task(&self, indent: String) {
+        println!("{}{}", indent, self.pid.0);
+        unsafe {
+            for child in self.inner.unsafe_get().children.iter() {
+                child.print_all_task(indent.clone() + "  ")
+            }
+        }
     }
 }
 

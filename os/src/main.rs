@@ -1,22 +1,12 @@
-//! The main module and entrypoint
-//!
-//! Various facilities of the kernels are implemented as submodules. The most
-//! important ones are:
-//!
-//! - [`trap`]: Handles all cases of switching from userspace to the kernel
-//! - [`task`]: Task management
-//! - [`syscall`]: System call handling and implementation
-//! - [`mm`]: Address map using SV39
-//! - [`sync`]: Wrap a static data structure inside it so that we are able to access it without any `unsafe`.
+//! main函数，以及程序的进入点，先跑entry.S之后就是rust_main.rs
+//! 之后调用 [`executor::run_forever()`] 这也是第一次进入userspace
+//! 各类功能在以下的子模块被实现
+//! - [`trap`] :解决用户空间和内核空间的切换
+//! - [`task`] :管理任务
+//! - [`syscall`]: System call 的处理和实现
+//! - [`mm`]: SV39 的 vm 管理
+//! - [`sync`]: 包装所有的static data structure，这样我们就不需要用unsafe访问他们
 //! - [`fs`]: Separate user from file system with some structures
-//!
-//! The operating system also starts in this module. Kernel code starts
-//! executing from `entry.asm`, after which [`rust_main()`] is called to
-//! initialize various pieces of functionality. (See its source code for
-//! details.)
-//!
-//! We then call [`task::run_tasks()`] and for the first time go to
-//! userspace.
 
 #![deny(missing_docs)]
 #![deny(warnings)]
@@ -57,9 +47,12 @@ pub mod utils;
 use log::error;
 use riscv::register::sstatus;
 
-use crate::mm::current_satp;
+use crate::mm::{current_satp, KERNEL_SPACE};
+use crate::sbi::hart_start;
+use crate::task::processor::new_local_hart;
 use crate::{config::KERNEL_BASE, drivers::block::block_device_test};
 use core::arch::{asm, global_asm};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
@@ -88,33 +81,76 @@ pub fn fake_main(hart_id: usize) {
 
 #[no_mangle]
 /// the rust entry-point of os
-pub fn rust_main() -> ! {
-    clear_bss();
-    println!("[kernel] Hello, world!");
-    logging::init();
-    error!("current satp: {:?}", current_satp());
-    mm::init();
-    error!("current satp: {:?}", current_satp());
-    //mm::remap_test();
-    //mm::from_global_test();
-    //mm::dump_test();
-    executor::init();
-    trap::init();
-    trap::enable_timer_interrupt();
-    timer::set_next_trigger();
-    //block_device_test();
-    fs::list_apps();
-    // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
-    unsafe {
-        sstatus::set_sum();
+pub fn rust_main(hart_id: usize) -> ! {
+    new_local_hart(hart_id);
+
+    if FIRST_HART
+        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        clear_bss();
+
+        println!("[kernel] Hello, world!");
+        logging::init();
+        error!("current satp: {:?}", current_satp());
+        mm::init();
+        error!("current satp: {:?}", current_satp());
+        //mm::remap_test();
+        //mm::from_global_test();
+        //mm::dump_test();
+        executor::init();
+
+        trap::init();
+
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        //block_device_test();
+        fs::list_apps();
+        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+        unsafe {
+            sstatus::set_sum();
+        }
+        task::add_initproc();
+
+        INIT_FINISHED.store(true, Ordering::SeqCst);
+        start_all_cpu(hart_id);
+    } else {
+        while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句，不过还是先留着。
+
+        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+        unsafe {
+            sstatus::set_sum();
+        }
+        trap::init();
+        KERNEL_SPACE.lock().activate();
+
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        println!("cpu: {} start!", hart_id);
     }
-    task::add_initproc();
-    //task::initproc_test();
-    // task::schedule::spawn_kernel_thread(async move {
-    //     task::add_initproc();
-    // });
 
     executor::run_forever();
-    // task::run_tasks();
-    // panic!("Unreachable in rust_main!");
+
+    // if hart_id == 0 {
+    //     executor::run_forever();
+    // } else {
+    //     loop {}
+    // }
 }
+
+fn start_all_cpu(hart_id: usize) {
+    println!("[kernel] cpu:{} Hello, world!", hart_id);
+    for i in 0..4 {
+        if i == hart_id {
+            continue;
+        }
+        let status = hart_start(i, 0x80200000);
+        println!(
+            "[kernel] {} start to wake up hart {}... status {}",
+            hart_id, i, status
+        );
+    }
+}
+
+static FIRST_HART: AtomicBool = AtomicBool::new(true);
+static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
