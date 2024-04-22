@@ -45,9 +45,17 @@ fn easy_fs_pack() -> std::io::Result<()> {
                 .takes_value(true)
                 .help("Executable target dir(with backslash)"),
         )
+        .arg(
+            Arg::with_name("dir")
+                .short("d")
+                .long("dir")
+                .takes_value(true)
+                .help("Extra dir to pack"),
+        )
         .get_matches();
     let src_path = matches.value_of("source").unwrap();
     let target_path = matches.value_of("target").unwrap();
+    let dir_path = matches.value_of("dir");
     println!("src_path = {}\ntarget_path = {}", src_path, target_path);
     let block_file = Arc::new(BlockFile(Mutex::new({
         let f = OpenOptions::new()
@@ -79,6 +87,29 @@ fn easy_fs_pack() -> std::io::Result<()> {
         let inode = root_inode.create(app.as_str()).unwrap();
         // write data to easy-fs
         inode.write_at(0, all_data.as_slice());
+    }
+    match dir_path {
+        Some(dir_path) => {
+            let dir_apps: Vec<_> = read_dir(dir_path)
+                .unwrap()
+                .into_iter()
+                .map(|dir_entry| dir_entry.unwrap().file_name().into_string().unwrap())
+                .collect();
+            for app in dir_apps {
+                println!("dir_app = {}", format!("{}{}", dir_path, app));
+                let mut host_file = File::open(format!("{}{}", dir_path, app)).unwrap();
+                if host_file.metadata().unwrap().is_dir() {
+                    continue;
+                }
+                let mut all_data: Vec<u8> = Vec::new();
+                host_file.read_to_end(&mut all_data).unwrap();
+                // create a file in easy-fs
+                let inode = root_inode.create(app.as_str()).unwrap();
+                // write data to easy-fs
+                inode.write_at(0, all_data.as_slice());
+            }
+        }
+        None => {}
     }
     // list apps
     // for app in root_inode.ls() {

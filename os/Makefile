@@ -9,6 +9,7 @@ APPS := ../user/src/bin/*
 LOG := ERROR
 KERNEL_FEATURES := kernel_tests
 KTEST :=
+TEST_DIR :=
 
 # BOARD
 BOARD := qemu
@@ -52,7 +53,11 @@ $(KERNEL_BIN): kernel
 fs-img: $(APPS)
 	@cd ../user && make build TEST=$(TEST)
 	@rm -f $(FS_IMG)
-	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/
+ifneq ($(TEST_DIR), )
+	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/ -d $(TEST_DIR)
+else
+	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/ 
+endif 
 
 $(APPS):
 
