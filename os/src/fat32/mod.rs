@@ -3,14 +3,10 @@
 #![allow(unused)]
 #![allow(dead_code)]
 
-use self::fs::FAT32FS;
-
 mod block_cache;
-mod block_dev;
-mod fs;
+pub mod block_dev;
+pub mod fs;
 mod layout;
-
-/// Initialize the FAT32 file system
-pub fn init() {
-    FAT32FS.lock().debug();
-}
+pub mod inode;
+mod fat;
+mod file;

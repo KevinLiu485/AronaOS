@@ -84,11 +84,6 @@ pub fn rust_main() -> ! {
     fat32::init();
     fs::list_apps();
     task::add_initproc();
-    // task::schedule::spawn_kernel_thread(async move {
-    //     task::add_initproc();
-    // });
 
     executor::run_forever();
-    // task::run_tasks();
-    // panic!("Unreachable in rust_main!");
 }

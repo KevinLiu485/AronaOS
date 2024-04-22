@@ -6,12 +6,14 @@
 //! need to wrap `OSInodeInner` into `UPSafeCell`
 use super::File;
 use crate::drivers::BLOCK_DEVICE;
+use crate::fat32::fs::FAT32FileSystem;
+use crate::fat32::inode::Inode;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
-use easy_fs::{EasyFileSystem, Inode};
+// use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
@@ -54,8 +56,8 @@ impl OSInode {
 
 lazy_static! {
     pub static ref ROOT_INODE: Arc<Inode> = {
-        let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
-        Arc::new(EasyFileSystem::root_inode(&efs))
+        let fat32fs = FAT32FileSystem::open(BLOCK_DEVICE.clone());
+        Arc::new(FAT32FileSystem::root_inode(&fat32fs))
     };
 }
 /// List all files in the filesystems
