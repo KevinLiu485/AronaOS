@@ -70,6 +70,12 @@ pub async fn yield_task() {
 
 /// Spawn a new user thread
 pub fn spawn_thread(task_control_block: Arc<TaskControlBlock>) {
+    // println!(
+    //     "[task:{}] before spawn thread count number:{}",
+    //     task_control_block.pid.0,
+    //     Arc::strong_count(&task_control_block)
+    // );
+
     let future = UserTaskFuture::new(task_control_block.clone(), thread_loop(task_control_block));
     let (runnable, task) = executor::spawn(future);
     runnable.schedule();
