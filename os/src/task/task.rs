@@ -8,7 +8,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
-use log::error;
+use log::{debug, error};
 
 pub struct TaskControlBlock {
     // immutable
@@ -120,9 +120,8 @@ impl TaskControlBlock {
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         // activate user space
         memory_set.activate();
-        // Change processor local context's pagetable (quite important!!!)
 
-        error!("current page_table root_ppn: {:?}", crate::current_satp());
+        debug!("entry_point: {:x}", entry_point);
 
         let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);

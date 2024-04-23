@@ -13,11 +13,13 @@
 //! to [`syscall()`].
 mod context;
 
+use crate::mm::PageTable;
 use crate::syscall::syscall;
 use crate::task::{current_trap_cx, current_user_token, exit_current, yield_task};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use log::debug;
+use riscv::register::satp;
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
@@ -83,6 +85,9 @@ pub async fn trap_handler() {
                 stval,
                 current_trap_cx().sepc,
             );
+            let satp = satp::read().bits();
+            let page_table = PageTable::from_token(satp);
+            page_table.dump_all();
             // page fault exit code
             exit_current(-2);
         }
