@@ -72,7 +72,7 @@ pub fn run_forever() -> ! {
     debug!("run_forever(): entered");
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
-            warn!("run_forever(): fetch a task");
+            //debug!(run_forever(): fetch a task");
             task.run();
         }
     }

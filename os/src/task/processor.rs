@@ -27,7 +27,7 @@ impl Processor {
     }
     /// Switch task context, including pagetable
     pub fn switch_task(&mut self, task: &mut Option<Arc<TaskControlBlock>>) {
-        debug!("switch to {:?}", task.as_ref().unwrap().pid);
+        //debug!("switch to {:?}", task.as_ref().unwrap().pid);
         // switch address space
         task.as_ref()
             .unwrap()
