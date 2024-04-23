@@ -235,7 +235,7 @@ impl MemorySet {
         );
         (
             memory_set,
-            user_stack_top,
+            user_stack_top - 8,
             elf.header.pt2.entry_point() as usize,
         )
     }
