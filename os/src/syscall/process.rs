@@ -4,6 +4,7 @@ use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
 use crate::utils::c_str_to_string;
 use alloc::sync::Arc;
+use log::debug;
 
 pub fn sys_exit(exit_code: i32) -> isize {
     exit_current(exit_code);
@@ -41,7 +42,7 @@ pub fn sys_exec(path: *const u8) -> isize {
     // let token = current_user_token();
     // let path = translated_str(token, path);
     let path = c_str_to_string(path);
-    println!("sys_exec path: {}", path);
+    debug!("sys_exec path: {}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();

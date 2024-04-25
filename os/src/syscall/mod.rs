@@ -15,23 +15,29 @@ const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_YIELD: usize = 124;
+const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_FORK: usize = 220;
 const SYSCALL_EXEC: usize = 221;
+const SYSCALL_MMAP: usize = 222;
 const SYSCALL_WAITPID: usize = 260;
 
 mod fs;
+mod info;
 mod mm;
 mod process;
 
 use fs::*;
+use info::*;
+use log::trace;
 use mm::*;
 use process::*;
 
 /// handle syscall exception with `syscall_id` and other arguments
-pub async fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
+    trace!("syscall_id: {}", syscall_id);
     match syscall_id {
         SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
         SYSCALL_CLOSE => sys_close(args[0]),
@@ -39,11 +45,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_YIELD => sys_yield().await,
+        SYSCALL_UNAME => sys_uname(args[0]),
         SYSCALL_GET_TIME => sys_get_time(),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_FORK => sys_fork(),
         SYSCALL_EXEC => sys_exec(args[0] as *const u8),
+        SYSCALL_MMAP => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }

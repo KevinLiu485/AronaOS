@@ -55,6 +55,10 @@ pub struct MemorySet {
     /// page table
     pub page_table: PageTable,
     areas: Vec<MapArea>,
+    /// 不放在areas是因为heap在运行时可能通过syscall改变
+    /// kernel不含有heap, 当from_elf和from_exist_user时分配
+    /// Option是因为Kernel没有, from_global是不分配heap
+    pub heap: Option<MapArea>,
 }
 
 impl MemorySet {
@@ -63,6 +67,7 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            heap: None,
         }
     }
     /// Create a user `MemorySet` that owns the global kernel mapping
@@ -71,6 +76,7 @@ impl MemorySet {
         Self {
             page_table,
             areas: Vec::new(),
+            heap: None,
         }
     }
     ///Get pagetable `root_ppn`
@@ -233,6 +239,18 @@ impl MemorySet {
             ),
             None,
         );
+        // map heap with U flags
+        let heap_bottom = user_stack_top;
+        let heap_top = heap_bottom;
+        let mut heap_area = MapArea::new(
+            heap_bottom.into(),
+            heap_top.into(),
+            MapType::Framed,
+            MapPermission::R | MapPermission::W | MapPermission::U,
+        );
+        heap_area.map(&mut memory_set.page_table);
+        memory_set.heap = Some(heap_area);
+
         (
             memory_set,
             user_stack_top - 8,
@@ -255,6 +273,23 @@ impl MemorySet {
                     .copy_from_slice(src_ppn.get_bytes_array());
             }
         }
+        // copy heap from another space
+        let mut new_heap = MapArea::from_another(
+            user_space
+                .heap
+                .as_ref()
+                .expect("heap not allocated in from_existed_user"),
+        );
+        new_heap.map(&mut memory_set.page_table);
+        for vpn in new_heap.vpn_range {
+            let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+            dst_ppn
+                .get_bytes_array()
+                .copy_from_slice(src_ppn.get_bytes_array());
+        }
+        memory_set.heap = Some(new_heap);
+
         memory_set
     }
     ///Refresh TLB with `sfence.vma`
@@ -277,7 +312,7 @@ impl MemorySet {
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
-    vpn_range: VPNRange,
+    pub vpn_range: VPNRange,
     data_frames: BTreeMap<VirtPageNum, FrameTracker>,
     map_type: MapType,
     map_perm: MapPermission,
@@ -299,6 +334,19 @@ impl MapArea {
             map_perm,
         }
     }
+    pub fn new_vpn(
+        start_vpn: VirtPageNum,
+        end_vpn: VirtPageNum,
+        map_type: MapType,
+        map_perm: MapPermission,
+    ) -> Self {
+        Self {
+            vpn_range: VPNRange::new(start_vpn, end_vpn),
+            data_frames: BTreeMap::new(),
+            map_type,
+            map_perm,
+        }
+    }
     pub fn from_another(another: &MapArea) -> Self {
         Self {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
@@ -306,6 +354,24 @@ impl MapArea {
             map_type: another.map_type,
             map_perm: another.map_perm,
         }
+    }
+    /// especially used for heap
+    pub fn shrink(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
+        let old_end = self.vpn_range.get_end();
+        assert!(new_end < old_end);
+        for vpn in VPNRange::new(new_end, old_end) {
+            self.unmap_one(page_table, vpn);
+        }
+        self.vpn_range.update_end(new_end);
+    }
+    /// especially used for heap
+    pub fn expand(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
+        let old_end = self.vpn_range.get_end();
+        assert!(new_end > old_end);
+        for vpn in VPNRange::new(old_end, new_end) {
+            self.map_one(page_table, vpn);
+        }
+        self.vpn_range.update_end(new_end);
     }
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;

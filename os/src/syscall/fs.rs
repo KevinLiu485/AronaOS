@@ -1,4 +1,6 @@
 //! File and filesystem-related syscalls
+use log::trace;
+
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, UserBuffer};
 use crate::task::{current_task, current_user_token};
@@ -49,6 +51,7 @@ pub fn sys_open(path: *const u8, flags: u32) -> isize {
     //let token = current_user_token();
     //let path = translated_str(token, path);
     let path = c_str_to_string(path);
+    trace!("sys_open path: {}", path);
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_exclusive_access();
         let fd = inner.alloc_fd();

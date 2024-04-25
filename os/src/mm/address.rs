@@ -1,7 +1,10 @@
 //! Implementation of physical and virtual address and page number.
+use async_task::ScheduleInfo;
+
 use super::PageTableEntry;
 use crate::config::{KERNEL_BASE, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
+use core::ops::Sub;
 
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
@@ -32,6 +35,14 @@ pub struct PhysPageNum(pub usize);
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 ///virtual page number
 pub struct VirtPageNum(pub usize);
+
+impl Sub<VirtPageNum> for VirtPageNum {
+    type Output = isize;
+
+    fn sub(self, rhs: VirtPageNum) -> Self::Output {
+        self.0 as isize - rhs.0 as isize
+    }
+}
 
 /// Debugging
 
@@ -298,6 +309,9 @@ where
     }
     pub fn get_end(&self) -> T {
         self.r
+    }
+    pub fn update_end(&mut self, new_end: T) {
+        self.r = new_end;
     }
 }
 impl<T> IntoIterator for SimpleRange<T>
