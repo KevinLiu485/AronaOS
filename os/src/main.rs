@@ -39,6 +39,7 @@ mod board;
 #[macro_use]
 mod console;
 mod config;
+pub mod ctypes;
 mod drivers;
 mod executor;
 pub mod fs;
