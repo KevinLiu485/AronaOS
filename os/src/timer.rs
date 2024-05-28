@@ -6,6 +6,25 @@ use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct TimeSpec {
+    pub sec: usize,
+    pub nsec: usize,
+}
+
+impl TimeSpec {
+    pub fn new() -> Self {
+        // new a time spec with machine time
+        let current_time = get_time_ms();
+        Self {
+            sec: current_time / 1000,
+            nsec: current_time % 1000000 * 1000000,
+        }
+    }
+}
+
 ///get current time
 pub fn get_time() -> usize {
     time::read()

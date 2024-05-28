@@ -1,9 +1,11 @@
 //!Stdin & Stdout
+use alloc::boxed::Box;
+
 use super::File;
+use crate::config::AsyncResult;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
 use crate::task::yield_task;
-// use crate::task::suspend_current_and_run_next;
 ///Standard input
 pub struct Stdin;
 ///Standard output
@@ -16,28 +18,30 @@ impl File for Stdin {
     fn writable(&self) -> bool {
         false
     }
-    fn read(&self, mut user_buf: UserBuffer) -> usize {
-        assert_eq!(user_buf.len(), 1);
-        // busy loop
-        let mut c: usize;
-        loop {
-            c = console_getchar();
-            // opensbi returns usize::MAX if no char available
-            if c == usize::MAX {
-                // suspend_current_and_run_next();
-                // yield_task().await;
-                continue;
-            } else {
-                break;
+    fn read(&self, mut user_buf: UserBuffer) -> AsyncResult<usize> {
+        Box::pin(async move {
+            assert_eq!(user_buf.len(), 1);
+            // busy loop
+            let mut c: usize;
+            loop {
+                c = console_getchar();
+                // opensbi returns usize::MAX if no char available
+                if c == usize::MAX {
+                    // suspend_current_and_run_next();
+                    yield_task().await;
+                    continue;
+                } else {
+                    break;
+                }
             }
-        }
-        let ch = c as u8;
-        unsafe {
-            user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
-        }
-        1
+            let ch = c as u8;
+            unsafe {
+                user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
+            }
+            Ok(1)
+        })
     }
-    fn write(&self, _user_buf: UserBuffer) -> usize {
+    fn write(&self, _user_buf: UserBuffer) -> AsyncResult<usize> {
         panic!("Cannot write to stdin!");
     }
 }
@@ -49,13 +53,15 @@ impl File for Stdout {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, _user_buf: UserBuffer) -> usize {
+    fn read(&self, _user_buf: UserBuffer) -> AsyncResult<usize> {
         panic!("Cannot read from stdout!");
     }
-    fn write(&self, user_buf: UserBuffer) -> usize {
-        for buffer in user_buf.buffers.iter() {
-            print!("{}", core::str::from_utf8(*buffer).unwrap());
-        }
-        user_buf.len()
+    fn write(&self, user_buf: UserBuffer) -> AsyncResult<usize> {
+        Box::pin(async move {
+            for buffer in user_buf.buffers.iter() {
+                print!("{}", core::str::from_utf8(*buffer).unwrap());
+            }
+            Ok(user_buf.len())
+        })
     }
 }

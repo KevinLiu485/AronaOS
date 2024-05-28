@@ -18,9 +18,9 @@
 //! We then call [`task::run_tasks()`] and for the first time go to
 //! userspace.
 
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 #![deny(warnings)]
-#![allow(unused_imports)]
+// #![allow(unused_imports)]
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
@@ -53,6 +53,7 @@ pub mod syscall;
 pub mod task;
 pub mod timer;
 pub mod trap;
+pub mod utilities;
 
 use core::arch::global_asm;
 
@@ -81,7 +82,7 @@ pub fn rust_main() -> ! {
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    fat32::init();
+    // fat32::init();
     fs::list_apps();
     task::add_initproc();
 

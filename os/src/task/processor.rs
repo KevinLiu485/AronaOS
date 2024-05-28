@@ -50,13 +50,10 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
-    let token = task.inner_exclusive_access().get_user_token();
+    let token = task.inner_lock().get_user_token();
     token
 }
 ///Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task()
-        .unwrap()
-        .inner_exclusive_access()
-        .get_trap_cx()
+    current_task().unwrap().inner_lock().get_trap_cx()
 }

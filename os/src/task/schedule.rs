@@ -6,11 +6,11 @@ use core::{
 };
 
 use alloc::sync::Arc;
-use log::{debug, info};
+use log::info;
 
 use crate::{
     executor,
-    task::{current_task, task::TaskStatus},
+    task::current_task,
     trap::{trap_handler, trap_return},
 };
 

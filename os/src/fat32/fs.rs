@@ -1,23 +1,28 @@
 use alloc::sync::Arc;
-// use easy_fs::BlockDevice;
 use lazy_static::lazy_static;
 use log::debug;
 
-use crate::{drivers::BLOCK_DEVICE, mutex::SpinLock};
+use crate::fs::inode::Inode;
 
 use super::{
-    block_cache::get_block_cache, block_dev::BlockDevice, fat::FAT32FileAllocTable, inode::Inode, layout::{FAT32BootSector, FAT32FSInfoSector, BLOCK_SIZE}
+    block_cache::get_block_cache,
+    block_dev::BlockDevice,
+    fat::FAT32FileAllocTable,
+    inode::FAT32Inode,
+    layout::{FAT32BootSector, FAT32FSInfoSector},
+    FSMutex,
 };
 
 pub struct FAT32FileSystem {
     pub block_device: Arc<dyn BlockDevice>,
-    pub fs_fat: Arc<SpinLock<FAT32FileAllocTable>>,
-    pub fs_meta: FAT32Meta,
-    pub fs_info: FAT32Info,
+    pub root_inode: Arc<dyn Inode>,
+    // pub fs_meta: Arc<FAT32Meta>,
+    // pub fs_info: Arc<FAT32Info>,
 }
 
 impl FAT32FileSystem {
-    pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<SpinLock<Self>> {
+    pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<FSMutex<Self>> {
+        debug!("FAT32FileSystem::open()");
         let fs_meta = get_block_cache(0, block_device.clone()).lock().read(
             0,
             |boot_sector: &FAT32BootSector| {
@@ -26,69 +31,102 @@ impl FAT32FileSystem {
                     boot_sector.is_valid(),
                     "FAT32FileSystem::open(): Error loading boot_sector!"
                 );
-                FAT32Meta::new(boot_sector)
+                Arc::new(FAT32Meta::new(boot_sector))
             },
         );
         let fs_info = get_block_cache(fs_meta.fs_info_sector_id, block_device.clone())
             .lock()
             .read(0, |fs_info_sector: &FAT32FSInfoSector| {
-                debug!(
-                    "FAT32FileSystem::open(): fs_info_sector: {:?}",
-                    fs_info_sector
-                );
+                // debug!(
+                //     "FAT32FileSystem::open(): fs_info_sector: {:?}",
+                //     fs_info_sector
+                // );
                 assert!(
                     fs_info_sector.is_valid(),
                     "FAT32FileSystem::open(): Error loading fs_info_sector!"
                 );
-                FAT32Info::new(fs_info_sector)
+                Arc::new(FSMutex::new(FAT32Info::new(fs_info_sector)))
             });
-        
-        Arc::new(SpinLock::new(Self {
+        let root_inode = Arc::new(FAT32Inode::new_root(
+            Arc::new(FAT32FileAllocTable::new(
+                block_device.clone(),
+                fs_info.clone(),
+                fs_meta.clone(),
+            )),
+            None,
+            "",
+            fs_meta.root_cluster_id,
+        ));
+        Arc::new(FSMutex::new(Self {
             block_device,
-            fs_meta,
-            fs_info,
+            root_inode,
+            // fs_meta,
+            // fs_info,
         }))
     }
 
-    pub fn root_inode(fs: &Arc<SpinLock<FAT32FileSystem>>) -> Inode {
-        todo!()
+    pub fn root_inode(&self) -> Arc<(dyn Inode + 'static)> {
+        self.root_inode.clone()
     }
 }
 
 /// immutable struct, initialized at open
 /// in-memory struct of FAT32BootSector
-struct FAT32Meta {
+pub struct FAT32Meta {
     // bytes_per_sector: hardwired `512` for simplicity, the same as blocksize
-    sector_per_cluster: usize,
+    pub sector_per_cluster: usize,
 
-    fat_count: usize, // count of FAT
-    total_sector_count: usize,
-    fat_sector_count: usize, // sector count of ONE FAT
+    pub fat_count: usize,        // count of FAT
+    pub fat_sector_count: usize, // sector count of ONE FAT
+    pub fat_start_sector: usize,
+    pub data_start_sector: usize, // start sector of data region
+    pub total_sector_count: usize,
+    pub total_cluster_count: usize,
 
-    root_cluster_id: usize,
-    fs_info_sector_id: usize,
-    backup_sector_id: usize,
+    pub root_cluster_id: usize,
+    pub fs_info_sector_id: usize,
+    pub backup_sector_id: usize,
 }
 
 impl FAT32Meta {
     pub fn new(boot_sector: &FAT32BootSector) -> Self {
+        let data_start_sector = (boot_sector.BPB_ReservedSectorCount as usize)
+            + (boot_sector.BPB_NumFATs as usize) * (boot_sector.BPB_FATsize32 as usize);
+        let total_cluster_count = (boot_sector.BPB_TotSector32 as usize - data_start_sector)
+            / (boot_sector.BPB_SectorPerCluster as usize);
         Self {
             sector_per_cluster: boot_sector.BPB_SectorPerCluster as usize,
+
             fat_count: boot_sector.BPB_NumFATs as usize,
-            total_sector_count: boot_sector.BPB_TotSector32 as usize,
             fat_sector_count: boot_sector.BPB_FATsize32 as usize,
+            fat_start_sector: boot_sector.BPB_ReservedSectorCount as usize,
+            data_start_sector,
+            total_sector_count: boot_sector.BPB_TotSector32 as usize,
+            total_cluster_count,
+
             root_cluster_id: boot_sector.BPB_RootCluster as usize,
             fs_info_sector_id: boot_sector.BPB_FSInfo as usize,
             backup_sector_id: boot_sector.BPB_BkBootSec as usize,
         }
     }
+
+    pub fn cid_to_sid(&self, cluster_id: usize) -> Option<usize> {
+        if cluster_id < 2 {
+            return None;
+        }
+        let ret = (cluster_id - 2) * self.sector_per_cluster + self.data_start_sector;
+        if ret >= self.total_sector_count {
+            return None;
+        }
+        Some(ret)
+    }
 }
 
 /// mutable struct, update along read and write
 /// in-memory struct of FAT32FSInfoSector
-struct FAT32Info {
-    free_cluster_count: usize,
-    next_free_cluster: usize,
+pub struct FAT32Info {
+    pub free_cluster_count: usize,
+    pub next_free_cluster: usize,
 }
 
 impl FAT32Info {

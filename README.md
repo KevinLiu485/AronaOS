@@ -65,7 +65,7 @@ By default, feature `kernel_tests` is enabled.
 > However, `Cargo.lock` can sometimes be a merge conflict
 - If you forget to clone submodule recursively, run `git submodule init` and `git submodule update` to clone submodule seperately.
 # Makefile args
-- `SBI`: Run with `SBI=<rustsbi/opensbi>` to specify sbi. By default, AronaOS will run on `rustsbi`.
+- `SBI`: Run with `SBI=<rustsbi/opensbi>` to specify sbi. By default, AronaOS will run on `opensbi`.
 - `LOG`: See [logging instructions](#logging-instructions).
 - `KTEST`: See [Kernel testing instructions](#kernel-testing-instructions).
 # Relative repositories
