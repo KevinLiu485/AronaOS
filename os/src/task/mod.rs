@@ -23,6 +23,7 @@ mod task;
 
 use crate::fs::{open_file, OpenFlags};
 use crate::sbi::shutdown;
+use crate::utilities::block_on::block_on;
 use alloc::sync::Arc;
 use lazy_static::*;
 use task::{TaskControlBlock, TaskStatus};
@@ -57,7 +58,7 @@ pub fn exit_current(exit_code: i32) {
     }
 
     // **** access current TCB exclusively
-    let mut inner = task.inner_exclusive_access();
+    let mut inner = task.inner_lock();
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
     // Record exit code
@@ -66,9 +67,9 @@ pub fn exit_current(exit_code: i32) {
 
     // ++++++ access initproc TCB exclusively
     {
-        let mut initproc_inner = INITPROC.inner_exclusive_access();
+        let mut initproc_inner = INITPROC.inner_lock();
         for child in inner.children.iter() {
-            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+            child.inner_lock().parent = Some(Arc::downgrade(&INITPROC));
             initproc_inner.children.push(child.clone());
         }
     }
@@ -84,7 +85,7 @@ lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
-        let v = inode.read_all();
+        let v = block_on(inode.read_all());
         TaskControlBlock::new(v.as_slice())
     });
 }

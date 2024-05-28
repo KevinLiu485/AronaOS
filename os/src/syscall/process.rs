@@ -1,3 +1,4 @@
+use crate::config::SyscallRet;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_refmut, translated_str};
 use crate::task::schedule::spawn_thread;
@@ -5,70 +6,70 @@ use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
 use alloc::sync::Arc;
 
-pub fn sys_exit(exit_code: i32) -> isize {
+pub fn sys_exit(exit_code: i32) -> SyscallRet {
     exit_current(exit_code);
-    0
+    Ok(0)
 }
 
-pub async fn sys_yield() -> isize {
+pub async fn sys_yield() -> SyscallRet {
     yield_task().await;
-    0
+    Ok(0)
 }
 
-pub fn sys_get_time() -> isize {
-    get_time_ms() as isize
+pub fn sys_get_time() -> SyscallRet {
+    Ok(get_time_ms())
 }
 
-pub fn sys_getpid() -> isize {
-    current_task().unwrap().pid.0 as isize
+pub fn sys_getpid() -> SyscallRet {
+    Ok(current_task().unwrap().pid.0)
 }
 
-pub fn sys_fork() -> isize {
+pub fn sys_fork() -> SyscallRet {
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
     // modify trap context of new_task, because it returns immediately after switching
-    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    let trap_cx = new_task.inner_lock().get_trap_cx();
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
     // add new task to scheduler
     spawn_thread(new_task);
-    new_pid as isize
+    Ok(new_pid)
 }
 
-pub fn sys_exec(path: *const u8) -> isize {
+pub async fn sys_exec(path: usize) -> SyscallRet {
     let token = current_user_token();
-    let path = translated_str(token, path);
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all();
+    let path = translated_str(token, path as *const u8);
+    if let Ok(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all().await;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
-        0
+        Ok(0)
     } else {
-        -1
+        Err(())
     }
 }
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
-pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
+pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
     let task = current_task().unwrap();
     // find a child process
 
     // ---- access current PCB exclusively
-    let mut inner = task.inner_exclusive_access();
+    let mut inner = task.inner_lock();
     if !inner
         .children
         .iter()
         .any(|p| pid == -1 || pid as usize == p.getpid())
     {
-        return -1;
+        return Err(());
         // ---- release current PCB
     }
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
         // ++++ temporarily access child PCB exclusively
-        p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
+        p.inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid())
         // ++++ release child PCB
     });
     if let Some((idx, _)) = pair {
@@ -77,12 +78,12 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         assert_eq!(Arc::strong_count(&child), 1);
         let found_pid = child.getpid();
         // ++++ temporarily access child PCB exclusively
-        let exit_code = child.inner_exclusive_access().exit_code;
+        let exit_code = child.inner_lock().exit_code;
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
-        found_pid as isize
+        Ok(found_pid)
     } else {
-        -2
+        Err(())
     }
     // ---- release current PCB automatically
 }

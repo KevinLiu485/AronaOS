@@ -1,8 +1,13 @@
 //! File system in os
-mod inode;
+pub mod inode;
+mod os_inode;
+pub mod path;
 mod stdio;
 
-use crate::mm::UserBuffer;
+use crate::{
+    config::{AsyncResult, AsyncSyscallRet},
+    mm::UserBuffer,
+};
 
 /// File trait
 pub trait File: Send + Sync {
@@ -11,11 +16,10 @@ pub trait File: Send + Sync {
     /// If writable
     fn writable(&self) -> bool;
     /// Read file to `UserBuffer`
-    fn read(&self, buf: UserBuffer) -> usize;
+    fn read(&self, buf: UserBuffer) -> AsyncSyscallRet;
     /// Write `UserBuffer` to file
-    fn write(&self, buf: UserBuffer) -> usize;
+    fn write(&self, buf: UserBuffer) -> AsyncResult<usize>;
 }
 
-use alloc::boxed::Box;
-pub use inode::{list_apps, open_file, OSInode, OpenFlags};
+pub use os_inode::{list_apps, open_file, OSInode, OpenFlags};
 pub use stdio::{Stdin, Stdout};

@@ -234,6 +234,11 @@ impl UserBuffer {
         }
         total
     }
+    // pub fn read_from(&self, buf: &mut [u8]) {
+    //     for slice in self.buffers.iter_mut() {
+
+    //     }
+    // }
 }
 
 impl IntoIterator for UserBuffer {

@@ -1,3 +1,9 @@
+# README
+# Makefile args
+# - `SBI`: Run with `SBI=<rustsbi/opensbi>` to specify sbi. By default, AronaOS will run on `opensbi`.
+# - `LOG`: See [logging instructions](#logging-instructions).
+# - `KTEST`: See [Kernel testing instructions](#kernel-testing-instructions).
+
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
@@ -71,7 +77,7 @@ fs-img: build-fs-root
 	@cp -r $(FS_IMG_ROOT)/* mnt
 	@sudo umount -v mnt
 	@rm -rf mnt
-	@sudo chmod -R 777 $(FS_IMG_SRC)
+#	@sudo chmod -R 777 $(FS_IMG_SRC)
 	@echo "finish pack fs-img"
 
 # fs-img: $(APPS)
@@ -126,4 +132,7 @@ gdbserver: build
 gdbclient:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner fs-img gdbserver gdbclient
+run-only: 
+	@qemu-system-riscv64 $(QEMU_ARGS)
+
+.PHONY: build env kernel clean disasm disasm-vim run-inner fs-img gdbserver gdbclient run-only
