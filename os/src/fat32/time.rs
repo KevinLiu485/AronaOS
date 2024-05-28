@@ -87,6 +87,7 @@ pub fn unix_time_to_FAT32(unix_time: i64) -> FAT32Timestamp {
     }
 }
 
+#[allow(unused)]
 fn month_to_day_count(month: i64, leap: bool) -> i64 {
     let mut ret: i64 = 0;
     for i in 0..month {
@@ -102,6 +103,7 @@ fn month_to_day_count(month: i64, leap: bool) -> i64 {
 /// convert FAT32 timestamp to Unix timestamp
 /// unix_time: 19700101 00:00:00 to now (millisecond)
 #[allow(non_snake_case)]
+#[allow(unused)]
 pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
     let year = (1980 + (fat32_time.date >> 9)) as i64;
     let month = (((fat32_time.date >> 5) & 0x0F) - 1) as i64;
@@ -116,6 +118,7 @@ pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
         + millisec
 }
 
+#[allow(unused)]
 pub fn unix_time_to_timespec(unix_time: i64) -> TimeSpec {
     if unix_time < 0 {
         TimeSpec { sec: 0, nsec: 0 }

@@ -6,11 +6,6 @@ use super::{
     block_cache::get_block_cache, fat::FAT32FileAllocTable, FATENTRY_MIN_EOC, SECTOR_SIZE,
 };
 
-enum FileType {
-    File,
-    Directory,
-}
-
 pub struct FAT32File {
     pub fat: Arc<FAT32FileAllocTable>,
     clusters: Vec<usize>,
@@ -116,9 +111,6 @@ impl FAT32File {
                 let cur_st = max(sector_st, st);
                 let cur_ed = min(sector_ed, ed);
                 let mut tmp_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
-                // self.fat
-                //     .block_device
-                //     .read_block(sector_id + j, &mut tmp_data[..]);
                 get_block_cache(sector_id + j, self.fat.block_device.clone())
                     .lock()
                     .read(0, |data: &[u8; SECTOR_SIZE]| tmp_data.copy_from_slice(data));
@@ -158,9 +150,6 @@ impl FAT32File {
                 let cur_ed = min(sector_ed, ed);
                 let mut tmp_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
                 if cur_st != sector_st || cur_ed != sector_ed {
-                    // self.fat
-                    //     .block_device
-                    //     .read_block(sector_id + j, &mut tmp_data[..]);
                     get_block_cache(sector_id + j, self.fat.block_device.clone())
                         .lock()
                         .read(0, |data: &[u8; SECTOR_SIZE]| tmp_data.copy_from_slice(data));
@@ -168,9 +157,6 @@ impl FAT32File {
                 for i in cur_st..cur_ed {
                     tmp_data[i - sector_st] = data[i - st];
                 }
-                // self.fat
-                //     .block_device
-                //     .write_block(sector_id + j, &tmp_data[..]);
                 get_block_cache(sector_id + j, self.fat.block_device.clone())
                     .lock()
                     .modify(0, |data: &mut [u8; SECTOR_SIZE]| {
@@ -182,9 +168,6 @@ impl FAT32File {
     }
 
     pub fn clear(&mut self) {
-        // for &cluster in self.clusters.iter() {
-        //     self.fat.free_cluster(cluster, None);
-        // }
         self.clusters.iter().for_each(|&cluster_id| {
             self.fat.free_cluster(cluster_id, None);
         });

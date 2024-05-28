@@ -47,7 +47,7 @@ pub async fn sys_exec(path: usize) -> SyscallRet {
         task.exec(all_data.as_slice());
         Ok(0)
     } else {
-        Err(())
+        Err(1)
     }
 }
 
@@ -64,7 +64,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
         .iter()
         .any(|p| pid == -1 || pid as usize == p.getpid())
     {
-        return Err(());
+        return Err(1);
         // ---- release current PCB
     }
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
@@ -83,7 +83,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
         Ok(found_pid)
     } else {
-        Err(())
+        Err(2)
     }
     // ---- release current PCB automatically
 }

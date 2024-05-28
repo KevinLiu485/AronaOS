@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use log::info;
 
 use super::{
-    block_cache::{self, get_block_cache, BlockCacheManager},
+    block_cache::get_block_cache,
     block_dev::BlockDevice,
     fs::{FAT32Info, FAT32Meta},
     FSMutex, FATENTRY_EOC, FATENTRY_MASK, FATENTRY_MIN_EOC, FATENTRY_PER_SECTOR, FSI_NOT_AVAILABLE,

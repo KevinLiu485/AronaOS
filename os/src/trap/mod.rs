@@ -69,7 +69,7 @@ pub async fn trap_handler() {
             cx = current_trap_cx();
             cx.x[10] = match result {
                 Ok(ret) => ret as usize,
-                Err(_) => (-1 as isize) as usize,
+                Err(err_code) => (-(err_code as isize)) as usize,
             };
         }
         Trap::Exception(Exception::StoreFault)
