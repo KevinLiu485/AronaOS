@@ -22,12 +22,6 @@ pub enum InodeMode {
 }
 
 pub trait Inode: Send + Sync {
-    // fn find(&self, name: &str) -> Option<Arc<dyn Inode>>;
-    // fn create(&self, name: &str) -> Option<Arc<dyn Inode>>;
-    // fn clear(&self);
-    // fn write_at(&self, offset: usize, buf: &[u8]) -> AsyncResult<usize>;
-    // fn read_at(&self, offset: usize, buf: &mut [u8]) -> AsyncResult<usize>;
-    // fn ls(&self) -> Vec<String>;
     fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AsyncResult<usize>;
     fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AsyncResult<usize>;
     fn mknod(&self, this: Arc<dyn Inode>, name: &str, mode: InodeMode)
@@ -46,11 +40,6 @@ impl dyn Inode {
 
     pub fn sync(&self) {
         todo!();
-        // if self.get_meta().mode == InodeMode::FileREG {
-        //     // sync self
-        // } else {
-        //     // sync self and all children
-        // }
     }
 
     pub fn get_name(&self) -> String {
@@ -65,43 +54,16 @@ impl dyn Inode {
             .lock()
             .children
             .insert(name.to_string(), child.clone());
-        // insert to cache
-        // let key = HashKey::new(self.metadata().ino, name.to_string());
-        // log::info!("[mkdir_v] insert {:?} into INODE_CACHE", key);
-        // INODE_CACHE.insert(key, child.clone());
         Ok(child)
     }
 
-    pub fn mknod_v(
-        self: &Arc<Self>,
-        name: &str,
-        mode: InodeMode,
-        // dev_id: Option<usize>,
-    ) -> SysResult<Arc<dyn Inode>> {
-        // stack_trace!();
+    pub fn mknod_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
         let child = self.mknod(self.clone(), name, mode)?;
-        self.get_meta()
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), child.clone());
-        // insert to cache
-        // let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
-        // log::info!(
-        //     "[mknod_v] child inode name {}, parent ino {}, key {:?}",
-        //     name,
-        //     self.metadata().ino,
-        //     key
-        // );
-        // INODE_CACHE.insert(key, child.clone());
-
-        // child.create_page_cache_if_needed();
+        self.get_meta().children_handler(self.clone(), |chidren| {
+            chidren.insert(name.to_string(), child.clone());
+        });
         Ok(child)
     }
-
-    // pub fn drop(&self) {
-    //     todo!();
-    // }
 }
 
 pub struct InodeMeta {
@@ -140,9 +102,37 @@ impl InodeMeta {
                 parent,
                 children: BTreeMap::new(),
                 data_len,
+                state: InodeState::Init,
             }),
         }
     }
+
+    /// We can do whatever we want to do on children by providing a handler
+    pub fn children_handler<T>(
+        &self,
+        this: Arc<dyn Inode>,
+        f: impl FnOnce(&mut BTreeMap<String, Arc<dyn Inode>>) -> T,
+    ) -> T {
+        let mut inner = self.inner.lock();
+        if inner.state == InodeState::Init {
+            inner.state = InodeState::Unmodified;
+            drop(inner); // release lock, avoid deadlock in load_children_from_disk()
+            this.load_children_from_disk(this.clone());
+            f(&mut self.inner.lock().children)
+        } else {
+            f(&mut inner.children)
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum InodeState {
+    /// children not loaded yet
+    Init,
+    /// children loaded, no modification
+    Unmodified,
+    /// children loaded, modification
+    Dirty,
 }
 
 #[derive(Clone)]
@@ -156,13 +146,12 @@ pub struct InodeMetaInner {
     /// parent
     pub parent: Option<Weak<dyn Inode>>,
     /// children list (name, inode)
+    /// USE INODEMETA::GET_CHILDREN() TO ENSURE CHILDREN ARE LOADED FROM DISK BEFORE USE
     pub children: BTreeMap<String, Arc<dyn Inode>>,
     /// file content len
     pub data_len: usize,
-    // inode state
-    // pub state: InodeState,
-    // elf data
-    // pub elf_data: Arc<SyncUnsafeCell<Vec<u8>>>,
+    // inode state, mainly for Dir inode
+    pub state: InodeState,
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);

@@ -27,7 +27,6 @@ impl File for Stdin {
                 c = console_getchar();
                 // opensbi returns usize::MAX if no char available
                 if c == usize::MAX {
-                    // suspend_current_and_run_next();
                     yield_task().await;
                     continue;
                 } else {

@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use lazy_static::lazy_static;
 use log::debug;
 
 use crate::fs::inode::Inode;
@@ -16,8 +15,6 @@ use super::{
 pub struct FAT32FileSystem {
     pub block_device: Arc<dyn BlockDevice>,
     pub root_inode: Arc<dyn Inode>,
-    // pub fs_meta: Arc<FAT32Meta>,
-    // pub fs_info: Arc<FAT32Info>,
 }
 
 impl FAT32FileSystem {
@@ -37,10 +34,6 @@ impl FAT32FileSystem {
         let fs_info = get_block_cache(fs_meta.fs_info_sector_id, block_device.clone())
             .lock()
             .read(0, |fs_info_sector: &FAT32FSInfoSector| {
-                // debug!(
-                //     "FAT32FileSystem::open(): fs_info_sector: {:?}",
-                //     fs_info_sector
-                // );
                 assert!(
                     fs_info_sector.is_valid(),
                     "FAT32FileSystem::open(): Error loading fs_info_sector!"
@@ -60,8 +53,6 @@ impl FAT32FileSystem {
         Arc::new(FSMutex::new(Self {
             block_device,
             root_inode,
-            // fs_meta,
-            // fs_info,
         }))
     }
 

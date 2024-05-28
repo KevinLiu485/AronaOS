@@ -1,14 +1,8 @@
-// use crate::mutex::SpinLock;
-
 use super::block_dev::BlockDevice;
-// use super::block_dev::BlockDevice;
-// use super::mod::{BLOCK_CACHE_SIZE, BLOCK_SIZE};
 use super::{FSMutex, BLOCK_CACHE_SIZE, BLOCK_SIZE};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-// use easy_fs::BlockDevice;
 use lazy_static::*;
-// use spin::Mutex;
 /// Cached block inside memory
 pub struct BlockCache {
     /// cached block data
@@ -140,6 +134,7 @@ pub fn get_block_cache(
         .get_block_cache(block_id, block_device)
 }
 /// Sync all block cache to block device
+#[allow(unused)]
 pub fn block_cache_sync_all() {
     let manager = BLOCK_CACHE_MANAGER.lock();
     for (_, cache) in manager.queue.iter() {

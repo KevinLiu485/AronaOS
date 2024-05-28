@@ -15,14 +15,6 @@ pub const ATTR_DIRECTORY: u8 = 0x10;
 const ATTR_LONG_NAME: u8 = 0x0F;
 const DENTRY_SIZE: usize = 0x20;
 
-// pub trait DentryReader {
-//     fn read_dentry(&mut self, data: &mut [u8]) -> usize;
-// }
-
-// pub trait DentryWriter: Send + Sync {
-//     fn write_dentry(&mut self, data: &[u8]);
-// }
-
 pub struct FAT32DentryContent<'a> {
     file: &'a mut FAT32File,
     offset: usize,
@@ -223,6 +215,7 @@ impl FAT32DirEntry {
         }
     }
 
+    #[allow(unused)]
     fn write_dentry(&self, writer: &mut FAT32DentryContent) {
         let mut lname_len = 0;
         while lname_len < LNAME_MAXLEN && self.lname[lname_len] != 0 {
@@ -315,6 +308,7 @@ fn shortname_checksum(data: &[u8]) -> u8 {
 }
 
 /// return "path/name"
+#[allow(unused)]
 pub fn append_path(path: &str, name: &str) -> String {
     format!("{}/{}", path, name)
 }

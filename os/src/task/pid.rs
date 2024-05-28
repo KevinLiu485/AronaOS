@@ -1,4 +1,7 @@
 //!Implementation of [`PidAllocator`]
+
+use core::fmt::Display;
+
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -50,6 +53,13 @@ impl Drop for PidHandle {
         PID_ALLOCATOR.exclusive_access().dealloc(self.0);
     }
 }
+
+impl Display for PidHandle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 ///Allocate a pid from PID_ALLOCATOR
 pub fn pid_alloc() -> PidHandle {
     PID_ALLOCATOR.exclusive_access().alloc()

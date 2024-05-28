@@ -14,7 +14,6 @@ use crate::mutex::SpinNoIrqLock;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-// use alloc::vec;
 use bitflags::*;
 use lazy_static::*;
 /// A wrapper around a filesystem inode
@@ -55,23 +54,17 @@ impl OSInode {
     }
     /// Read all data inside a inode into vector
     pub async fn read_all(&self) -> Vec<u8> {
-        // let mut inner = self.inner.lock();
-        // let inode = inner.inode.clone();
-        // let inode = self.inner.lock().inode.clone();
         let inode = self.inner_handler(|inner| inner.inode.clone());
         let mut buffer = [0u8; 512];
         let mut v: Vec<u8> = Vec::new();
         loop {
             let offset = self.get_offset();
-            // let offset = self.inner_handler(|inner| inner.offset);
             let len = inode.read(offset, &mut buffer).await;
             let len = len.unwrap();
             if len == 0 {
                 break;
             }
-            // inner.offset += len;
             self.set_offset(offset + len);
-            // self.inner_handler(|inner| inner.offset += len);
             v.extend_from_slice(&buffer[..len]);
         }
         v
@@ -133,9 +126,6 @@ pub fn open_file(name: &str, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
             Ok(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
             // create file
-            // ROOT_INODE
-            //     .create(name)
-            //     .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
             ROOT_INODE
                 .mknod_v(name, InodeMode::FileREG)
                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
@@ -158,33 +148,6 @@ impl File for OSInode {
         self.writable
     }
     fn read(&self, mut buf: UserBuffer) -> AsyncResult<usize> {
-        // let mut inner = self.inner.exclusive_access();
-        // let mut total_read_size = 0usize;
-        // for slice in buf.buffers.iter_mut() {
-        //     let read_size = inner.inode.read(inner.offset, *slice);
-        //     if read_size == 0 {
-        //         break;
-        //     }
-        //     inner.offset += read_size;
-        //     total_read_size += read_size;
-        // }
-        // total_read_size
-
-        // Box::pin(async move {
-        //     let _sum_guard = SumGuard::new();
-        //     let info =
-        //         "nodev\ttmpfs\n".to_owned() + "nodev\tproc\n" + "nodev\tdevtmpfs\n" + "\tvfat\n";
-        //     let len = info.len();
-        //     let mut inner = self.metadata().inner.lock();
-        //     if inner.pos == len {
-        //         debug!("[MountFile] already read");
-        //         Ok(0)
-        //     } else {
-        //         buf[..len].copy_from_slice(info.as_bytes());
-        //         inner.pos = len;
-        //         Ok(len)
-        //     }
-        // })
         Box::pin(async move {
             let mut total_read_size = 0;
             let inode = self.inner_handler(|inner| inner.inode.clone());
@@ -201,15 +164,6 @@ impl File for OSInode {
         })
     }
     fn write(&self, buf: UserBuffer) -> AsyncResult<usize> {
-        // let mut inner = self.inner.exclusive_access();
-        // let mut total_write_size = 0usize;
-        // for slice in buf.buffers.iter() {
-        //     let write_size = inner.inode.write_at(inner.offset, *slice);
-        //     assert_eq!(write_size, slice.len());
-        //     inner.offset += write_size;
-        //     total_write_size += write_size;
-        // }
-        // total_write_size
         Box::pin(async move {
             let mut total_write_size = 0;
             let inode = self.inner_handler(|inner| inner.inode.clone());

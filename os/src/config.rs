@@ -19,7 +19,8 @@ pub use crate::board::{CLOCK_FREQ, MEMORY_END, MMIO};
 
 pub type SysFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-pub type SysResult<T> = Result<T, ()>;
+// pub type SysResult<T> = Result<T, ()>;
+pub type SysResult<T> = Result<T, usize>;
 pub type SyscallRet = SysResult<usize>;
 
 pub type AsyncResult<'a, T> = SysFuture<'a, SysResult<T>>;
