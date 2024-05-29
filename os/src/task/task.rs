@@ -9,7 +9,9 @@ use crate::trap::TrapContext;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cell::RefMut;
 use core::ops::DerefMut;
+use log::{debug, error};
 
 pub struct TaskControlBlock {
     // immutable
@@ -19,7 +21,8 @@ pub struct TaskControlBlock {
 }
 
 pub struct TaskControlBlockInner {
-    pub trap_cx_ppn: PhysPageNum,
+    //pub trap_cx_ppn: PhysPageNum,
+    pub trap_cx: TrapContext,
     pub base_size: usize,
     pub task_status: TaskStatus,
     pub memory_set: MemorySet,
@@ -31,8 +34,11 @@ pub struct TaskControlBlockInner {
 }
 
 impl TaskControlBlockInner {
-    pub fn get_trap_cx(&self) -> &'static mut TrapContext {
-        self.trap_cx_ppn.get_mut()
+    pub fn get_trap_cx(&mut self) -> &'static mut TrapContext {
+        unsafe {
+            // 先转换为raw pointer绕过rust的borrow检查
+            &mut *(&mut self.trap_cx as *mut TrapContext)
+        }
     }
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
@@ -62,90 +68,91 @@ impl TaskControlBlock {
     pub fn new_bare() -> Self {
         TaskControlBlock {
             pid: PidHandle(usize::MAX),
-            inner: SpinNoIrqLock::new(TaskControlBlockInner {
-                trap_cx_ppn: PhysPageNum(0),
-                base_size: 0,
-                task_status: TaskStatus::Zombie,
-                memory_set: MemorySet::new_bare(),
-                parent: None,
-                children: Vec::new(),
-                exit_code: 0,
-                fd_table: Vec::new(),
-                cwd: Path::new(),
-            }),
+            inner: unsafe {
+                SpinNoIrqLock::new(TaskControlBlockInner {
+                    trap_cx: TrapContext::zero_init(),
+                    base_size: 0,
+                    task_status: TaskStatus::Zombie,
+                    memory_set: MemorySet::new_bare(),
+                    parent: None,
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: Vec::new(),
+                    cwd: Path::new(),
+                })
+            },
         }
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        println!("  entry_point: {}", entry_point);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
+        // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        // *trap_cx = TrapContext::app_init_context(entry_point, user_sp, unsafe {
+        //     KERNEL_SPACE.as_ref().unwrap().token()
+        // });
+        let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
+        let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         let task_control_block = Self {
             pid: pid_handle,
-            inner: SpinNoIrqLock::new(TaskControlBlockInner {
-                trap_cx_ppn,
-                base_size: user_sp,
-                task_status: TaskStatus::Ready,
-                memory_set,
-                parent: None,
-                children: Vec::new(),
-                exit_code: 0,
-                fd_table: vec![
-                    // 0 -> stdin
-                    Some(Arc::new(Stdin)),
-                    // 1 -> stdout
-                    Some(Arc::new(Stdout)),
-                    // 2 -> stderr
-                    Some(Arc::new(Stdout)),
-                ],
-                cwd: Path::new(),
-            }),
+            inner: unsafe {
+                SpinNoIrqLock::new(TaskControlBlockInner {
+                    trap_cx,
+                    base_size: user_sp,
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: None,
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: vec![
+                        // 0 -> stdin
+                        Some(Arc::new(Stdin)),
+                        // 1 -> stdout
+                        Some(Arc::new(Stdout)),
+                        // 2 -> stderr
+                        Some(Arc::new(Stdout)),
+                    ],
+                    cwd: Path::new(),
+                })
+            },
         };
         // prepare TrapContext in user space
-        let trap_cx = task_control_block.inner_lock().get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
-        );
+        // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        // *trap_cx = TrapContext::app_init_context(
+        //     entry_point,
+        //     user_sp,
+        //     KERNEL_SPACE.exclusive_access().token(),
+        // );
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        // activate user space
+        memory_set.activate();
 
+        debug!("entry_point: {:x}", entry_point);
+
+        let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
+        let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         // **** access current TCB exclusively
         let mut inner = self.inner_lock();
         // substitute memory_set
         inner.memory_set = memory_set;
-        // update trap_cx ppn
-        inner.trap_cx_ppn = trap_cx_ppn;
-        // initialize trap_cx
-        let trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
-        );
-        *inner.get_trap_cx() = trap_cx;
-        // **** release current PCB
+        // update trap_cx
+        inner.trap_cx = trap_cx;
     }
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_lock();
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+
+        //still parent's user space, not child
+        parent_inner.memory_set.activate();
+        let trap_cx = parent_inner.trap_cx.clone();
         // alloc a pid
         let pid_handle = pid_alloc();
         // copy fd table
@@ -161,17 +168,19 @@ impl TaskControlBlock {
         let cwd = parent_inner.cwd.clone();
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            inner: SpinNoIrqLock::new(TaskControlBlockInner {
-                trap_cx_ppn,
-                base_size: parent_inner.base_size,
-                task_status: TaskStatus::Ready,
-                memory_set,
-                parent: Some(Arc::downgrade(self)),
-                children: Vec::new(),
-                exit_code: 0,
-                fd_table: new_fd_table,
-                cwd,
-            }),
+            inner: unsafe {
+                SpinNoIrqLock::new(TaskControlBlockInner {
+                    trap_cx,
+                    base_size: parent_inner.base_size,
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                    fd_table: new_fd_table,
+                    cwd,
+                })
+            },
         });
         // add child
         parent_inner.children.push(task_control_block.clone());

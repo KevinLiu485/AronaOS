@@ -2,7 +2,7 @@ use core::future::Future;
 
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
-use log::debug;
+use log::{debug, warn};
 
 use crate::mutex::SpinNoIrqLock;
 
@@ -72,7 +72,7 @@ pub fn run_forever() -> ! {
     debug!("run_forever(): entered");
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
-            // debug!("run_forever(): fetch a task");
+            //debug!(run_forever(): fetch a task");
             task.run();
         }
     }

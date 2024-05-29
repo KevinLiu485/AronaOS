@@ -1,11 +1,11 @@
 use crate::config::SyscallRet;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
-use alloc::string::ToString;
+use crate::utils::c_str_to_string;
 use alloc::sync::Arc;
+use log::debug;
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
     exit_current(exit_code);
@@ -39,11 +39,13 @@ pub fn sys_fork() -> SyscallRet {
     Ok(new_pid)
 }
 
-pub async fn sys_exec(path: usize) -> SyscallRet {
-    let token = current_user_token();
-    let path = translated_str(token, path as *const u8);
-    if let Ok(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all().await;
+pub fn sys_exec(path: *const u8) -> isize {
+    // let token = current_user_token();
+    // let path = translated_str(token, path);
+    let path = c_str_to_string(path);
+    debug!("sys_exec path: {}", path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)
@@ -81,8 +83,11 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_lock().exit_code;
         // ++++ release child PCB
-        *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
-        Ok(found_pid)
+        //*translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        unsafe {
+            *exit_code_ptr = exit_code;
+        }
+        found_pid as isize
     } else {
         Err(2)
     }

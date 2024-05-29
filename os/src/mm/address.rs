@@ -1,7 +1,10 @@
 //! Implementation of physical and virtual address and page number.
+use async_task::ScheduleInfo;
+
 use super::PageTableEntry;
-use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::config::{KERNEL_BASE, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
+use core::ops::Sub;
 
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
@@ -9,6 +12,11 @@ const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
 /// Definitions
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct KernelAddr(pub usize);
+
+/// physical page address
 #[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
@@ -28,8 +36,21 @@ pub struct PhysPageNum(pub usize);
 ///virtual page number
 pub struct VirtPageNum(pub usize);
 
+impl Sub<VirtPageNum> for VirtPageNum {
+    type Output = isize;
+
+    fn sub(self, rhs: VirtPageNum) -> Self::Output {
+        self.0 as isize - rhs.0 as isize
+    }
+}
+
 /// Debugging
 
+impl Debug for KernelAddr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("KA:{:#x}", self.0))
+    }
+}
 impl Debug for VirtAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("VA:{:#x}", self.0))
@@ -55,6 +76,12 @@ impl Debug for PhysPageNum {
 /// T -> usize: T.0
 /// usize -> T: usize.into()
 
+impl From<usize> for KernelAddr {
+    fn from(v: usize) -> Self {
+        Self(v)
+    }
+}
+
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
         Self(v & ((1 << PA_WIDTH_SV39) - 1))
@@ -73,6 +100,11 @@ impl From<usize> for VirtAddr {
 impl From<usize> for VirtPageNum {
     fn from(v: usize) -> Self {
         Self(v & ((1 << VPN_WIDTH_SV39) - 1))
+    }
+}
+impl From<KernelAddr> for usize {
+    fn from(ka: KernelAddr) -> Self {
+        ka.0
     }
 }
 impl From<PhysAddr> for usize {
@@ -167,6 +199,24 @@ impl From<PhysPageNum> for PhysAddr {
     }
 }
 
+impl From<PhysPageNum> for KernelAddr {
+    fn from(ppn: PhysPageNum) -> Self {
+        Self((ppn.0 << PAGE_SIZE_BITS) + KERNEL_BASE)
+    }
+}
+
+impl From<KernelAddr> for PhysPageNum {
+    fn from(ka: KernelAddr) -> Self {
+        PhysAddr(ka.0 - KERNEL_BASE).floor()
+    }
+}
+
+impl From<KernelAddr> for PhysAddr {
+    fn from(ka: KernelAddr) -> Self {
+        Self(ka.0 - KERNEL_BASE)
+    }
+}
+
 impl VirtPageNum {
     ///Return VPN 3 level index
     pub fn indexes(&self) -> [usize; 3] {
@@ -180,31 +230,45 @@ impl VirtPageNum {
     }
 }
 
+// 不再有直接通过pa访问物理页帧的能力, 而是由ka负责
 impl PhysAddr {
     ///Get reference to `PhysAddr` value
     pub fn get_ref<T>(&self) -> &'static T {
-        unsafe { (self.0 as *const T).as_ref().unwrap() }
+        unsafe { (KernelAddr::from(self.0).0 as *const T).as_ref().unwrap() }
     }
     ///Get mutable reference to `PhysAddr` value
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        unsafe { (KernelAddr::from(self.0).0 as *mut T).as_mut().unwrap() }
+    }
+}
+
+impl KernelAddr {
+    ///Get reference to `KernelAddr` value
+    pub fn get_ref<T>(&self) -> &'static T {
+        unsafe { (self.0 as *const T).as_ref().unwrap() }
+    }
+    ///Get mutable reference to `KernelAddr` value
     pub fn get_mut<T>(&self) -> &'static mut T {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
     }
 }
+
+// 直接获取物理页帧的方式是通过KernelAddr
 impl PhysPageNum {
     ///Get `PageTableEntry` on `PhysPageNum`
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
-        let pa: PhysAddr = (*self).into();
-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
+        let ka: KernelAddr = (*self).into();
+        unsafe { core::slice::from_raw_parts_mut(ka.0 as *mut PageTableEntry, 512) }
     }
     ///Get u8 array on `PhysPageNum`
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
-        let pa: PhysAddr = (*self).into();
-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
+        let ka: KernelAddr = (*self).into();
+        unsafe { core::slice::from_raw_parts_mut(ka.0 as *mut u8, 4096) }
     }
     ///Get Get mutable reference to `PhysAddr` value on `PhysPageNum`
     pub fn get_mut<T>(&self) -> &'static mut T {
-        let pa: PhysAddr = (*self).into();
-        pa.get_mut()
+        let ka: KernelAddr = (*self).into();
+        ka.get_mut()
     }
 }
 ///Add value by one
@@ -245,6 +309,9 @@ where
     }
     pub fn get_end(&self) -> T {
         self.r
+    }
+    pub fn update_end(&mut self, new_end: T) {
+        self.r = new_end;
     }
 }
 impl<T> IntoIterator for SimpleRange<T>

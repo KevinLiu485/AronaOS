@@ -6,6 +6,7 @@ use core::{
 };
 
 use alloc::sync::Arc;
+use log::{debug, info, warn};
 use log::info;
 
 use crate::{
@@ -68,6 +69,7 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         // drop(task);
 
         switch_task(&mut this.task_ctx.clone());
+        // run `threadloop`
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
         switch_task(&mut this.task_ctx.clone());
 
@@ -106,7 +108,7 @@ pub async fn thread_loop(task: Arc<TaskControlBlock>) {
         trap_handler().await;
         // debug!("thread_loop(): back from trap_handler");
         if task.is_zombie() {
-            info!(
+            warn!(
                 "process terminated, pid = {}",
                 current_task().unwrap().getpid()
             );

@@ -18,6 +18,7 @@ APPS := ../user/src/bin/*
 LOG := ERROR
 KERNEL_FEATURES := kernel_tests
 KTEST :=
+TEST_DIR :=
 
 # BOARD
 BOARD := qemu

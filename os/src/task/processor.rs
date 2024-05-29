@@ -1,9 +1,11 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use super::TaskControlBlock;
+use crate::mm::PageTable;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use log::debug;
 ///Processor management structure
 pub struct Processor {
     ///The task currently executing on the current processor
@@ -25,7 +27,14 @@ impl Processor {
     }
     /// Switch task context, including pagetable
     pub fn switch_task(&mut self, task: &mut Option<Arc<TaskControlBlock>>) {
-        // pagetable is set accroding to `TaskControlBlock`, only need to switch `TaskControlBlock`
+        //debug!("switch to {:?}", task.as_ref().unwrap().pid);
+        // switch address space
+        task.as_ref()
+            .unwrap()
+            .inner
+            .exclusive_access()
+            .memory_set
+            .activate();
         // switch `TaskControlBlock`
         core::mem::swap(&mut self.current, task);
     }

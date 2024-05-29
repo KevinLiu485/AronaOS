@@ -21,10 +21,15 @@ pub mod schedule;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
+use crate::error;
+use crate::executor::init;
 use crate::fs::{open_file, OpenFlags};
+use crate::mm::{current_satp, VirtAddr};
 use crate::sbi::shutdown;
 use crate::utilities::block_on::block_on;
+use alloc::string;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use lazy_static::*;
 use task::{TaskControlBlock, TaskStatus};
 
@@ -41,6 +46,10 @@ pub const IDLE_PID: usize = 0;
 /// More exiting works will de done by its parent.
 pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
+    error!(
+        "exit task's pagetable: {:?}",
+        task.inner.exclusive_access().memory_set.page_table.root_ppn
+    );
 
     let pid = task.getpid();
     if pid == IDLE_PID {
@@ -92,4 +101,48 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     schedule::spawn_thread(INITPROC.clone());
+}
+
+#[allow(unused)]
+/// debug info about INITPROC TaskContorlBlock
+pub fn initproc_test() {
+    let init_proc = &INITPROC.inner.exclusive_access();
+    let page_table = &init_proc.memory_set.page_table;
+    assert_eq!(page_table.root_ppn, current_satp());
+    let entry = init_proc.trap_cx.sepc;
+    let va: VirtAddr = entry.into();
+    let pte = page_table.find_pte(va.into()).unwrap();
+    println!("{:?}", pte);
+    println!("{}", pte.flags().readable_flags());
+}
+
+use alloc::string::String;
+
+#[allow(unused)]
+/// debug
+pub fn elf_data_info(v: &Vec<u8>) {
+    let mut elf_data = String::new();
+    let len = v.len();
+    println!("elf: ");
+    println!("{}", elf_data);
+    let mut i = 0;
+    while i < len {
+        match core::str::from_utf8(&v[i..]) {
+            Ok(valid) => {
+                elf_data.push_str(valid);
+                break;
+            }
+            Err(error) => {
+                let valid_up_to = error.valid_up_to();
+                let valid = core::str::from_utf8(&v[i..(i + valid_up_to)]).unwrap_or("\u{FFFD}"); // 使用unwrap_or来处理不正确的UTF-8序列
+                elf_data.push_str(valid);
+                if let Some(error_len) = error.error_len() {
+                    i += valid_up_to + error_len; // 跳过无效的字节
+                } else {
+                    // 如果 error_len 是 None，则意味着错误在字节序列的末尾
+                    break;
+                }
+            }
+        }
+    }
 }

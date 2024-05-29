@@ -55,7 +55,9 @@ pub mod timer;
 pub mod trap;
 pub mod utilities;
 
-use core::arch::global_asm;
+use crate::mm::current_satp;
+use crate::{config::KERNEL_BASE, drivers::block::block_device_test};
+use core::arch::{asm, global_asm};
 
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
@@ -70,20 +72,40 @@ fn clear_bss() {
     }
 }
 
+///
+#[no_mangle]
+pub fn fake_main(hart_id: usize) {
+    unsafe {
+        asm!("add sp, sp, {}", in(reg) KERNEL_BASE);
+        asm!("la t0, rust_main");
+        asm!("add t0, t0, {}", in(reg) KERNEL_BASE);
+        asm!("mv a0, {}", in(reg) hart_id);
+        asm!("jalr zero, 0(t0)");
+    }
+}
+
 #[no_mangle]
 /// the rust entry-point of os
 pub fn rust_main() -> ! {
     clear_bss();
     println!("[kernel] Hello, world!");
     logging::init();
+    error!("current satp: {:?}", current_satp());
     mm::init();
-    mm::remap_test();
+    error!("current satp: {:?}", current_satp());
+    //mm::remap_test();
+    //mm::from_global_test();
+    //mm::dump_test();
     executor::init();
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     // fat32::init();
     fs::list_apps();
+    // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+    unsafe {
+        sstatus::set_sum();
+    }
     task::add_initproc();
 
     executor::run_forever();
