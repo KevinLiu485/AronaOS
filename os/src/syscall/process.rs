@@ -3,11 +3,10 @@ use crate::ctypes::TimeVal;
 use crate::fs::path::Path;
 use crate::fs::{open_file, OpenFlags, AT_FDCWD};
 use crate::task::schedule::spawn_thread;
-use crate::task::{current_task, current_user_token, exit_current, yield_task, INITPROC};
+use crate::task::{current_task, exit_current, yield_task, INITPROC};
 use crate::timer::{get_time_ms, TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
 use alloc::string::{String, ToString};
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::Future;
 use core::ptr::null;
@@ -78,9 +77,9 @@ pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
     Ok(new_pid)
 }
 
-pub async fn sys_exec(path: usize, mut args: usize, mut envs: usize) -> SyscallRet {
+pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
     // let token = current_user_token();
-    let path = c_str_to_string(path as *const u8);
+    let path = Path::from(c_str_to_string(path as *const u8));
     let mut args = args as *const usize;
     let mut envs = envs as *const usize;
     println!("sys_exec path: {}", path);
@@ -116,7 +115,6 @@ pub async fn sys_exec(path: usize, mut args: usize, mut envs: usize) -> SyscallR
             }
         }
     }
-
     // let path = translated_str(token, path as *const u8);
     if let Ok(app_inode) = open_file(AT_FDCWD, &path, OpenFlags::RDONLY) {
         let all_data = app_inode.read_all().await;
@@ -146,12 +144,7 @@ bitflags! {
 
 pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> SyscallRet {
     let options = WaitOption::from_bits(options).unwrap();
-    WaitFuture {
-        options,
-        pid,
-        exit_status_addr: exit_code_ptr,
-    }
-    .await
+    WaitFuture::new(options, pid, exit_code_ptr).await
 }
 
 struct WaitFuture {
@@ -238,9 +231,9 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
 pub fn sys_clone(
     flags: usize,
     stack_ptr: usize,
-    parent_tid_ptr: usize,
-    tls_ptr: usize,
-    chilren_tid_ptr: usize,
+    _parent_tid_ptr: usize,
+    _tls_ptr: usize,
+    _chilren_tid_ptr: usize,
 ) -> SyscallRet {
     let clone_flags = match CloneFlags::from_bits(flags as u32) {
         None => {
@@ -250,7 +243,7 @@ pub fn sys_clone(
         Some(flag) => flag,
     };
 
-    let current_task = current_task().unwrap();
+    // let current_task = current_task().unwrap();
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
         let stack = match stack_ptr {

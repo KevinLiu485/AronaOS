@@ -1,13 +1,9 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use super::TaskControlBlock;
 use crate::config::PAGE_SIZE;
-use crate::mm::PageTable;
-use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use core::arch::asm;
-use lazy_static::*;
-use log::debug;
 
 /// 每个CPU核心对应的抽象
 // #[derive(Debug)]
@@ -30,7 +26,7 @@ impl U7Hart {
     }
     /// Switch task context, including pagetable
     pub fn switch_task(&mut self, task: &mut Option<Arc<TaskControlBlock>>) {
-        debug!("switch to {:?}", task.as_ref().unwrap().pid);
+        // debug!("switch to {:?}", task.as_ref().unwrap().pid);
         // switch address space
         task.as_ref().unwrap().inner_lock().memory_set.activate();
         // switch `TaskControlBlock`

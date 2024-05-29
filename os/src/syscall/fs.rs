@@ -5,12 +5,10 @@ use log::info;
 use crate::config::SyscallRet;
 use crate::fs::path::Path;
 use crate::fs::{create_dir, open_file, OpenFlags, AT_FDCWD};
-// use crate::mm::{translated_byte_buffer, UserBuffer};
 use crate::task::current_task;
 use crate::utils::c_str_to_string;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
-    // let token = current_user_token();
     let task = current_task().unwrap();
     let fd_table_len = task.inner_handler(|inner| inner.fd_table.len());
     if fd >= fd_table_len {
@@ -35,7 +33,6 @@ pub async fn sys_read(
     buf: usize, /* cannot use `*const u8` here as it does not satisfy `Send` trait */
     len: usize,
 ) -> SyscallRet {
-    // let token = current_user_token();
     let task = current_task().unwrap();
     /* cannot use `inner` as MutexGuard will cross `await` that way */
     let fd_table_len = task.inner_handler(|inner| inner.fd_table.len());
@@ -90,7 +87,6 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -> SyscallRet {
     let task = current_task().unwrap();
-    // let token = current_user_token();
     let path = Path::from(c_str_to_string(pathname));
     if let Ok(inode) = open_file(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_lock();

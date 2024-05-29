@@ -3,7 +3,6 @@
 use core::fmt::Display;
 
 use crate::mutex::SpinNoIrqLock;
-use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
 use log::debug;

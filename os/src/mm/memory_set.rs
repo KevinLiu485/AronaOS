@@ -29,7 +29,7 @@ extern "C" {
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
     pub static ref KERNEL_SPACE: Arc<SpinNoIrqLock<MemorySet>> =
-        Arc::new(unsafe { SpinNoIrqLock::new(MemorySet::new_kernel()) });
+        Arc::new(SpinNoIrqLock::new(MemorySet::new_kernel()) );
 }
 
 // /// kernel_space
@@ -42,7 +42,7 @@ lazy_static! {
 
 ///Get kernelspace root ppn
 pub fn kernel_token() -> usize {
-    unsafe { KERNEL_SPACE.lock().token() }
+    KERNEL_SPACE.lock().token()
 }
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
