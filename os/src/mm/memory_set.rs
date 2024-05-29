@@ -4,9 +4,12 @@ use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
+use crate::mutex::SpinNoIrqLock;
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
+use lazy_static::lazy_static;
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -23,25 +26,23 @@ extern "C" {
     fn strampoline();
 }
 
-/*
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
-    pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
-        Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
+    pub static ref KERNEL_SPACE: Arc<SpinNoIrqLock<MemorySet>> =
+        Arc::new(unsafe { SpinNoIrqLock::new(MemorySet::new_kernel()) });
 }
-*/
-/// kernel_space
-pub static mut KERNEL_SPACE: Option<MemorySet> = None;
 
-pub fn init_kernel_space() {
-    unsafe {
-        KERNEL_SPACE = Some(MemorySet::new_kernel());
-    }
-}
+// /// kernel_space
+// pub static mut KERNEL_SPACE: Option<MemorySet> = None;
+// pub fn init_kernel_space() {
+//     unsafe {
+//         KERNEL_SPACE = Some(MemorySet::new_kernel());
+//     }
+// }
 
 ///Get kernelspace root ppn
 pub fn kernel_token() -> usize {
-    unsafe { KERNEL_SPACE.as_ref().unwrap().token() }
+    unsafe { KERNEL_SPACE.lock().token() }
 }
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
@@ -446,7 +447,7 @@ bitflags! {
 ///Check PageTable running correctly
 pub fn remap_test() {
     //let mut kernel_space = KERNEL_SPACE.exclusive_access();
-    let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+    let kernel_space = KERNEL_SPACE.lock();
     let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
     let mid_rodata: VirtAddr =
         (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
@@ -486,6 +487,6 @@ pub fn from_global_test() {
 #[allow(unused)]
 ///
 pub fn dump_test() {
-    let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+    let kernel_space = KERNEL_SPACE.lock();
     kernel_space.page_table.dump();
 }
