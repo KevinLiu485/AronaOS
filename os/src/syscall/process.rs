@@ -25,7 +25,8 @@ pub async fn sys_yield() -> SyscallRet {
 }
 
 /// Todo!: manage Sum register
-pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
+pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
+    let time_val_ptr = time_val_ptr as *mut TimeVal;
     let current_time_ms = get_time_ms();
     let time_val = TimeVal {
         sec: current_time_ms / 1000,
@@ -194,10 +195,11 @@ impl Future for WaitFuture {
             let exit_code = child.inner_lock().exit_code;
 
             let exit_status_ptr = self.exit_status_addr as *mut i32;
-            unsafe {
-                exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
+            if exit_status_ptr != core::ptr::null_mut() {
+                unsafe {
+                    exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
+                }
             }
-
             return Poll::Ready(Ok(found_pid));
         } else {
             if self.options.contains(WaitOption::WNOHANG) {

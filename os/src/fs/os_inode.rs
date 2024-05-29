@@ -37,7 +37,7 @@ impl OSInode {
         self.inner.lock().offset
     }
 
-    fn set_offset(&self, offset: usize) {
+    pub fn set_offset(&self, offset: usize) {
         self.inner.lock().offset = offset;
     }
 
@@ -140,6 +140,7 @@ impl OpenFlags {
         }
     }
 }
+
 ///Open file with flags
 // pub fn open_file(name: &str, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
 //     let (readable, writable) = flags.read_write();
@@ -186,15 +187,31 @@ fn open_cwd(dirfd: isize, path: &Path) -> Arc<dyn Inode> {
     }
 }
 
-pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
-    let (readable, writable) = flags.read_write();
+pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<dyn Inode>> {
     match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
         Ok(inode) => {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.clear();
             }
-            Ok(Arc::new(OSInode::new(readable, writable, inode)))
+            Ok(inode)
         }
+        Err(e) => Err(e),
+    }
+}
+
+pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
+    let (readable, writable) = flags.read_write();
+    // match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
+    //     Ok(inode) => {
+    //         if flags.contains(OpenFlags::TRUNC) {
+    //             inode.clear();
+    //         }
+    //         Ok(Arc::new(OSInode::new(readable, writable, inode)))
+    //     }
+    //     Err(e) => Err(e),
+    // }
+    match open_inode(dirfd, path, flags) {
+        Ok(inode) => Ok(Arc::new(OSInode::new(readable, writable, inode))),
         Err(e) => Err(e),
     }
 }
@@ -240,10 +257,9 @@ impl File for OSInode {
     }
 
     fn get_meta(&self) -> FileMeta {
-        FileMeta::new(
-            Some(self.inner.lock().inode.clone()),
-            self.inner_handler(|inner| inner.offset),
-        )
+        let inode = self.inner.lock().inode.clone();
+        let offset = self.inner_handler(|inner| inner.offset);
+        FileMeta::new(Some(inode), offset)
     }
 
     fn seek(&self, offset: usize) {

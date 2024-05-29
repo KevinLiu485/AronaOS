@@ -3,9 +3,11 @@
 use log::info;
 
 use crate::config::SyscallRet;
+use crate::fs::inode::InodeMode;
 use crate::fs::path::Path;
-use crate::fs::{create_dir, open_file, OpenFlags, AT_FDCWD};
+use crate::fs::{create_dir, open_file, open_inode, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
 use crate::task::current_task;
+
 use crate::utils::c_str_to_string;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -136,11 +138,53 @@ pub fn sys_getdents64(_fd: usize, buf: *const u8, len: usize) -> SyscallRet {
 pub fn sys_dup(fd: usize) -> SyscallRet {
     let task = current_task().unwrap();
     task.inner_handler(|inner| {
-        inner.fd_table[fd].clone().map(|file| {
-            let new_fd = inner.alloc_fd();
-            inner.fd_table[new_fd] = Some(file);
-            new_fd
-        })
-    });
+        if inner.fd_table.len() <= fd {
+            return Err(1);
+        }
+        inner.fd_table[fd]
+            .clone()
+            .map(|file| {
+                let new_fd = inner.alloc_fd();
+                inner.fd_table[new_fd] = Some(file);
+                Ok(new_fd)
+            })
+            .unwrap_or(Err(1))
+    })
+}
+
+pub fn sys_dup3(oldfd: usize, newfd: usize) -> SyscallRet {
+    let task = current_task().unwrap();
+    task.inner_handler(|inner| {
+        if inner.fd_table.len() <= oldfd {
+            return Err(1);
+        }
+        inner.fd_table[oldfd]
+            .clone()
+            .map(|file| {
+                inner.reserve_fd(newfd);
+                inner.fd_table[newfd] = Some(file);
+                Ok(newfd)
+            })
+            .unwrap_or(Err(1))
+    })
+}
+
+pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet {
+    let path = Path::from(c_str_to_string(pathname));
+    match open_inode(dirfd, &path, OpenFlags::empty()) {
+        Ok(inode) => {
+            let mode = inode.get_meta().mode;
+            if mode == InodeMode::FileREG || (mode == InodeMode::FileDIR && flags == AT_REMOVEDIR) {
+                inode.delete();
+                Ok(0)
+            } else {
+                Err(1)
+            }
+        }
+        Err(_) => Err(1),
+    }
+}
+
+pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     todo!()
 }

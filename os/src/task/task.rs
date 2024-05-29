@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
+use log::info;
 
 pub struct TaskControlBlock {
     // immutable
@@ -22,7 +23,6 @@ pub struct TaskControlBlock {
 }
 
 pub struct TaskControlBlockInner {
-    //pub trap_cx_ppn: PhysPageNum,
     pub trap_cx: TrapContext,
     pub base_size: usize,
     pub task_status: TaskStatus,
@@ -53,6 +53,11 @@ impl TaskControlBlockInner {
         } else {
             self.fd_table.push(None);
             self.fd_table.len() - 1
+        }
+    }
+    pub fn reserve_fd(&mut self, fd: usize) {
+        if fd >= self.fd_table.len() {
+            self.fd_table.resize(fd + 1, None);
         }
     }
 }
@@ -130,7 +135,7 @@ impl TaskControlBlock {
         // activate user space
         memory_set.activate();
 
-        // debug!("entry_point: {:x}", entry_point);
+        info!("entry_point: {:x}", entry_point);
 
         let kernel_satp = KERNEL_SPACE.lock().token();
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);

@@ -11,22 +11,23 @@
 //! submodules, and you should also implement syscalls this way.
 
 // #![allow(unused)]
+// #![allow(unused)]
 #![allow(non_upper_case_globals)]
 
-const SYSCALL_OPEN: usize = 56;
-const SYSCALL_CLOSE: usize = 57;
-const SYSCALL_READ: usize = 63;
-const SYSCALL_WRITE: usize = 64;
-const SYSCALL_EXIT: usize = 93;
-const SYSCALL_YIELD: usize = 124;
-const SYSCALL_UNAME: usize = 160;
-const SYSCALL_GET_TIME: usize = 169;
-const SYSCALL_GETPID: usize = 172;
-const SYSCALL_BRK: usize = 214;
-const SYSCALL_FORK: usize = 220;
-const SYSCALL_EXEC: usize = 221;
-const SYSCALL_MMAP: usize = 222;
-const SYSCALL_WAITPID: usize = 260;
+// const SYSCALL_OPEN: usize = 56;
+// const SYSCALL_CLOSE: usize = 57;
+// const SYSCALL_READ: usize = 63;
+// const SYSCALL_WRITE: usize = 64;
+// const SYSCALL_EXIT: usize = 93;
+// const SYSCALL_YIELD: usize = 124;
+// const SYSCALL_UNAME: usize = 160;
+// const SYSCALL_GET_TIME: usize = 169;
+// const SYSCALL_GETPID: usize = 172;
+// const SYSCALL_BRK: usize = 214;
+// const SYSCALL_FORK: usize = 220;
+// const SYSCALL_EXEC: usize = 221;
+// const SYSCALL_MMAP: usize = 222;
+// const SYSCALL_WAITPID: usize = 260;
 
 // os-comp testsuits
 const SYS_getcwd: usize = 17;
@@ -69,38 +70,27 @@ mod process;
 mod util;
 
 use fs::*;
-use log::trace;
+use log::error;
 use mm::*;
 use process::*;
-use util::sys_uname;
+use util::{sys_times, sys_uname};
 
-use crate::{config::SyscallRet, ctypes::TimeVal};
+use crate::config::SyscallRet;
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
-        // SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
-        // SYSCALL_CLOSE => sys_close(args[0]),
-        // SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
-        // SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
         SYS_exit => sys_exit(args[0] as i32),
-        // SYSCALL_EXIT => sys_exit(args[0] as i32),
-        // SYSCALL_YIELD => sys_yield().await,
-        // SYSCALL_UNAME => sys_uname(args[0]),
-        // SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYS_getpid => sys_getpid(),
-        // SYSCALL_BRK => sys_brk(args[0]),
         SYS_clone => sys_clone(args[0], args[1], args[2], args[3], args[4]),
         SYS_execve => sys_exec(args[0], args[1], args[2]).await,
-        SYSCALL_MMAP => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
-        // SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
         SYS_uname => sys_uname(args[0]),
-        SYS_gettimeofday => sys_get_time(args[0] as *mut TimeVal),
+        SYS_gettimeofday => sys_get_time(args[0]),
         SYS_brk => sys_brk(args[0]),
         SYS_sched_yield => sys_yield().await,
-        SYS_wait4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
-        SYS_getppid => sys_getppid(),
-        SYS_nanosleep => sys_nanosleep(args[0]).await,
+        SYS_times => sys_times(args[0]),
 
+        // SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4] as i32, args[5]),
+        // SYS_munmap => sys_munmap(),
         SYS_getcwd => sys_getcwd(args[0], args[1]),
         SYS_openat => sys_openat(
             args[0] as isize,
@@ -116,6 +106,19 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_fstat => sys_fstat(args[0], args[1] as *const u8),
         SYS_getdents64 => sys_getdents64(args[0], args[1] as *const u8, args[2]),
         SYS_dup => sys_dup(args[0]),
-        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        SYS_dup3 => sys_dup3(args[0], args[1]),
+        SYS_unlinkat => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
+        // SYS_pipe2 => sys_pipe2(args[0] as *const u8),
+        SYS_nanosleep => sys_nanosleep(args[0]).await,
+        SYS_getppid => sys_getppid(),
+        SYS_wait4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
+        // _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        _ => unsupported_syscall(syscall_id),
     }
+}
+
+fn unsupported_syscall(syscall_id: usize) -> SyscallRet {
+    error!("Unsupported syscall_id: {}", syscall_id);
+    let _ = sys_exit(0);
+    Ok(0)
 }
