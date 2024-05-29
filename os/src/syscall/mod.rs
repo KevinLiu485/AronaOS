@@ -46,11 +46,56 @@ const SYS_umount2: usize = 39;
 const SYS_mount: usize = 40;
 const SYS_fstat: usize = 80;
 
+/*======================================= 进程管理相关系统调用 =======================================*/
+/// define SYS_clone 220
+/// 功能：创建一个子进程；
+/// 输入：
+/// flags: 创建的标志，如SIGCHLD；
+/// stack: 指定新进程的栈，可为0；
+/// ptid: 父线程ID；
+/// tls: TLS线程本地存储描述符；
+/// ctid: 子线程ID；
+/// 返回值：成功则返回子进程的线程ID，失败返回-1；
+/// pid_t ret = syscall(SYS_clone, flags, stack, ptid, tls, ctid)
+/// todo: not implemented yet
 const SYS_clone: usize = 220;
+///  SYS_execve 221
+/// 功能：执行一个指定的程序；
+/// 输入：
+/// path: 待执行程序路径名称，
+/// argv: 程序的参数，
+/// envp: 环境变量的数组指针
+/// 返回值：成功不返回，失败返回-1；
+/// const char *path, char *const argv[], char *const envp[];
+/// int ret = syscall(SYS_execve, path, argv, envp);
+/// todo: not implemented yet
 const SYS_execve: usize = 221;
+/// SYS_wait4 260
+/// 功能：等待进程改变状态;
+/// 输入：
+/// pid: 指定进程ID，可为-1等待任何子进程；
+/// status: 接收状态的指针；
+/// options: 选项：WNOHANG，WUNTRACED，WCONTINUED；
+/// 返回值：成功则返回进程ID；如果指定了WNOHANG，且进程还未改变状态，直接返回0；失败则返回-1；
+/// pid_t pid, int *status, int options;
+/// pid_t ret = syscall(SYS_wait4, pid, status, options);
+/// todo: not implemented yet
 const SYS_wait4: usize = 260;
+/// 功能：触发进程终止(当前进程)，无返回值；
+/// 输入：终止状态值；
+/// 返回值：无返回值；
+/// int ec;
+/// syscall(SYS_exit, ec);
 const SYS_exit: usize = 93;
+/// 功能：获取父进程ID；(如果父进程死掉了，就返回init process)
+/// 输入：系统调用ID；
+/// 返回值：成功返回父进程ID；
+/// pid_t ret = syscall(SYSCALL_GETPPID);
 const SYS_getppid: usize = 173;
+/// 功能：获取进程ID；
+/// 输入：系统调用ID；
+/// 返回值：成功返回进程ID；
+/// pid_t ret = syscall(SYSCALL_GETPID);
 const SYS_getpid: usize = 172;
 
 const SYS_brk: usize = 214;
@@ -87,11 +132,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         // SYSCALL_BRK => sys_brk(args[0]),
-        SYSCALL_FORK => sys_fork(),
-        SYSCALL_EXEC => sys_exec(args[0]).await,
+        SYS_clone => sys_clone(args[0], args[1], args[2], args[3], args[4]),
+        SYS_execve => sys_exec(args[0], args[1], args[2]).await,
         SYSCALL_MMAP => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
-        SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
-
+        SYS_wait4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
+        SYS_getppid => sys_getppid(),
         SYS_getcwd => sys_getcwd(args[0], args[1]),
         SYS_uname => sys_uname(args[0]),
         SYS_gettimeofday => sys_get_time(args[0] as *mut TimeVal),

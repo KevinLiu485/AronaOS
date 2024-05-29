@@ -74,10 +74,7 @@ pub async fn trap_handler() {
             .await;
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
-            cx.x[10] = match result {
-                Ok(ret) => ret as usize,
-                Err(err_code) => (-(err_code as isize)) as usize,
-            };
+            cx.x[10] = result.unwrap_or_else(|err_code| (-(err_code as isize)) as usize);
         }
         Trap::Exception(Exception::StoreFault)
         | Trap::Exception(Exception::StorePageFault)
