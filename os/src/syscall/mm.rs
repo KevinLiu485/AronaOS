@@ -1,5 +1,5 @@
-use crate::config::{SysResult, SyscallRet};
-use crate::mm::{VirtAddr, VirtPageNum};
+use crate::config::SyscallRet;
+use crate::mm::VirtAddr;
 use crate::task::current_task;
 use log::{debug, error};
 

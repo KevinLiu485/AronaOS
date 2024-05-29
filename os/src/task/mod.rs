@@ -21,7 +21,8 @@ pub mod schedule;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::path::Path;
+use crate::fs::{open_file, OpenFlags, AT_FDCWD};
 use crate::sbi::shutdown;
 use crate::utils::block_on::block_on;
 use alloc::sync::Arc;
@@ -90,7 +91,7 @@ pub fn exit_current(exit_code: i32) {
 lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
-        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
+        let inode = open_file(AT_FDCWD, &Path::from("/initproc"), OpenFlags::RDONLY).unwrap();
         let v = block_on(inode.read_all());
         TaskControlBlock::new(v.as_slice())
     });
