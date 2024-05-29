@@ -21,16 +21,13 @@ pub mod schedule;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
-use crate::error;
-use crate::executor::init;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{current_satp, VirtAddr};
 use crate::sbi::shutdown;
-use crate::utilities::block_on::block_on;
-use alloc::string;
+use crate::utils::block_on::block_on;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use lazy_static::*;
+use log::error;
 use task::{TaskControlBlock, TaskStatus};
 
 pub use pid::{pid_alloc, PidAllocator, PidHandle};
@@ -48,7 +45,7 @@ pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
     error!(
         "exit task's pagetable: {:?}",
-        task.inner.exclusive_access().memory_set.page_table.root_ppn
+        task.inner_lock().memory_set.page_table.root_ppn
     );
 
     let pid = task.getpid();
@@ -103,19 +100,18 @@ pub fn add_initproc() {
     schedule::spawn_thread(INITPROC.clone());
 }
 
-#[allow(unused)]
+// #[allow(unused)]
 /// debug info about INITPROC TaskContorlBlock
-pub fn initproc_test() {
-    let init_proc = &INITPROC.inner.exclusive_access();
-    let page_table = &init_proc.memory_set.page_table;
-    assert_eq!(page_table.root_ppn, current_satp());
-    let entry = init_proc.trap_cx.sepc;
-    let va: VirtAddr = entry.into();
-    let pte = page_table.find_pte(va.into()).unwrap();
-    println!("{:?}", pte);
-    println!("{}", pte.flags().readable_flags());
-}
-
+// pub fn initproc_test() {
+//     let init_proc = &INITPROC.inner.exclusive_access();
+//     let page_table = &init_proc.memory_set.page_table;
+//     assert_eq!(page_table.root_ppn, current_satp());
+//     let entry = init_proc.trap_cx.sepc;
+//     let va: VirtAddr = entry.into();
+//     let pte = page_table.find_pte(va.into()).unwrap();
+//     println!("{:?}", pte);
+//     println!("{}", pte.flags().readable_flags());
+// }
 use alloc::string::String;
 
 #[allow(unused)]

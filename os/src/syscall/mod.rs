@@ -75,7 +75,7 @@ use process::*;
 
 use crate::config::SyscallRet;
 /// handle syscall exception with `syscall_id` and other arguments
-pub async fn syscall(syscall_id: usize, args: [usize; 3]) -> SyscallRet {
+pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
         SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
         SYSCALL_CLOSE => sys_close(args[0]),

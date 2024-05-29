@@ -15,10 +15,9 @@ mod context;
 
 use crate::mm::PageTable;
 use crate::syscall::syscall;
-use crate::task::{current_trap_cx, current_user_token, exit_current, yield_task};
+use crate::task::{current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
-use core::arch::{asm, global_asm};
-use log::debug;
+use core::arch::global_asm;
 use riscv::register::satp;
 use riscv::register::{
     mtvec::TrapMode,

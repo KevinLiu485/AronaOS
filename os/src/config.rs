@@ -1,5 +1,5 @@
 //! Constants and types used in rCore
-#[allow(unused)]
+#![allow(unused)]
 
 pub const USER_STACK_SIZE: usize = 4096 * 2;
 //pub const USER_HEAP_SIZE: usize = 4096 * 2;
@@ -12,8 +12,8 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 pub const USER_MAX_VA: usize = 0x0000_003f_ffff_ffff;
 
-pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
-pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
+// pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
+// pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
 
 use core::{future::Future, pin::Pin};
 

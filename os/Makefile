@@ -3,6 +3,7 @@
 # - `SBI`: Run with `SBI=<rustsbi/opensbi>` to specify sbi. By default, AronaOS will run on `opensbi`.
 # - `LOG`: See [logging instructions](#logging-instructions).
 # - `KTEST`: See [Kernel testing instructions](#kernel-testing-instructions).
+# - `TESTSUITS`: Run with `TESTSUITS=0` to run rCore tests. By default, AronaOS will run the OScomp testsuits.
 
 # Building
 TARGET := riscv64gc-unknown-none-elf
@@ -12,13 +13,15 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 USER_ELF_SRC := ../user/target/$(TARGET)/$(MODE)
 FS_IMG_SRC := ../fs-img-src
-FS_IMG_ROOT := ../fs-img-src/root
+# FS_IMG_ROOT := ../fs-img-src/root
+FS_IMG_ROOT := ../fs-img-src/testsuits
 FS_IMG := $(FS_IMG_SRC)/fs.img
 APPS := ../user/src/bin/*
 LOG := ERROR
 KERNEL_FEATURES := kernel_tests
 KTEST :=
-TEST_DIR :=
+# TEST_DIR :=
+TESTSUITS := 1
 
 # BOARD
 BOARD := qemu

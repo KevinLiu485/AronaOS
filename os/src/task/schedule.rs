@@ -6,8 +6,7 @@ use core::{
 };
 
 use alloc::sync::Arc;
-use log::{debug, info, warn};
-use log::info;
+use log::warn;
 
 use crate::{
     executor,

@@ -2,7 +2,7 @@ use core::future::Future;
 
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
-use log::{debug, warn};
+use log::debug;
 
 use crate::mutex::SpinNoIrqLock;
 

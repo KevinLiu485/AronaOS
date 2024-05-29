@@ -18,7 +18,8 @@ pub use memory_set::{dump_test, from_global_test, remap_test};
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
 use page_table::PTEFlags;
 pub use page_table::{
-    current_satp, translated_byte_buffer, PageTable, PageTableEntry, UserBuffer, UserBufferIterator,
+    current_satp, /* translated_byte_buffer,  */ PageTable,
+    PageTableEntry, /* UserBuffer, UserBufferIterator ,*/
 };
 
 use self::frame_allocator::frame_allocator_test;

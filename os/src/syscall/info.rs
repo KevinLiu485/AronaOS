@@ -1,5 +1,7 @@
 use core::ptr;
 
+use crate::config::SyscallRet;
+
 #[repr(C)]
 struct Utsname {
     pub sysname: [u8; 65],
@@ -47,12 +49,12 @@ impl Utsname {
 }
 
 /// fake uname  
-pub fn sys_uname(uts: usize) -> isize {
+pub fn sys_uname(uts: usize) -> SyscallRet {
     let uts = uts as *mut Utsname;
     //Todo!: check validarity
     let utsname = Utsname::new();
     unsafe {
         ptr::write(uts, utsname);
     }
-    0
+    Ok(0)
 }

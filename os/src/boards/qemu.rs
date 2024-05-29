@@ -1,4 +1,4 @@
-use crate::config::{KERNEL_BASE, KERNEL_DIRECT_OFFSET};
+use crate::config::KERNEL_BASE;
 
 pub const CLOCK_FREQ: usize = 12500000;
 pub const MEMORY_END: usize = KERNEL_BASE + 0x8800_0000;
