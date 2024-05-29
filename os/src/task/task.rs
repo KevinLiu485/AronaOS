@@ -9,6 +9,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::DerefMut;
+use log::info;
 
 pub struct TaskControlBlock {
     // immutable
@@ -126,7 +127,7 @@ impl TaskControlBlock {
         // activate user space
         memory_set.activate();
 
-        // debug!("entry_point: {:x}", entry_point);
+        info!("entry_point: {:x}", entry_point);
 
         let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);

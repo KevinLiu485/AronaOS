@@ -34,7 +34,7 @@ impl OSInode {
         self.inner.lock().offset
     }
 
-    fn set_offset(&self, offset: usize) {
+    pub fn set_offset(&self, offset: usize) {
         self.inner.lock().offset = offset;
     }
 
