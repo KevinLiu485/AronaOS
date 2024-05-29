@@ -21,9 +21,7 @@ use log::info;
 use task::{TaskControlBlock, TaskStatus};
 
 pub use pid::{pid_alloc, PidAllocator, PidHandle};
-pub use processor::{
-    current_task, current_trap_cx, current_user_token, take_current_task, Processor,
-};
+pub use processor::{current_task, current_trap_cx, current_user_token, take_current_task};
 pub use schedule::yield_task;
 
 /// pid of usertests app in make run TEST=1
@@ -33,6 +31,7 @@ pub const IDLE_PID: usize = 0;
 /// More exiting works will de done by its parent.
 pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
+
     info!(
         "exit task's pagetable: {:?}",
         task.inner_lock().memory_set.page_table.root_ppn
@@ -57,7 +56,8 @@ pub fn exit_current(exit_code: i32) {
     let mut inner = task.inner_lock();
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
-    current_task().unwrap().is_zombie.store(true, Relaxed);
+
+    task.is_zombie.store(true, Relaxed);
     // Record exit code
     inner.exit_code = exit_code;
     // do not move to its parent but under initproc

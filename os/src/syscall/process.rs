@@ -3,7 +3,7 @@ use crate::ctypes::TimeVal;
 use crate::fs::{open_file, OpenFlags};
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, current_user_token, exit_current, yield_task, INITPROC};
-use crate::timer::get_time_ms;
+use crate::timer::{get_time_ms, TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
+use core::time::Duration;
 use log::{debug, error, info};
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
@@ -35,6 +36,15 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
         time_val_ptr.write_volatile(time_val);
     }
     Ok(0)
+}
+
+pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
+    let sleep_ms = {
+        let time_val_ptr = time_val_ptr as *const TimeSpec;
+        let time_val = unsafe { &(*time_val_ptr) };
+        time_val.sec * 1000 + time_val.nsec / 1000000
+    };
+    TimeoutFuture::new(Duration::from_millis(sleep_ms as u64)).await
 }
 
 pub fn sys_getpid() -> SyscallRet {

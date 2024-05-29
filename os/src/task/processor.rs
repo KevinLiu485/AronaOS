@@ -1,9 +1,11 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use super::TaskControlBlock;
+use crate::config::PAGE_SIZE;
 use crate::mm::PageTable;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
+use core::arch::asm;
 use lazy_static::*;
 use log::debug;
 

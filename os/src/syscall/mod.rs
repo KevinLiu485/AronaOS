@@ -105,6 +105,16 @@ const SYS_times: usize = 153;
 const SYS_uname: usize = 160;
 const SYS_sched_yield: usize = 124;
 const SYS_gettimeofday: usize = 169;
+
+/// 功能：执行线程睡眠，sleep()库函数基于此系统调用；
+/// 输入：睡眠的时间间隔；
+/// struct timespec {
+///     time_t tv_sec;        /* 秒 */
+///     long   tv_nsec;       /* 纳秒, 范围在0~999999999 */
+/// };
+/// 返回值：成功返回0，失败返回-1;
+/// const struct timespec *req, struct timespec *rem;
+/// int ret = syscall(SYS_nanosleep, req, rem);
 const SYS_nanosleep: usize = 101;
 
 mod fs;
@@ -126,7 +136,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
-        SYSCALL_EXIT => sys_exit(args[0] as i32),
+        SYS_exit => sys_exit(args[0] as i32),
         // SYSCALL_YIELD => sys_yield().await,
         // SYSCALL_UNAME => sys_uname(args[0]),
         // SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
@@ -142,6 +152,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_gettimeofday => sys_get_time(args[0] as *mut TimeVal),
         SYS_brk => sys_brk(args[0]),
         SYS_sched_yield => sys_yield().await,
+        SYS_nanosleep => sys_nanosleep(args[0]).await,
         // SYS_chdir => sys_chdir(args[0] as *const u8),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
