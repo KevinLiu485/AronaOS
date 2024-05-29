@@ -1,3 +1,5 @@
+use crate::task::processor::get_local_hart;
+use crate::task::INITPROC;
 use alloc::string::String;
 use core::{
     cell::UnsafeCell,
@@ -5,7 +7,6 @@ use core::{
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
 };
-use crate::task::INITPROC;
 
 // use riscv::register::sstatus;
 

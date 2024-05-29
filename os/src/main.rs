@@ -8,9 +8,9 @@
 //! - [`sync`]: 包装所有的static data structure，这样我们就不需要用unsafe访问他们
 //! - [`fs`]: Separate user from file system with some structures
 
-#![deny(missing_docs)]
-#![deny(warnings)]
-#![allow(unused_imports)]
+// #![deny(missing_docs)]
+// #![deny(warnings)]
+// #![allow(unused_imports)]
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
@@ -47,9 +47,13 @@ pub mod trap;
 pub mod utils;
 
 use core::arch::{asm, global_asm};
+use core::sync::atomic::{AtomicBool, Ordering};
 use riscv::register::sstatus;
 
 use crate::config::*;
+use crate::mm::KERNEL_SPACE;
+use crate::sbi::hart_start;
+use crate::task::processor::new_local_hart;
 
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
@@ -79,7 +83,7 @@ pub fn fake_main(hart_id: usize) {
 #[no_mangle]
 /// the rust entry-point of os
 pub fn rust_main(hart_id: usize) -> ! {
-     new_local_hart(hart_id);
+    new_local_hart(hart_id);
 
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -109,7 +113,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
         start_all_cpu(hart_id);
-
     } else {
         while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句，不过还是先留着。
 
@@ -118,19 +121,19 @@ pub fn rust_main(hart_id: usize) -> ! {
             sstatus::set_sum();
         }
         trap::init();
-        KERNEL_SPACE.lock().activate();
-
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
+
+        KERNEL_SPACE.lock().activate();
         println!("cpu: {} start!", hart_id);
     }
 
-    executor::run_forever();
-    // if hart_id == 0 {
-    //     executor::run_forever();
-    // } else {
-    //     loop {}
-    // }
+    // executor::run_forever();
+    if hart_id == 0 {
+        executor::run_forever();
+    } else {
+        loop {}
+    }
 }
 
 fn start_all_cpu(hart_id: usize) {

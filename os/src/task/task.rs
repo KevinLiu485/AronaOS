@@ -1,13 +1,19 @@
 //!Implementation of [`TaskControlBlock`]
 use super::{pid_alloc, PidHandle};
+use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mutex::SpinNoIrqLock;
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
+use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::ops::DerefMut;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering::Relaxed;
 use log::error;
 
 pub struct TaskControlBlock {
@@ -44,9 +50,6 @@ impl TaskControlBlockInner {
     pub fn get_status(&self) -> TaskStatus {
         self.task_status
     }
-    pub fn is_zombie(&self) -> bool {
-        self.get_status() == TaskStatus::Zombie
-    }
     pub fn alloc_fd(&mut self) -> usize {
         if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
             fd
@@ -58,7 +61,6 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-
     pub fn inner_lock(&self) -> impl DerefMut<Target = TaskControlBlockInner> + '_ {
         self.inner.lock()
     }
