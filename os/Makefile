@@ -58,17 +58,20 @@ env:
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
+# build rCore usertests
 build-user: 
 	@cd ../user && make build TEST=$(TEST)
 
+# move rCore usertests to root
 build-fs-root: build-user
-	@rm -rf $(FS_IMG_ROOT)
+#	@rm -rf $(FS_IMG_ROOT)
 	@mkdir -p $(FS_IMG_ROOT)
 	@find $(USER_ELF_SRC) -maxdepth 1 -type f ! -name '*.*' -exec cp {} $(FS_IMG_ROOT) \;
 
-fs-img: build-fs-root
+# pack FS_IMG_ROOT into FAT32 fs.img
+fs-img: #build-fs-root
 	@rm -rf $(FS_IMG)
-	@mkdir -p $(FS_IMG_SRC)
+#	@mkdir -p $(FS_IMG_SRC)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
 #	@dd if=/dev/zero of=$(FS_IMG) count=1363148 bs=1K
 	@mkfs.vfat -F 32 $(FS_IMG)
@@ -79,11 +82,6 @@ fs-img: build-fs-root
 	@rm -rf mnt
 #	@sudo chmod -R 777 $(FS_IMG_SRC)
 	@echo "finish pack fs-img"
-
-# fs-img: $(APPS)
-# 	@cd ../user && make build TEST=$(TEST)
-# 	@rm -f $(FS_IMG)
-# 	@cd ../easy-fs-fuse && cargo run --release -- -s ../user/src/bin/ -t ../user/target/riscv64gc-unknown-none-elf/release/
 
 kernel:
 	@echo Platform: $(BOARD)
