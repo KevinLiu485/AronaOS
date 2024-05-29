@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use log::debug;
 
-use crate::fs::inode::Inode;
+use crate::fs::{inode::Inode, path::Path};
 
 use super::{
     block_cache::get_block_cache,
@@ -47,7 +47,7 @@ impl FAT32FileSystem {
                 fs_meta.clone(),
             )),
             None,
-            "",
+            &Path::new_absolute(),
             fs_meta.root_cluster_id,
         ));
         Arc::new(FSMutex::new(Self {

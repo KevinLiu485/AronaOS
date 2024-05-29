@@ -1,8 +1,9 @@
 use crate::config::SyscallRet;
 use crate::ctypes::TimeVal;
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::path::Path;
+use crate::fs::{open_file, OpenFlags, AT_FDCWD};
 use crate::task::schedule::spawn_thread;
-use crate::task::{current_task, current_user_token, exit_current, yield_task};
+use crate::task::{current_task, exit_current, yield_task};
 use crate::timer::get_time_ms;
 use crate::utils::c_str_to_string;
 use alloc::string::ToString;
@@ -53,9 +54,9 @@ pub fn sys_fork() -> SyscallRet {
 
 pub async fn sys_exec(path: usize) -> SyscallRet {
     // let token = current_user_token();
-    let path = c_str_to_string(path as *const u8);
+    let path = Path::from(c_str_to_string(path as *const u8));
     // let path = translated_str(token, path as *const u8);
-    if let Ok(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+    if let Ok(app_inode) = open_file(AT_FDCWD, &path, OpenFlags::RDONLY) {
         let all_data = app_inode.read_all().await;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
@@ -106,19 +107,20 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
 }
 
 pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
-    let token = current_user_token();
+    // let token = current_user_token();
     let task = current_task().unwrap();
     let cwd = task.inner_handler(|inner| inner.cwd.to_string());
-    let len = cwd.len();
+    let len = cwd.len() + 1;
     if buf == 0 {
         // should alloc a buffer
         todo!("[sys_getcwd] alloc a buffer for NULL buf")
-    } else if len + 1 > size {
+    } else if len > size {
         return Err(1);
     }
 
     // let user_buf = UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len + 1));
-    let user_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len + 1) };
+    let user_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+    user_buf[..len].copy_from_slice((cwd + "\0").as_bytes());
     // user_buf.into_write(&(cwd + "\0"));
     Ok(buf)
 }

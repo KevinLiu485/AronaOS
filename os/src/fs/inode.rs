@@ -6,6 +6,7 @@ use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
+use log::debug;
 
 use crate::{
     config::{AsyncResult, SysResult},
@@ -63,6 +64,44 @@ impl dyn Inode {
             chidren.insert(name.to_string(), child.clone());
         });
         Ok(child)
+    }
+
+    pub fn open_path(
+        self: &Arc<Self>,
+        path: &Path,
+        create_file: bool,
+        create_dir: bool,
+    ) -> SysResult<Arc<dyn Inode>> {
+        let mut current_dir = self.clone();
+        for (i, name) in path.get_inner().iter().enumerate() {
+            if name == "." {
+                continue;
+            } else if name == ".." {
+                if let Some(new_dir) = current_dir.get_meta().inner.lock().parent.clone() {
+                    current_dir = new_dir.upgrade().unwrap();
+                } else {
+                    return Err(1);
+                }
+            } else {
+                // name is a String
+                if let Ok(new_dir) = current_dir.find(current_dir.clone(), name)
+                // .get_meta()
+                // .children_handler(current_dir.clone(), |children| children.get(name).clone())
+                {
+                    current_dir = new_dir.clone();
+                } else if i == path.len() - 1 && create_file {
+                    debug!("[open_path] file {} created", name);
+                    current_dir = current_dir.mknod_v(name, InodeMode::FileREG).unwrap();
+                } else if i == path.len() - 1 && create_dir {
+                    debug!("[open_path] dir {} created", name);
+                    current_dir = current_dir.mkdir_v(name, InodeMode::FileDIR).unwrap();
+                } else {
+                    debug!("[open_path] file {} not found", name);
+                    return Err(1);
+                }
+            }
+        }
+        Ok(current_dir)
     }
 }
 

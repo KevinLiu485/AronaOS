@@ -25,7 +25,7 @@ impl FAT32Inode {
     pub fn new_root(
         fat: Arc<FAT32FileAllocTable>,
         fa_inode: Option<Arc<dyn Inode>>,
-        path: &str,
+        path: &Path,
         first_cluster: usize,
     ) -> Self {
         let file = FAT32File::new(Arc::clone(&fat), first_cluster, None);
@@ -34,7 +34,7 @@ impl FAT32Inode {
             file: Arc::new(FSMutex::new(file)),
             meta: Arc::new(InodeMeta::new(
                 fa_inode,
-                Path::from(path),
+                path.clone(),
                 InodeMode::FileDIR,
                 0,
             )),
@@ -43,9 +43,12 @@ impl FAT32Inode {
 
     pub fn from_dentry(
         fat: Arc<FAT32FileAllocTable>,
-        fa_inode: Option<Arc<dyn Inode>>,
+        // fa_inode: Option<Arc<dyn Inode>>,
+        fa_inode: Arc<dyn Inode>,
         dentry: &FAT32DirEntry,
     ) -> Self {
+        let parent_path = &fa_inode.get_meta().path;
+        let path = parent_path.clone_and_append(&dentry.fname());
         let mode = if (dentry.attr & ATTR_DIRECTORY) == ATTR_DIRECTORY {
             InodeMode::FileDIR
         } else {
@@ -63,8 +66,8 @@ impl FAT32Inode {
             fat: Arc::clone(&fat),
             file: Arc::new(FSMutex::new(file)),
             meta: Arc::new(InodeMeta::new(
-                fa_inode,
-                Path::from(dentry.fname()),
+                Some(fa_inode),
+                path,
                 mode,
                 dentry.filesize as usize,
             )),
@@ -165,7 +168,7 @@ impl Inode for FAT32Inode {
             if fname == "." || fname == ".." {
                 continue;
             }
-            let inode = FAT32Inode::from_dentry(Arc::clone(&fat), Some(Arc::clone(&this)), &dentry);
+            let inode = FAT32Inode::from_dentry(Arc::clone(&fat), Arc::clone(&this), &dentry);
             let inode_rc: Arc<dyn Inode> = Arc::new(inode);
             meta_inner
                 .children
