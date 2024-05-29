@@ -133,13 +133,7 @@ impl PageTable {
     /// Create a pagetable from kernel global pagetable
     pub fn from_global() -> Self {
         let frame = frame_alloc().unwrap();
-        let global_root_ppn = unsafe {
-            KERNEL_SPACE
-                .as_ref()
-                .expect("KERNEL SPACE not init yet")
-                .page_table
-                .root_ppn
-        };
+        let global_root_ppn = KERNEL_SPACE.lock().page_table.root_ppn;
 
         // Map kernel space
         // deep copy before page_fault handler implementation(Note that we just need shallow copy here)

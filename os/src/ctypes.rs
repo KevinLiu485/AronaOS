@@ -70,13 +70,3 @@ pub struct TimeVal {
     /// microseconds
     pub usec: usize,
 }
-
-/// sys_nanosleep
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TimeSecs {
-    /// s
-    pub tv_sec: usize,
-    /// ns
-    pub tv_nsec: usize,
-}

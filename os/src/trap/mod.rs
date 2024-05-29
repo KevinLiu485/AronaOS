@@ -1,12 +1,9 @@
-//! Trap handling functionality
+//! Trap 处理函数
+//! 对于这个系统, 我们仅拥有一个trap 的进入点（entry point）, 就是 `__alltraps`.
+//! 在 [`init()`]的初始化中, 我们把 stvec 的 CSR指向它
 //!
-//! For rCore, we have a single trap entry point, namely `__alltraps`. At
-//! initialization in [`init()`], we set the `stvec` CSR to point to it.
-//!
-//! All traps go through `__alltraps`, which is defined in `trap.S`. The
-//! assembly language code does just enough work restore the kernel space
-//! context, ensuring that Rust code safely runs, and transfers control to
-//! [`trap_handler()`].
+//! 所有的trap都需要经过 `__alltraps`, 他的定义在 `trap.S`中. 仅仅是做保存上下文的任务
+//! 来确保Rust code 能够安全的运行 并且把控制权移交给 [`trap_handler()`].
 //!
 //! It then calls different functionality based on what exactly the exception
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
@@ -74,10 +71,7 @@ pub async fn trap_handler() {
             .await;
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
-            cx.x[10] = match result {
-                Ok(ret) => ret as usize,
-                Err(err_code) => (-(err_code as isize)) as usize,
-            };
+            cx.x[10] = result.unwrap_or_else(|err_code| (-(err_code as isize)) as usize);
         }
         Trap::Exception(Exception::StoreFault)
         | Trap::Exception(Exception::StorePageFault)

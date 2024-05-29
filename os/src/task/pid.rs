@@ -2,9 +2,12 @@
 
 use core::fmt::Display;
 
+use crate::mutex::SpinNoIrqLock;
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
+use log::debug;
+
 ///Pid Allocator struct
 pub struct PidAllocator {
     current: usize,
@@ -31,6 +34,7 @@ impl PidAllocator {
     ///Recycle a pid
     pub fn dealloc(&mut self, pid: usize) {
         assert!(pid < self.current);
+        assert_ne!(pid, 0);
         assert!(
             !self.recycled.iter().any(|ppid| *ppid == pid),
             "pid {} has been deallocated!",
@@ -41,8 +45,8 @@ impl PidAllocator {
 }
 
 lazy_static! {
-    pub static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
-        unsafe { UPSafeCell::new(PidAllocator::new()) };
+    pub static ref PID_ALLOCATOR: SpinNoIrqLock<PidAllocator> =
+        SpinNoIrqLock::new(PidAllocator::new());
 }
 
 #[derive(PartialEq, Debug)]
@@ -51,8 +55,8 @@ pub struct PidHandle(pub usize);
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        //println!("drop pid {}", self.0);
-        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
+        debug!("drop pid {}", self.0);
+        PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 
@@ -64,5 +68,5 @@ impl Display for PidHandle {
 
 ///Allocate a pid from PID_ALLOCATOR
 pub fn pid_alloc() -> PidHandle {
-    PID_ALLOCATOR.exclusive_access().alloc()
+    PID_ALLOCATOR.lock().alloc()
 }

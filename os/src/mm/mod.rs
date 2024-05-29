@@ -31,11 +31,6 @@ pub fn init() {
     frame_allocator::init_frame_allocator();
     frame_allocator_test();
     //KERNEL_SPACE.exclusive_access().activate
-    memory_set::init_kernel_space();
-    unsafe {
-        KERNEL_SPACE
-            .as_ref()
-            .expect("KERNEL SPACE not init yet")
-            .activate();
-    }
+
+    KERNEL_SPACE.lock().activate();
 }

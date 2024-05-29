@@ -1,21 +1,11 @@
-//! Task management implementation
-//!
-//! Everything about task management, like starting and switching tasks is
-//! implemented here.
-//!
-//! A single global instance of [`TaskManager`] called `TASK_MANAGER` controls
-//! all the tasks in the whole operating system.
-//!
-//! A single global instance of [`Processor`] called `PROCESSOR` monitors running
-//! task(s) for each core.
-//!
-//! A single global instance of [`PidAllocator`] called `PID_ALLOCATOR` allocates
-//! pid for user apps.
-//!
-//! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
-//! might not be what you expect.
+//! 这里基本是关于和切换任务
+//! [`TaskManager`] （单例）控制着所有的系统task （目前还没有对应的线程进程抽象）
+//! [`U7Hart`] （单例）监听着核上面运行的任务。
+//! [`PidAllocator`]（单例）分配所有的 pid
+//! 用了异步无栈协程进行对应的相关调度
+
 mod pid;
-mod processor;
+pub(crate) mod processor;
 pub mod schedule;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
@@ -32,9 +22,7 @@ use log::info;
 use task::{TaskControlBlock, TaskStatus};
 
 pub use pid::{pid_alloc, PidAllocator, PidHandle};
-pub use processor::{
-    current_task, current_trap_cx, current_user_token, take_current_task, Processor,
-};
+pub use processor::{current_task, current_trap_cx, current_user_token, take_current_task};
 pub use schedule::yield_task;
 
 /// pid of usertests app in make run TEST=1
@@ -44,6 +32,7 @@ pub const IDLE_PID: usize = 0;
 /// More exiting works will de done by its parent.
 pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
+
     info!(
         "exit task's pagetable: {:?}",
         task.inner_lock().memory_set.page_table.root_ppn
@@ -68,6 +57,8 @@ pub fn exit_current(exit_code: i32) {
     let mut inner = task.inner_lock();
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
+
+    task.is_zombie.store(true, Relaxed);
     // Record exit code
     inner.exit_code = exit_code;
     // do not move to its parent but under initproc
@@ -114,6 +105,7 @@ pub fn add_initproc() {
 //     println!("{}", pte.flags().readable_flags());
 // }
 use alloc::string::String;
+use core::sync::atomic::Ordering::Relaxed;
 
 #[allow(unused)]
 /// debug
