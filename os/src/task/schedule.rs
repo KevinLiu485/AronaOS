@@ -117,6 +117,10 @@ pub async fn thread_loop(task: Arc<TaskControlBlock>) {
                 "process terminated, pid = {}",
                 current_task().unwrap().getpid()
             );
+            #[cfg(feature = "submit")]
+            if current_task().unwrap().getpid() == 0 {
+                crate::sbi::shutdown(false);
+            }
             break;
         }
     }

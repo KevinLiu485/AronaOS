@@ -82,7 +82,12 @@ pub fn exit_current(exit_code: i32) {
 lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
+        #[cfg(not(feature = "submit"))]
         let inode = open_file(AT_FDCWD, &Path::from("/initproc"), OpenFlags::RDONLY).unwrap();
+
+        #[cfg(feature = "submit")]
+        let inode = open_file(AT_FDCWD, &Path::from("/testsuits"), OpenFlags::RDONLY).unwrap();
+
         let v = block_on(inode.read_all());
         TaskControlBlock::new(v.as_slice())
     });
