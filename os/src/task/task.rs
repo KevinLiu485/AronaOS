@@ -9,7 +9,6 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::DerefMut;
-use log::debug;
 
 pub struct TaskControlBlock {
     // immutable
@@ -82,7 +81,7 @@ impl TaskControlBlock {
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        println!("  entry_point: {}", entry_point);
+        // println!("  entry_point: {}", entry_point);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -127,7 +126,7 @@ impl TaskControlBlock {
         // activate user space
         memory_set.activate();
 
-        debug!("entry_point: {:x}", entry_point);
+        // debug!("entry_point: {:x}", entry_point);
 
         let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
