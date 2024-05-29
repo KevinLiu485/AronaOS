@@ -1,3 +1,4 @@
+use crate::ctypes::TimeVal;
 use crate::config::SyscallRet;
 use crate::fs::{open_file, OpenFlags};
 use crate::task::schedule::spawn_thread;
@@ -18,8 +19,18 @@ pub async fn sys_yield() -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_get_time() -> SyscallRet {
-    Ok(get_time_ms())
+/// Todo!: manage Sum register
+pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> isize {
+    let current_time_ms = get_time_ms();
+    let time_val = TimeVal {
+        sec: current_time_ms / 1000,
+        usec: current_time_ms % 1000 * 1000,
+    };
+    debug!("get time of day, time(ms): {}", current_time_ms);
+    unsafe {
+        time_val_ptr.write_volatile(time_val);
+    }
+    0
 }
 
 pub fn sys_getpid() -> SyscallRet {
