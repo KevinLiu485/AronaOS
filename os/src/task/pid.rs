@@ -1,4 +1,6 @@
 //!Implementation of [`PidAllocator`]
+use crate::config::PAGE_SIZE;
+use crate::mm::{MapPermission, VirtAddr, KERNEL_SPACE};
 
 use core::fmt::Display;
 
@@ -44,6 +46,8 @@ lazy_static! {
     pub static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
         unsafe { UPSafeCell::new(PidAllocator::new()) };
 }
+
+#[derive(PartialEq, Debug)]
 ///Bind pid lifetime to `PidHandle`
 pub struct PidHandle(pub usize);
 

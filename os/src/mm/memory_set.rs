@@ -1,17 +1,22 @@
 //! Implementation of [`MapArea`] and [`MemorySet`].
-use super::{frame_alloc, FrameTracker};
+use super::{frame_alloc, page_table, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
+use crate::config::{
+    KERNEL_BASE, KERNEL_DIRECT_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE,
+};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
+use log::error;
+use riscv::addr::{page, Page};
 use riscv::register::satp;
 
+#[allow(unused)]
 extern "C" {
     fn stext();
     fn etext();
@@ -25,19 +30,35 @@ extern "C" {
     fn strampoline();
 }
 
+/*
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
+*/
+/// kernel_space
+pub static mut KERNEL_SPACE: Option<MemorySet> = None;
+
+pub fn init_kernel_space() {
+    unsafe {
+        KERNEL_SPACE = Some(MemorySet::new_kernel());
+    }
+}
+
 ///Get kernelspace root ppn
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.exclusive_access().token()
+    unsafe { KERNEL_SPACE.as_ref().unwrap().token() }
 }
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
-    page_table: PageTable,
+    /// page table
+    pub page_table: PageTable,
     areas: Vec<MapArea>,
+    /// 不放在areas是因为heap在运行时可能通过syscall改变
+    /// kernel不含有heap, 当from_elf和from_exist_user时分配
+    /// Option是因为Kernel没有, from_global是不分配heap
+    pub heap: Option<MapArea>,
 }
 
 impl MemorySet {
@@ -46,6 +67,16 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            heap: None,
+        }
+    }
+    /// Create a user `MemorySet` that owns the global kernel mapping
+    pub fn new_from_global() -> Self {
+        let page_table = PageTable::from_global();
+        Self {
+            page_table,
+            areas: Vec::new(),
+            heap: None,
         }
     }
     ///Get pagetable `root_ppn`
@@ -83,19 +114,9 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
-    /// Mention that trampoline is not collected by areas.
-    fn map_trampoline(&mut self) {
-        self.page_table.map(
-            VirtAddr::from(TRAMPOLINE).into(),
-            PhysAddr::from(strampoline as usize).into(),
-            PTEFlags::R | PTEFlags::X,
-        );
-    }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
         // map kernel sections
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
@@ -109,7 +130,7 @@ impl MemorySet {
             MapArea::new(
                 (stext as usize).into(),
                 (etext as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::X,
             ),
             None,
@@ -119,7 +140,7 @@ impl MemorySet {
             MapArea::new(
                 (srodata as usize).into(),
                 (erodata as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R,
             ),
             None,
@@ -129,7 +150,7 @@ impl MemorySet {
             MapArea::new(
                 (sdata as usize).into(),
                 (edata as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -139,7 +160,7 @@ impl MemorySet {
             MapArea::new(
                 (sbss_with_stack as usize).into(),
                 (ebss as usize).into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -149,7 +170,7 @@ impl MemorySet {
             MapArea::new(
                 (ekernel as usize).into(),
                 MEMORY_END.into(),
-                MapType::Identical,
+                MapType::Linear,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -158,9 +179,9 @@ impl MemorySet {
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(
-                    (*pair).0.into(),
-                    ((*pair).0 + (*pair).1).into(),
-                    MapType::Identical,
+                    ((*pair).0 + KERNEL_BASE).into(),
+                    ((*pair).0 + (*pair).1 + KERNEL_BASE).into(),
+                    MapType::Linear,
                     MapPermission::R | MapPermission::W,
                 ),
                 None,
@@ -168,12 +189,10 @@ impl MemorySet {
         }
         memory_set
     }
-    /// Include sections in elf and trampoline and TrapContext and user stack,
+    /// Include sections in elf and user stack,
     /// also returns user_sp and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
-        let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
+        let mut memory_set = Self::new_from_global();
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
@@ -220,27 +239,27 @@ impl MemorySet {
             ),
             None,
         );
-        // map TrapContext
-        memory_set.push(
-            MapArea::new(
-                TRAP_CONTEXT.into(),
-                TRAMPOLINE.into(),
-                MapType::Framed,
-                MapPermission::R | MapPermission::W,
-            ),
-            None,
+        // map heap with U flags
+        let heap_bottom = user_stack_top;
+        let heap_top = heap_bottom;
+        let mut heap_area = MapArea::new(
+            heap_bottom.into(),
+            heap_top.into(),
+            MapType::Framed,
+            MapPermission::R | MapPermission::W | MapPermission::U,
         );
+        heap_area.map(&mut memory_set.page_table);
+        memory_set.heap = Some(heap_area);
+
         (
             memory_set,
-            user_stack_top,
+            user_stack_top - 8,
             elf.header.pt2.entry_point() as usize,
         )
     }
     ///Clone a same `MemorySet`
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
-        let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
+        let mut memory_set = Self::new_from_global();
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
@@ -254,6 +273,23 @@ impl MemorySet {
                     .copy_from_slice(src_ppn.get_bytes_array());
             }
         }
+        // copy heap from another space
+        let mut new_heap = MapArea::from_another(
+            user_space
+                .heap
+                .as_ref()
+                .expect("heap not allocated in from_existed_user"),
+        );
+        new_heap.map(&mut memory_set.page_table);
+        for vpn in new_heap.vpn_range {
+            let src_ppn = user_space.translate(vpn).unwrap().ppn();
+            let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+            dst_ppn
+                .get_bytes_array()
+                .copy_from_slice(src_ppn.get_bytes_array());
+        }
+        memory_set.heap = Some(new_heap);
+
         memory_set
     }
     ///Refresh TLB with `sfence.vma`
@@ -276,7 +312,7 @@ impl MemorySet {
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
-    vpn_range: VPNRange,
+    pub vpn_range: VPNRange,
     data_frames: BTreeMap<VirtPageNum, FrameTracker>,
     map_type: MapType,
     map_perm: MapPermission,
@@ -298,6 +334,19 @@ impl MapArea {
             map_perm,
         }
     }
+    pub fn new_vpn(
+        start_vpn: VirtPageNum,
+        end_vpn: VirtPageNum,
+        map_type: MapType,
+        map_perm: MapPermission,
+    ) -> Self {
+        Self {
+            vpn_range: VPNRange::new(start_vpn, end_vpn),
+            data_frames: BTreeMap::new(),
+            map_type,
+            map_perm,
+        }
+    }
     pub fn from_another(another: &MapArea) -> Self {
         Self {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
@@ -306,11 +355,29 @@ impl MapArea {
             map_perm: another.map_perm,
         }
     }
+    /// especially used for heap
+    pub fn shrink(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
+        let old_end = self.vpn_range.get_end();
+        assert!(new_end < old_end);
+        for vpn in VPNRange::new(new_end, old_end) {
+            self.unmap_one(page_table, vpn);
+        }
+        self.vpn_range.update_end(new_end);
+    }
+    /// especially used for heap
+    pub fn expand(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
+        let old_end = self.vpn_range.get_end();
+        assert!(new_end > old_end);
+        for vpn in VPNRange::new(old_end, new_end) {
+            self.map_one(page_table, vpn);
+        }
+        self.vpn_range.update_end(new_end);
+    }
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
-            MapType::Identical => {
-                ppn = PhysPageNum(vpn.0);
+            MapType::Linear => {
+                ppn = PhysPageNum(vpn.0 - 0x4000000);
             }
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
@@ -364,7 +431,7 @@ impl MapArea {
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
 pub enum MapType {
-    Identical,
+    Linear,
     Framed,
 }
 
@@ -385,10 +452,12 @@ bitflags! {
 #[allow(unused)]
 ///Check PageTable running correctly
 pub fn remap_test() {
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
-    let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
-    let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
-    let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+    //let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+    let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
+    let mid_rodata: VirtAddr =
+        (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
+    let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())
@@ -405,4 +474,25 @@ pub fn remap_test() {
         .unwrap()
         .executable(),);
     println!("remap_test passed!");
+}
+
+#[allow(unused)]
+/// Check PageTable from_global()running correctly
+pub fn from_global_test() {
+    let page_table = PageTable::from_global();
+    let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
+    let mid_rodata: VirtAddr =
+        (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
+    let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
+    assert!(!page_table.translate(mid_text.floor()).unwrap().writable(),);
+    assert!(!page_table.translate(mid_rodata.floor()).unwrap().writable(),);
+    assert!(!page_table.translate(mid_data.floor()).unwrap().executable(),);
+    println!("from_global_test passed!");
+}
+
+#[allow(unused)]
+///
+pub fn dump_test() {
+    let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+    kernel_space.page_table.dump();
 }

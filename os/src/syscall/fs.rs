@@ -3,8 +3,9 @@ use log::info;
 
 use crate::config::SyscallRet;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::mm::{translated_byte_buffer, UserBuffer};
 use crate::task::{current_task, current_user_token};
+use crate::utils::c_str_to_string;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let token = current_user_token();

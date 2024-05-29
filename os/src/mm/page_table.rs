@@ -1,9 +1,16 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{
+    frame_alloc, FrameTracker, KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum,
+    KERNEL_SPACE,
+};
+use crate::config::KERNEL_DIRECT_OFFSET;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use core::fmt::{self, Debug, Formatter};
+use log::debug;
+use riscv::{addr::page, register::satp};
 
 bitflags! {
     pub struct PTEFlags: u8 {
@@ -18,12 +25,51 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
+/// convert pte's flas to readable str
+impl PTEFlags {
+    pub fn readable_flags(&self) -> String {
+        let mut ret = String::new();
+        if *self & PTEFlags::V != PTEFlags::empty() {
+            ret.push_str("V");
+        }
+        if *self & PTEFlags::R != PTEFlags::empty() {
+            ret.push_str("R");
+        }
+        if *self & PTEFlags::W != PTEFlags::empty() {
+            ret.push_str("W");
+        }
+        if *self & PTEFlags::X != PTEFlags::empty() {
+            ret.push_str("X");
+        }
+        if *self & PTEFlags::U != PTEFlags::empty() {
+            ret.push_str("U");
+        }
+        if *self & PTEFlags::A != PTEFlags::empty() {
+            ret.push_str("A");
+        }
+        if *self & PTEFlags::D != PTEFlags::empty() {
+            ret.push_str("D");
+        }
+        ret
+    }
+}
+
 #[derive(Copy, Clone)]
 #[repr(C)]
 /// page table entry structure
 pub struct PageTableEntry {
     ///PTE
     pub bits: usize,
+}
+
+impl Debug for PageTableEntry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let ppn = self.bits >> 12;
+        let flags = self.flags().readable_flags();
+
+        write!(f, "PTE {{ ppn: 0x{:X}, flags: {} }}", ppn, flags)
+    }
 }
 
 impl PageTableEntry {
@@ -61,10 +107,17 @@ impl PageTableEntry {
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
+    ///Check PTE User mode
+    pub fn is_user(&self) -> bool {
+        (self.flags() & PTEFlags::U) != PTEFlags::empty()
+    }
 }
+
+#[derive(Debug)]
 ///Record root ppn and has the same lifetime as 1 and 2 level `PageTableEntry`
 pub struct PageTable {
-    root_ppn: PhysPageNum,
+    /// Todo*: pub for debug
+    pub root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
 }
 
@@ -78,6 +131,58 @@ impl PageTable {
             frames: vec![frame],
         }
     }
+
+    /// Create a pagetable from kernel global pagetable
+    pub fn from_global() -> Self {
+        let frame = frame_alloc().unwrap();
+        let global_root_ppn = unsafe {
+            KERNEL_SPACE
+                .as_ref()
+                .expect("KERNEL SPACE not init yet")
+                .page_table
+                .root_ppn
+        };
+
+        // Map kernel space
+        // deep copy before page_fault handler implementation(Note that we just need shallow copy here)
+
+        // Todo*:优化, 先整个进行copy
+        //let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
+        //let level_1_index = kernel_start_vpn.indexes()[0];
+        let level_1_index = 0;
+
+        // Copy from root page table
+        let dst_1_table = &mut frame.ppn.get_pte_array()[level_1_index..];
+        let src_1_table = global_root_ppn.get_pte_array();
+        dst_1_table.copy_from_slice(&src_1_table[level_1_index..]);
+
+        // Copy valid entries in level 1 table
+        for (level_1_entry_index, entry) in dst_1_table.iter_mut().enumerate() {
+            if entry.is_valid() {
+                let source_level_2_table = &src_1_table[level_1_entry_index].ppn().get_pte_array();
+                let level_2_table = &mut entry.ppn().get_pte_array();
+                level_2_table.copy_from_slice(source_level_2_table);
+
+                // Copy valid entries in level 2 table
+                for (level_2_entry_index, entry) in level_2_table.iter_mut().enumerate() {
+                    if entry.is_valid() {
+                        let source_level_3_table = &source_level_2_table[level_2_entry_index]
+                            .ppn()
+                            .get_pte_array();
+                        let level_3_table = &mut entry.ppn().get_pte_array();
+                        level_3_table.copy_from_slice(source_level_3_table);
+                    }
+                }
+            }
+        }
+
+        // the new pagetable only owns the ownership of its own root ppn
+        PageTable {
+            root_ppn: frame.ppn,
+            frames: vec![frame],
+        }
+    }
+
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
@@ -106,7 +211,8 @@ impl PageTable {
         result
     }
     /// Find phsical address by virtual address
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    /// Todo*: pub for debug
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -126,6 +232,7 @@ impl PageTable {
     #[allow(unused)]
     /// Create a mapping form `vpn` to `ppn`
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+        //println!("map vpn{:?} to ppn{:?}", vpn, ppn);
         let pte = self.find_pte_create(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
@@ -154,7 +261,47 @@ impl PageTable {
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
+    /// dump mapping va -> ppn in user address space
+    #[allow(unused)]
+    pub fn dump_all(&self) {
+        debug!("pagetable at {:?}", self.root_ppn);
+        let pagetable = self.root_ppn.get_pte_array();
+        let mut va = 0;
+        // 一级页表
+        for (index, entry) in pagetable.iter().enumerate() {
+            if entry.is_valid() {
+                va = va | index << 30;
+                let pagetable = entry.ppn().get_pte_array();
+                // 二级页表
+                for (index, entry) in pagetable.iter().enumerate() {
+                    if entry.is_valid() {
+                        va = va | index << 21;
+                        let pagetable = entry.ppn().get_pte_array();
+                        // 三级页表
+                        for (index, entry) in pagetable.iter().enumerate() {
+                            if entry.is_valid() && entry.is_user() {
+                                va = va | index << 12;
+                                println!("--- va: {:x}: {:?}", va, entry);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    #[allow(unused)]
+    /// dump entry only in the given page table
+    pub fn dump(&self) {
+        println!("pagetable at {:?}", self.root_ppn);
+        let pagetable = self.root_ppn.get_pte_array();
+        for (index, entry) in pagetable.iter().enumerate() {
+            if entry.is_valid() {
+                println!("{}: {:?}", index, entry);
+            }
+        }
+    }
 }
+
 /// Translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);
@@ -178,43 +325,6 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 
-/// Translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
-pub fn translated_str(token: usize, ptr: *const u8) -> String {
-    let page_table = PageTable::from_token(token);
-    let mut string = String::new();
-    let mut va = ptr as usize;
-    loop {
-        let ch: u8 = *(page_table
-            .translate_va(VirtAddr::from(va))
-            .unwrap()
-            .get_mut());
-        if ch == 0 {
-            break;
-        }
-        string.push(ch as char);
-        va += 1;
-    }
-    string
-}
-
-#[allow(unused)]
-///Translate a generic through page table and return a reference
-pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
-    let page_table = PageTable::from_token(token);
-    page_table
-        .translate_va(VirtAddr::from(ptr as usize))
-        .unwrap()
-        .get_ref()
-}
-///Translate a generic through page table and return a mutable reference
-pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
-    let page_table = PageTable::from_token(token);
-    let va = ptr as usize;
-    page_table
-        .translate_va(VirtAddr::from(va))
-        .unwrap()
-        .get_mut()
-}
 ///Array of u8 slice that user communicate with os
 pub struct UserBuffer {
     ///U8 vec
@@ -287,4 +397,10 @@ impl Iterator for UserBufferIterator {
             Some(r)
         }
     }
+}
+
+#[allow(unused)]
+/// read current pagetable's root_ppn in satp
+pub fn current_satp() -> PhysPageNum {
+    satp::read().bits().into()
 }

@@ -22,4 +22,3 @@ easy-fs-fuse/target/*
 tools/
 pushall.sh
 fs-img-src/*
-code-unit/*
