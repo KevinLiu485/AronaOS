@@ -75,7 +75,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: Vec::new(),
-                cwd: Path::new(),
+                cwd: Path::new_absolute(),
             }),
         }
     }
@@ -109,7 +109,7 @@ impl TaskControlBlock {
                     // 2 -> stderr
                     Some(Arc::new(Stdout)),
                 ],
-                cwd: Path::new(),
+                cwd: Path::new_absolute(),
             }),
         };
         // prepare TrapContext in user space

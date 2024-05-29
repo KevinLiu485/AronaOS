@@ -4,13 +4,16 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::inode::{Inode, InodeMode};
-use super::File;
+use super::inode::Inode;
+use super::path::Path;
+use super::{File, FileMeta};
 use crate::config::{AsyncResult, SysResult};
 use crate::drivers::BLOCK_DEVICE;
 use crate::fat32::fs::FAT32FileSystem;
-// use crate::mm::UserBuffer;
+use crate::fs::AT_FDCWD;
 use crate::mutex::SpinNoIrqLock;
+use crate::task::current_task;
+use crate::SyscallRet;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -40,6 +43,10 @@ impl OSInode {
 
     pub fn inner_handler<T>(&self, f: impl FnOnce(&mut OSInodeInner) -> T) -> T {
         f(&mut self.inner.lock())
+    }
+
+    pub fn get_path(&self) -> Path {
+        self.inner_handler(|inner| inner.inode.get_meta().path.clone())
     }
 }
 
@@ -90,16 +97,33 @@ pub fn list_apps() {
 bitflags! {
     ///Open file flags
     pub struct OpenFlags: u32 {
-        ///Read only
+        const APPEND = 1 << 10;
+        const ASYNC = 1 << 13;
+        const DIRECT = 1 << 14;
+        const DSYNC = 1 << 12;
+        const EXCL = 1 << 7;
+        const NOATIME = 1 << 18;
+        const NOCTTY = 1 << 8;
+        const NOFOLLOW = 1 << 17;
+        const PATH = 1 << 21;
+        /// TODO: need to find 1 << 15
+        const TEMP = 1 << 15;
+        /// Read only
         const RDONLY = 0;
-        ///Write only
+        /// Write only
         const WRONLY = 1 << 0;
-        ///Read & Write
+        /// Read & Write
         const RDWR = 1 << 1;
-        ///Allow create
-        const CREATE = 1 << 9;
-        ///Clear file and return an empty one
-        const TRUNC = 1 << 10;
+        /// Allow create
+        const CREATE = 1 << 6;
+        /// Clear file and return an empty one
+        const TRUNC = 1 << 9;
+        /// Directory
+        const DIRECTORY = 1 << 16;
+        /// Enable the close-on-exec flag for the new file descriptor
+        const CLOEXEC = 1 << 19;
+        /// When possible, the file is opened in nonblocking mode
+        const NONBLOCK = 1 << 11;
     }
 }
 
@@ -117,26 +141,68 @@ impl OpenFlags {
     }
 }
 ///Open file with flags
-pub fn open_file(name: &str, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
-    let (readable, writable) = flags.read_write();
-    if flags.contains(OpenFlags::CREATE) {
-        if let Ok(inode) = ROOT_INODE.find(ROOT_INODE.clone(), name) {
-            // clear size
-            // inode.clear();
-            Ok(Arc::new(OSInode::new(readable, writable, inode)))
-        } else {
-            // create file
-            ROOT_INODE
-                .mknod_v(name, InodeMode::FileREG)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
-        }
+// pub fn open_file(name: &str, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
+//     let (readable, writable) = flags.read_write();
+//     if flags.contains(OpenFlags::CREATE) {
+//         if let Ok(inode) = ROOT_INODE.find(ROOT_INODE.clone(), name) {
+//             // clear size
+//             // inode.clear();
+//             Ok(Arc::new(OSInode::new(readable, writable, inode)))
+//         } else {
+//             // create file
+//             ROOT_INODE
+//                 .mknod_v(name, InodeMode::FileREG)
+//                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
+//         }
+//     } else {
+//         ROOT_INODE.find(ROOT_INODE.clone(), name).map(|inode| {
+//             if flags.contains(OpenFlags::TRUNC) {
+//                 inode.clear();
+//             }
+//             Arc::new(OSInode::new(readable, writable, inode))
+//         })
+//     }
+// }
+
+fn open_cwd(dirfd: isize, path: &Path) -> Arc<dyn Inode> {
+    if !path.is_relative() {
+        // absolute path
+        ROOT_INODE.clone()
+    } else if dirfd == AT_FDCWD {
+        // relative to cwd
+        let task = current_task().unwrap();
+        let cwd = &task.inner_lock().cwd;
+        ROOT_INODE.open_path(cwd, false, false).unwrap()
     } else {
-        ROOT_INODE.find(ROOT_INODE.clone(), name).map(|inode| {
+        // relative to dirfd
+        let task = current_task().unwrap();
+        let ret = task.inner_lock().fd_table[dirfd as usize]
+            .clone()
+            .unwrap()
+            .get_meta()
+            .inode
+            .unwrap();
+        ret
+    }
+}
+
+pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
+    let (readable, writable) = flags.read_write();
+    match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
+        Ok(inode) => {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.clear();
             }
-            Arc::new(OSInode::new(readable, writable, inode))
-        })
+            Ok(Arc::new(OSInode::new(readable, writable, inode)))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+pub fn create_dir(dirfd: isize, path: &Path) -> SyscallRet {
+    match open_cwd(dirfd, path).open_path(path, false, true) {
+        Ok(_) => Ok(0),
+        Err(e) => Err(e),
     }
 }
 
@@ -149,18 +215,10 @@ impl File for OSInode {
     }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            // let mut total_read_size = 0;
             let inode = self.inner_handler(|inner| inner.inode.clone());
-            // for slices in buf.buffers.iter_mut() {
-            // let mut inner = self.inner.lock();
             let offset = self.get_offset();
             let read_size = inode.read(offset, buf).await;
-            // inner.offset += read_size.unwrap();
             self.set_offset(offset + read_size.unwrap());
-            // total_read_size += read_size.unwrap();
-            // inner droped here
-            // }
-            // Ok(total_read_size)
             Ok(read_size.unwrap())
         })
     }
@@ -179,5 +237,16 @@ impl File for OSInode {
             // }
             Ok(write_size.unwrap())
         })
+    }
+
+    fn get_meta(&self) -> FileMeta {
+        FileMeta::new(
+            Some(self.inner.lock().inode.clone()),
+            self.inner_handler(|inner| inner.offset),
+        )
+    }
+
+    fn seek(&self, offset: usize) {
+        self.inner_handler(|inner| inner.offset = offset);
     }
 }

@@ -1,6 +1,5 @@
 use crate::config::{SysResult, SyscallRet};
 use crate::ctypes::{MMAPFLAGS, MMAPPROT};
-use crate::fs::OSInode;
 use crate::mm::{VirtAddr, VirtPageNum};
 use crate::syscall::process;
 use crate::task::current_task;

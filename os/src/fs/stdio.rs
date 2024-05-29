@@ -1,7 +1,7 @@
 //!Stdin & Stdout
 use alloc::boxed::Box;
 
-use super::File;
+use super::{File, FileMeta};
 use crate::config::AsyncResult;
 // use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
@@ -44,6 +44,12 @@ impl File for Stdin {
     fn write(&self, _buf: &[u8]) -> AsyncResult<usize> {
         panic!("Cannot write to stdin!");
     }
+    fn get_meta(&self) -> FileMeta {
+        FileMeta::new(None, 0)
+    }
+    fn seek(&self, _offset: usize) {
+        panic!("Cannot seek stdin!");
+    }
 }
 
 impl File for Stdout {
@@ -64,5 +70,11 @@ impl File for Stdout {
             print!("{}", core::str::from_utf8(buf).unwrap());
             Ok(buf.len())
         })
+    }
+    fn get_meta(&self) -> FileMeta {
+        FileMeta::new(None, 0)
+    }
+    fn seek(&self, _offset: usize) {
+        panic!("Cannot seek stdout!");
     }
 }
