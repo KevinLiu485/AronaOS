@@ -54,6 +54,7 @@ pub struct MemorySet {
     /// kernel不含有heap, 当from_elf和from_exist_user时分配
     /// Option是因为Kernel没有, from_global是不分配heap
     pub heap: Option<MapArea>,
+    pub brk: usize,
 }
 
 impl MemorySet {
@@ -63,6 +64,7 @@ impl MemorySet {
             page_table: PageTable::new(),
             areas: Vec::new(),
             heap: None,
+            brk: 0,
         }
     }
     /// Create a user `MemorySet` that owns the global kernel mapping
@@ -72,6 +74,8 @@ impl MemorySet {
             page_table,
             areas: Vec::new(),
             heap: None,
+            // user的brk在from_elf和from_existed_user中设置
+            brk: 0,
         }
     }
     ///Get pagetable `root_ppn`
@@ -253,6 +257,7 @@ impl MemorySet {
         // map heap with U flags
         let heap_bottom = user_stack_top;
         let heap_top = heap_bottom;
+        memory_set.brk = heap_top;
         info!("user space heap_top: {:x}", heap_top);
         let mut heap_area = MapArea::new(
             heap_bottom.into(),
@@ -301,6 +306,7 @@ impl MemorySet {
                 .copy_from_slice(src_ppn.get_bytes_array());
         }
         memory_set.heap = Some(new_heap);
+        memory_set.brk = user_space.brk;
 
         memory_set
     }
