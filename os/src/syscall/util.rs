@@ -15,11 +15,11 @@ pub fn sys_uname(uts: usize) -> SyscallRet {
 
 /// fake sys_times
 /// Todo?:
-pub fn sys_times(buf: usize) -> isize {
+pub fn sys_times(buf: usize) -> SyscallRet {
     let buf = buf as *mut Tms;
     let tms = Tms::default();
     unsafe {
         ptr::write(buf, tms);
     }
-    0
+    Ok(0)
 }

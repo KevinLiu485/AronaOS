@@ -1,4 +1,5 @@
 use crate::config::{SysResult, SyscallRet};
+use crate::ctypes::{MMAPFLAGS, MMAPPROT};
 use crate::mm::{VirtAddr, VirtPageNum};
 use crate::task::current_task;
 use log::{debug, error};
@@ -47,6 +48,8 @@ pub fn sys_mmap(
     fd: usize,
     offset: usize,
 ) -> SyscallRet {
-    error!("{} {} {} {} {} {}", start, len, prot, flags, fd, offset);
+    let prot = MMAPPROT::from_bits(prot as u32);
+    let flags = MMAPFLAGS::from_bits(flags as u32);
+    error!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
     todo!()
 }

@@ -20,7 +20,8 @@ pub async fn sys_yield() -> SyscallRet {
 }
 
 /// Todo!: manage Sum register
-pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
+pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
+    let time_val_ptr = time_val_ptr as *mut TimeVal;
     let current_time_ms = get_time_ms();
     let time_val = TimeVal {
         sec: current_time_ms / 1000,

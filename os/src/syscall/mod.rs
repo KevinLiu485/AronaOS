@@ -71,9 +71,9 @@ use fs::*;
 use log::trace;
 use mm::*;
 use process::*;
-use util::sys_uname;
+use util::{sys_times, sys_uname};
 
-use crate::{config::SyscallRet, ctypes::TimeVal};
+use crate::config::SyscallRet;
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
@@ -94,9 +94,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
 
         SYS_getcwd => sys_getcwd(args[0], args[1]),
         SYS_uname => sys_uname(args[0]),
-        SYS_gettimeofday => sys_get_time(args[0] as *mut TimeVal),
+        SYS_gettimeofday => sys_get_time(args[0]),
         SYS_brk => sys_brk(args[0]),
         SYS_sched_yield => sys_yield().await,
+        SYS_times => sys_times(args[0]),
+        SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
         // SYS_chdir => sys_chdir(args[0] as *const u8),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }

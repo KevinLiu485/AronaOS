@@ -75,8 +75,36 @@ pub struct TimeVal {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TimeSecs {
-    /// s
+    /// seconds
     pub tv_sec: usize,
-    /// ns
+    /// nanoseconds
     pub tv_nsec: usize,
+}
+
+bitflags! {
+    /// MMAP memeory protection
+    pub struct MMAPPROT: u32 {
+        /// Readable
+        const PROT_READ = 1 << 0;
+        /// Writeable
+        const PROT_WRITE = 1 << 1;
+        /// Executable
+        const PROT_EXEC = 1 << 2;
+    }
+}
+
+bitflags! {
+    /// determines whether updates to the mapping are visible to other processes mapping the same region, and whether
+    /// updates are carried through to the underlying file.
+    pub struct MMAPFLAGS: u32 {
+        /// MAP_SHARED
+        const MAP_SHARED = 1 << 0;
+        /// MAP_PRIVATE
+        const MAP_PRIVATE = 1 << 1;
+        /// 以上两种只能选一
+        /// MAP_FIXED, 一定要映射到addr, 不是作为hint, 要取消原来位置的映射
+        const MAP_FIXED = 1 << 4;
+        /// MAP_ANONYMOUS, 需要fd为-1, offset为0
+        const MAP_ANONYMOUS = 1 << 5;
+    }
 }
