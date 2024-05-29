@@ -89,7 +89,6 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_FORK => sys_fork(),
         SYSCALL_EXEC => sys_exec(args[0]).await,
-        SYSCALL_MMAP => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
 
         SYS_getcwd => sys_getcwd(args[0], args[1]),
@@ -98,7 +97,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_brk => sys_brk(args[0]),
         SYS_sched_yield => sys_yield().await,
         SYS_times => sys_times(args[0]),
-        SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4], args[5]),
+        SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4] as i32, args[5]),
         // SYS_chdir => sys_chdir(args[0] as *const u8),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }

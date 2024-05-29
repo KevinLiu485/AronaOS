@@ -1,4 +1,10 @@
 #[allow(unused)]
+
+impl From<SyscallErr> for usize {
+    fn from(e: SyscallErr) -> Self {
+        e as usize
+    }
+}
 pub enum SyscallErr {
     EUNDEF = 0,
     EPERM = 1,

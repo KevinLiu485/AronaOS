@@ -1,4 +1,6 @@
 //! ffi
+
+use crate::mm::MapPermission;
 ///
 pub const NSEC_PER_SEC: usize = 10_0000_0000;
 
@@ -90,6 +92,22 @@ bitflags! {
         const PROT_WRITE = 1 << 1;
         /// Executable
         const PROT_EXEC = 1 << 2;
+    }
+}
+
+impl From<MMAPPROT> for MapPermission {
+    fn from(prot: MMAPPROT) -> Self {
+        let mut map_permission = MapPermission::from_bits(0).unwrap();
+        if prot.contains(MMAPPROT::PROT_READ) {
+            map_permission |= MapPermission::R;
+        }
+        if prot.contains(MMAPPROT::PROT_WRITE) {
+            map_permission |= MapPermission::W;
+        }
+        if prot.contains(MMAPPROT::PROT_EXEC) {
+            map_permission |= MapPermission::X;
+        }
+        map_permission
     }
 }
 
