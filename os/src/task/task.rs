@@ -2,19 +2,16 @@
 use super::{pid_alloc, PidHandle};
 use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
-use crate::sync::UPSafeCell;
-use crate::trap::{trap_handler, TrapContext};
+use crate::trap::TrapContext;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::RefMut;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use log::error;
 
 pub struct TaskControlBlock {
     // immutable
@@ -127,7 +124,7 @@ impl TaskControlBlock {
         // );
         task_control_block
     }
-    pub fn exec(&self, elf_data: &[u8], args_vec: Vec<String>, envs_vec: Vec<String>) {
+    pub fn exec(&self, elf_data: &[u8], _args_vec: Vec<String>, _envs_vec: Vec<String>) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         // activate user space
@@ -145,7 +142,7 @@ impl TaskControlBlock {
         inner.trap_cx = trap_cx;
     }
 
-    pub fn fork(self: &Arc<TaskControlBlock>, stack: Option<usize>) -> Arc<TaskControlBlock> {
+    pub fn fork(self: &Arc<TaskControlBlock>, _stack: Option<usize>) -> Arc<TaskControlBlock> {
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_lock();
         // copy user space(include trap context)
