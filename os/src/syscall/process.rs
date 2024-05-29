@@ -1,5 +1,5 @@
-use crate::ctypes::TimeVal;
 use crate::config::SyscallRet;
+use crate::ctypes::TimeVal;
 use crate::fs::{open_file, OpenFlags};
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, current_user_token, exit_current, yield_task};
@@ -20,7 +20,7 @@ pub async fn sys_yield() -> SyscallRet {
 }
 
 /// Todo!: manage Sum register
-pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> isize {
+pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
     let current_time_ms = get_time_ms();
     let time_val = TimeVal {
         sec: current_time_ms / 1000,
@@ -30,7 +30,7 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> isize {
     unsafe {
         time_val_ptr.write_volatile(time_val);
     }
-    0
+    Ok(0)
 }
 
 pub fn sys_getpid() -> SyscallRet {

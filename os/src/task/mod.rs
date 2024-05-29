@@ -27,7 +27,7 @@ use crate::utils::block_on::block_on;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use lazy_static::*;
-use log::error;
+use log::info;
 use task::{TaskControlBlock, TaskStatus};
 
 pub use pid::{pid_alloc, PidAllocator, PidHandle};
@@ -43,7 +43,7 @@ pub const IDLE_PID: usize = 0;
 /// More exiting works will de done by its parent.
 pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
-    error!(
+    info!(
         "exit task's pagetable: {:?}",
         task.inner_lock().memory_set.page_table.root_ppn
     );

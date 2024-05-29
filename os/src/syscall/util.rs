@@ -1,16 +1,16 @@
+use crate::{ctypes::*, SyscallRet};
 use core::ptr;
-use crate::ctypes::*;
 
 /// fake uname  
 /// Todo?:
-pub fn sys_uname(uts: usize) -> isize {
+pub fn sys_uname(uts: usize) -> SyscallRet {
     let uts = uts as *mut Utsname;
     //Todo!: check validarity
     let utsname = Utsname::default();
     unsafe {
         ptr::write(uts, utsname);
     }
-    0
+    Ok(0)
 }
 
 /// fake sys_times
