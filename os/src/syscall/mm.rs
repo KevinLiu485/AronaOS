@@ -15,6 +15,10 @@ pub fn sys_brk(brk: usize) -> SyscallRet {
     info!("sys_brk argument: {:x}", brk);
     let current_task = current_task().expect("failt to get current task in sys_brk");
     let current_memory_set = &mut current_task.inner_lock().memory_set;
+    // sbrk(0)是获取当前program brk(堆顶)
+    if brk == 0 {
+        return Ok(current_memory_set.brk);
+    }
     let heap_area = current_memory_set
         .heap
         .as_mut()
@@ -22,14 +26,13 @@ pub fn sys_brk(brk: usize) -> SyscallRet {
     let page_table = &mut current_memory_set.page_table;
     let start = heap_area.vpn_range.get_start();
     let end = heap_area.vpn_range.get_end();
-    // sbrk(0)是获取当前program brk
+    current_memory_set.brk = brk;
     debug!("brk: {:x}", brk);
-    if brk == 0 {
-        // return Ok(VirtAddr::from(end).0);
-        return Ok(unaligned_brk);
-    }
     let new_end = VirtAddr::from(brk).ceil();
-    if new_end < start {
+    // 页内偏移, 不用分配新页
+    if new_end == end {
+        return Ok(0);
+    } else if new_end < start {
         // Todo!: 设置errno为ENOMEM
         return Err(1);
     } else if new_end < end {
@@ -81,6 +84,10 @@ pub fn sys_mmap(
         let file = task
             .inner_handler(|inner| inner.fd_table[fd as usize].clone())
             .unwrap();
+        let origin_offset = file.get_meta().offset;
+        file.seek(offset);
+        //file.read(buf)
+        file.seek(origin_offset);
     }
     error!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
     todo!()
