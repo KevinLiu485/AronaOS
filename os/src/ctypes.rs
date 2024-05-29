@@ -1,4 +1,6 @@
 //! ffi
+
+use crate::mm::MapPermission;
 ///
 pub const NSEC_PER_SEC: usize = 10_0000_0000;
 
@@ -69,4 +71,58 @@ pub struct TimeVal {
     pub sec: usize,
     /// microseconds
     pub usec: usize,
+}
+
+/// sys_nanosleep
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TimeSecs {
+    /// seconds
+    pub tv_sec: usize,
+    /// nanoseconds
+    pub tv_nsec: usize,
+}
+
+bitflags! {
+    /// MMAP memeory protection
+    pub struct MMAPPROT: u32 {
+        /// Readable
+        const PROT_READ = 1 << 0;
+        /// Writeable
+        const PROT_WRITE = 1 << 1;
+        /// Executable
+        const PROT_EXEC = 1 << 2;
+    }
+}
+
+impl From<MMAPPROT> for MapPermission {
+    fn from(prot: MMAPPROT) -> Self {
+        let mut map_permission = MapPermission::from_bits(0).unwrap();
+        if prot.contains(MMAPPROT::PROT_READ) {
+            map_permission |= MapPermission::R;
+        }
+        if prot.contains(MMAPPROT::PROT_WRITE) {
+            map_permission |= MapPermission::W;
+        }
+        if prot.contains(MMAPPROT::PROT_EXEC) {
+            map_permission |= MapPermission::X;
+        }
+        map_permission
+    }
+}
+
+bitflags! {
+    /// determines whether updates to the mapping are visible to other processes mapping the same region, and whether
+    /// updates are carried through to the underlying file.
+    pub struct MMAPFLAGS: u32 {
+        /// MAP_SHARED
+        const MAP_SHARED = 1 << 0;
+        /// MAP_PRIVATE
+        const MAP_PRIVATE = 1 << 1;
+        /// 以上两种只能选一
+        /// MAP_FIXED, 一定要映射到addr, 不是作为hint, 要取消原来位置的映射
+        const MAP_FIXED = 1 << 4;
+        /// MAP_ANONYMOUS, 需要fd为-1, offset为0
+        const MAP_ANONYMOUS = 1 << 5;
+    }
 }

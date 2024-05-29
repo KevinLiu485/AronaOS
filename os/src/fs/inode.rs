@@ -31,6 +31,7 @@ pub trait Inode: Send + Sync {
     fn list(&self, this: Arc<dyn Inode>) -> SysResult<Vec<Arc<dyn Inode>>>;
     fn get_meta(&self) -> Arc<InodeMeta>;
     fn load_children_from_disk(&self, this: Arc<dyn Inode>);
+    /// clear the file content, inode still exists
     fn clear(&self);
 }
 
@@ -102,6 +103,19 @@ impl dyn Inode {
             }
         }
         Ok(current_dir)
+    }
+
+    pub fn delete(&self) {
+        let parent = self.get_meta().inner.lock().parent.clone();
+        if let Some(parent) = parent {
+            let parent = parent.upgrade().unwrap();
+            let name = self.get_name();
+            parent
+                .get_meta()
+                .children_handler(parent.clone(), |children| {
+                    children.remove(&name);
+                });
+        }
     }
 }
 

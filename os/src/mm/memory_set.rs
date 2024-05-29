@@ -10,6 +10,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::lazy_static;
+use log::info;
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -48,11 +49,13 @@ pub fn kernel_token() -> usize {
 pub struct MemorySet {
     /// page table
     pub page_table: PageTable,
+    /// Todo!: 使用树来管理MapArea
     areas: Vec<MapArea>,
     /// 不放在areas是因为heap在运行时可能通过syscall改变
     /// kernel不含有heap, 当from_elf和from_exist_user时分配
     /// Option是因为Kernel没有, from_global是不分配heap
     pub heap: Option<MapArea>,
+    pub brk: usize,
 }
 
 impl MemorySet {
@@ -62,6 +65,7 @@ impl MemorySet {
             page_table: PageTable::new(),
             areas: Vec::new(),
             heap: None,
+            brk: 0,
         }
     }
     /// Create a user `MemorySet` that owns the global kernel mapping
@@ -71,21 +75,18 @@ impl MemorySet {
             page_table,
             areas: Vec::new(),
             heap: None,
+            // user的brk在from_elf和from_existed_user中设置
+            brk: 0,
         }
     }
     ///Get pagetable `root_ppn`
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
-    /// Assume that no conflicts.
-    pub fn insert_framed_area(
-        &mut self,
-        start_va: VirtAddr,
-        end_va: VirtAddr,
-        permission: MapPermission,
-    ) {
+    /// Assume that no conflicts, 由caller保证
+    pub fn insert_framed_area(&mut self, vpn_range: VPNRange, permission: MapPermission) {
         self.push(
-            MapArea::new(start_va, end_va, MapType::Framed, permission),
+            MapArea::from_vpn_range(vpn_range, MapType::Framed, permission),
             None,
         );
     }
@@ -101,6 +102,27 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    /// especially used for sys_mmap
+    pub fn get_unmapped_area(&self, start: usize, len: usize) -> VPNRange {
+        // fisrt, use start as a hint
+        let end = start + len;
+        let start_vpn = VirtAddr::from(start).floor();
+        let end_vpn = VirtAddr::from(end).ceil();
+        let range = VPNRange::new(start_vpn, end_vpn);
+        if !self.check_vpn_range_conflict(range) {
+            return range;
+        } else {
+            // second, find a gap between prev_area and cur_area that is large enough
+            panic!("unimplemented!")
+        }
+    }
+    /// especially used for sys_mmap, pretty **slow**
+    fn check_vpn_range_conflict(&self, range: VPNRange) -> bool {
+        self.areas
+            .iter()
+            .any(|area| area.vpn_range.is_overlap(range))
+    }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
@@ -236,6 +258,8 @@ impl MemorySet {
         // map heap with U flags
         let heap_bottom = user_stack_top;
         let heap_top = heap_bottom;
+        memory_set.brk = heap_top;
+        info!("user space heap_top: {:x}", heap_top);
         let mut heap_area = MapArea::new(
             heap_bottom.into(),
             heap_top.into(),
@@ -283,6 +307,7 @@ impl MemorySet {
                 .copy_from_slice(src_ppn.get_bytes_array());
         }
         memory_set.heap = Some(new_heap);
+        memory_set.brk = user_space.brk;
 
         memory_set
     }
@@ -298,10 +323,11 @@ impl MemorySet {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
-    ///Remove all `MapArea`
+    ///Remove all `MapArea`, 注意还有heap
     pub fn recycle_data_pages(&mut self) {
         //*self = Self::new_bare();
         self.areas.clear();
+        self.heap = None;
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
@@ -313,6 +339,7 @@ pub struct MapArea {
 }
 
 impl MapArea {
+    /// Create a empty `MapArea` from va
     pub fn new(
         start_va: VirtAddr,
         end_va: VirtAddr,
@@ -328,7 +355,8 @@ impl MapArea {
             map_perm,
         }
     }
-    pub fn new_vpn(
+    /// Create a empty `MapArea` from vpn
+    pub fn from_vpn(
         start_vpn: VirtPageNum,
         end_vpn: VirtPageNum,
         map_type: MapType,
@@ -336,6 +364,15 @@ impl MapArea {
     ) -> Self {
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
+            data_frames: BTreeMap::new(),
+            map_type,
+            map_perm,
+        }
+    }
+    /// Create a `MapArea` from VPNRange
+    pub fn from_vpn_range(vpn_range: VPNRange, map_type: MapType, map_perm: MapPermission) -> Self {
+        Self {
+            vpn_range,
             data_frames: BTreeMap::new(),
             map_type,
             map_perm,
@@ -367,6 +404,7 @@ impl MapArea {
         }
         self.vpn_range.update_end(new_end);
     }
+    // 在页表中添加映射关系
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
