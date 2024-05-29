@@ -31,7 +31,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
         Err(1)
     }
 }
-
 pub async fn sys_read(
     fd: usize,
     buf: usize, /* cannot use `*const u8` here as it does not satisfy `Send` trait */

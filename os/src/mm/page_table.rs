@@ -234,11 +234,23 @@ impl UserBuffer {
         }
         total
     }
-    // pub fn read_from(&self, buf: &mut [u8]) {
-    //     for slice in self.buffers.iter_mut() {
-
-    //     }
-    // }
+    /// Write a string to `UserBuffer`, consuming itself
+    /// Return the length of the string written
+    pub fn into_write(self, buf: &str) -> usize {
+        let mut i: usize = 0;
+        let buf = buf.as_bytes();
+        let buf_len = buf.len();
+        for ptr in self.into_iter() {
+            if i >= buf_len {
+                return i;
+            }
+            unsafe {
+                *ptr = buf[i];
+            }
+            i += 1;
+        }
+        i
+    }
 }
 
 impl IntoIterator for UserBuffer {

@@ -1,6 +1,7 @@
 //!Implementation of [`TaskControlBlock`]
 use super::{pid_alloc, PidHandle};
 use crate::config::TRAP_CONTEXT;
+use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
@@ -26,6 +27,7 @@ pub struct TaskControlBlockInner {
     pub children: Vec<Arc<TaskControlBlock>>,
     pub exit_code: i32,
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub cwd: Path,
 }
 
 impl TaskControlBlockInner {
@@ -69,6 +71,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: Vec::new(),
+                cwd: Path::new(),
             }),
         }
     }
@@ -99,6 +102,7 @@ impl TaskControlBlock {
                     // 2 -> stderr
                     Some(Arc::new(Stdout)),
                 ],
+                cwd: Path::new(),
             }),
         };
         // prepare TrapContext in user space
@@ -153,6 +157,8 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+        // inherit cwd
+        let cwd = parent_inner.cwd.clone();
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             inner: SpinNoIrqLock::new(TaskControlBlockInner {
@@ -164,6 +170,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: new_fd_table,
+                cwd,
             }),
         });
         // add child
@@ -179,9 +186,6 @@ impl TaskControlBlock {
     pub fn is_zombie(&self) -> bool {
         self.inner_lock().is_zombie()
     }
-    // pub fn get_inner_fd_table(&self) -> &Vec<Option<Arc<dyn File + Send + Sync>>> {
-    //     &self.inner_lock().fd_table
-    // }
     /// We can get whatever we want in the inner by providing a handler
     pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TaskControlBlockInner) -> T) -> T {
         f(&mut self.inner.lock())

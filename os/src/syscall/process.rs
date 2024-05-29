@@ -1,9 +1,10 @@
 use crate::config::SyscallRet;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str};
+use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
@@ -86,4 +87,21 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
         Err(2)
     }
     // ---- release current PCB automatically
+}
+
+pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
+    let token = current_user_token();
+    let task = current_task().unwrap();
+    let cwd = task.inner_handler(|inner| inner.cwd.to_string());
+    let len = cwd.len();
+    if buf == 0 {
+        // should alloc a buffer
+        todo!("[sys_getcwd] alloc a buffer for NULL buf")
+    } else if len + 1 > size {
+        return Err(1);
+    }
+
+    let user_buf = UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len + 1));
+    user_buf.into_write(&(cwd + "\0"));
+    Ok(buf)
 }

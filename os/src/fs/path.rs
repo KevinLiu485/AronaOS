@@ -28,6 +28,7 @@ impl From<String> for Path {
     }
 }
 
+// you can call to_string() or println!("{}", path) to get path concated by "/"
 impl Display for Path {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", "/".to_string() + &self.inner.join("/"))
