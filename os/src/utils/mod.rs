@@ -1,5 +1,6 @@
 //! utils
 
+pub mod block_on;
 mod error;
 mod string;
 

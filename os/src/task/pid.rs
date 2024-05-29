@@ -1,6 +1,4 @@
 //!Implementation of [`PidAllocator`]
-use crate::config::PAGE_SIZE;
-use crate::mm::{MapPermission, VirtAddr, KERNEL_SPACE};
 
 use core::fmt::Display;
 

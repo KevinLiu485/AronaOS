@@ -4,6 +4,7 @@ use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, current_user_token, exit_current, yield_task};
 use crate::timer::get_time_ms;
 use crate::utils::c_str_to_string;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use log::debug;
 
@@ -39,13 +40,12 @@ pub fn sys_fork() -> SyscallRet {
     Ok(new_pid)
 }
 
-pub fn sys_exec(path: *const u8) -> isize {
+pub async fn sys_exec(path: usize) -> SyscallRet {
     // let token = current_user_token();
-    // let path = translated_str(token, path);
-    let path = c_str_to_string(path);
-    debug!("sys_exec path: {}", path);
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all();
+    let path = c_str_to_string(path as *const u8);
+    // let path = translated_str(token, path as *const u8);
+    if let Ok(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all().await;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)
@@ -87,7 +87,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SyscallRet {
         unsafe {
             *exit_code_ptr = exit_code;
         }
-        found_pid as isize
+        Ok(found_pid)
     } else {
         Err(2)
     }
@@ -106,7 +106,8 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
         return Err(1);
     }
 
-    let user_buf = UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len + 1));
-    user_buf.into_write(&(cwd + "\0"));
+    // let user_buf = UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len + 1));
+    let user_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len + 1) };
+    // user_buf.into_write(&(cwd + "\0"));
     Ok(buf)
 }

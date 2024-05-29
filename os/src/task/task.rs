@@ -1,17 +1,15 @@
 //!Implementation of [`TaskControlBlock`]
 use super::{pid_alloc, PidHandle};
-use crate::config::TRAP_CONTEXT;
 use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::trap::TrapContext;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::RefMut;
 use core::ops::DerefMut;
-use log::{debug, error};
+use log::debug;
 
 pub struct TaskControlBlock {
     // immutable
@@ -68,19 +66,17 @@ impl TaskControlBlock {
     pub fn new_bare() -> Self {
         TaskControlBlock {
             pid: PidHandle(usize::MAX),
-            inner: unsafe {
-                SpinNoIrqLock::new(TaskControlBlockInner {
-                    trap_cx: TrapContext::zero_init(),
-                    base_size: 0,
-                    task_status: TaskStatus::Zombie,
-                    memory_set: MemorySet::new_bare(),
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: Vec::new(),
-                    cwd: Path::new(),
-                })
-            },
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+                trap_cx: TrapContext::zero_init(),
+                base_size: 0,
+                task_status: TaskStatus::Zombie,
+                memory_set: MemorySet::new_bare(),
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: Vec::new(),
+                cwd: Path::new(),
+            }),
         }
     }
     pub fn new(elf_data: &[u8]) -> Self {
@@ -97,26 +93,24 @@ impl TaskControlBlock {
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         let task_control_block = Self {
             pid: pid_handle,
-            inner: unsafe {
-                SpinNoIrqLock::new(TaskControlBlockInner {
-                    trap_cx,
-                    base_size: user_sp,
-                    task_status: TaskStatus::Ready,
-                    memory_set,
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: vec![
-                        // 0 -> stdin
-                        Some(Arc::new(Stdin)),
-                        // 1 -> stdout
-                        Some(Arc::new(Stdout)),
-                        // 2 -> stderr
-                        Some(Arc::new(Stdout)),
-                    ],
-                    cwd: Path::new(),
-                })
-            },
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+                trap_cx,
+                base_size: user_sp,
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: vec![
+                    // 0 -> stdin
+                    Some(Arc::new(Stdin)),
+                    // 1 -> stdout
+                    Some(Arc::new(Stdout)),
+                    // 2 -> stderr
+                    Some(Arc::new(Stdout)),
+                ],
+                cwd: Path::new(),
+            }),
         };
         // prepare TrapContext in user space
         // let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -168,19 +162,17 @@ impl TaskControlBlock {
         let cwd = parent_inner.cwd.clone();
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            inner: unsafe {
-                SpinNoIrqLock::new(TaskControlBlockInner {
-                    trap_cx,
-                    base_size: parent_inner.base_size,
-                    task_status: TaskStatus::Ready,
-                    memory_set,
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: new_fd_table,
-                    cwd,
-                })
-            },
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+                trap_cx,
+                base_size: parent_inner.base_size,
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+                fd_table: new_fd_table,
+                cwd,
+            }),
         });
         // add child
         parent_inner.children.push(task_control_block.clone());

@@ -3,7 +3,7 @@ use log::info;
 
 use crate::config::SyscallRet;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_byte_buffer, UserBuffer};
+// use crate::mm::{translated_byte_buffer, UserBuffer};
 use crate::task::{current_task, current_user_token};
 use crate::utils::c_str_to_string;
 
@@ -21,11 +21,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
         }
         let file = file.clone();
         let ret = file
-            .write(UserBuffer::new(translated_byte_buffer(
-                token,
-                buf as *const u8,
-                len,
-            )))
+            .write(unsafe { core::slice::from_raw_parts(buf as *const u8, len) })
             .await?;
         Ok(ret)
     } else {
@@ -51,11 +47,7 @@ pub async fn sys_read(
             return Err(1);
         }
         let ret = file
-            .read(UserBuffer::new(translated_byte_buffer(
-                token,
-                buf as *const u8,
-                len,
-            )))
+            .read(unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) })
             .await?;
         Ok(ret)
     } else {
@@ -66,7 +58,7 @@ pub async fn sys_read(
 pub fn sys_open(path: *const u8, flags: u32) -> SyscallRet {
     let task = current_task().unwrap();
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let path = c_str_to_string(path);
     if let Ok(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_lock();
         let fd = inner.alloc_fd();

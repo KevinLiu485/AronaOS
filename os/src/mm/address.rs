@@ -1,5 +1,4 @@
 //! Implementation of physical and virtual address and page number.
-use async_task::ScheduleInfo;
 
 use super::PageTableEntry;
 use crate::config::{KERNEL_BASE, PAGE_SIZE, PAGE_SIZE_BITS};

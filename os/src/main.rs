@@ -53,11 +53,12 @@ pub mod syscall;
 pub mod task;
 pub mod timer;
 pub mod trap;
-pub mod utilities;
+pub mod utils;
 
-use crate::mm::current_satp;
-use crate::{config::KERNEL_BASE, drivers::block::block_device_test};
 use core::arch::{asm, global_asm};
+use riscv::register::sstatus;
+
+use crate::config::*;
 
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
@@ -90,9 +91,9 @@ pub fn rust_main() -> ! {
     clear_bss();
     println!("[kernel] Hello, world!");
     logging::init();
-    error!("current satp: {:?}", current_satp());
+    // error!("current satp: {:?}", current_satp());
     mm::init();
-    error!("current satp: {:?}", current_satp());
+    // error!("current satp: {:?}", current_satp());
     //mm::remap_test();
     //mm::from_global_test();
     //mm::dump_test();

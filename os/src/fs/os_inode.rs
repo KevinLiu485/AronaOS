@@ -9,7 +9,7 @@ use super::File;
 use crate::config::{AsyncResult, SysResult};
 use crate::drivers::BLOCK_DEVICE;
 use crate::fat32::fs::FAT32FileSystem;
-use crate::mm::UserBuffer;
+// use crate::mm::UserBuffer;
 use crate::mutex::SpinNoIrqLock;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -147,36 +147,37 @@ impl File for OSInode {
     fn writable(&self) -> bool {
         self.writable
     }
-    fn read(&self, mut buf: UserBuffer) -> AsyncResult<usize> {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            let mut total_read_size = 0;
+            // let mut total_read_size = 0;
             let inode = self.inner_handler(|inner| inner.inode.clone());
-            for slices in buf.buffers.iter_mut() {
-                // let mut inner = self.inner.lock();
-                let offset = self.get_offset();
-                let read_size = inode.read(offset, *slices).await;
-                // inner.offset += read_size.unwrap();
-                self.set_offset(offset + read_size.unwrap());
-                total_read_size += read_size.unwrap();
-                // inner droped here
-            }
-            Ok(total_read_size)
+            // for slices in buf.buffers.iter_mut() {
+            // let mut inner = self.inner.lock();
+            let offset = self.get_offset();
+            let read_size = inode.read(offset, buf).await;
+            // inner.offset += read_size.unwrap();
+            self.set_offset(offset + read_size.unwrap());
+            // total_read_size += read_size.unwrap();
+            // inner droped here
+            // }
+            // Ok(total_read_size)
+            Ok(read_size.unwrap())
         })
     }
-    fn write(&self, buf: UserBuffer) -> AsyncResult<usize> {
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            let mut total_write_size = 0;
+            // let mut total_write_size = 0;
             let inode = self.inner_handler(|inner| inner.inode.clone());
-            for slices in buf.buffers.iter() {
-                // let mut inner = self.inner.lock();
-                let offset = self.get_offset();
-                let write_size = inode.write(offset, *slices).await;
-                // inner.offset += write_size.unwrap();
-                self.set_offset(offset + write_size.unwrap());
-                total_write_size += write_size.unwrap();
-                // inner droped here
-            }
-            Ok(total_write_size)
+            // for slices in buf.buffers.iter() {
+            // let mut inner = self.inner.lock();
+            let offset = self.get_offset();
+            let write_size = inode.write(offset, buf).await;
+            // inner.offset += write_size.unwrap();
+            self.set_offset(offset + write_size.unwrap());
+            // total_write_size += write_size.unwrap();
+            // inner droped here
+            // }
+            Ok(write_size.unwrap())
         })
     }
 }
