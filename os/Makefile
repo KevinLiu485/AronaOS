@@ -110,7 +110,8 @@ QEMU_ARGS := -machine virt \
 			 -bios $(BOOTLOADER) \
 			 -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 			 -drive file=$(FS_IMG),if=none,format=raw,id=x0 \
-			 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+			 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0\
+			 -smp 4
 
 run-inner: build
 	@qemu-system-riscv64 $(QEMU_ARGS)

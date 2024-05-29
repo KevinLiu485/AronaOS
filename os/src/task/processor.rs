@@ -1,20 +1,23 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use super::TaskControlBlock;
+use crate::mm::PageTable;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
-///Processor management structure
-pub struct Processor {
+use log::debug;
+
+/// 每个CPU核心对应的抽象
+// #[derive(Debug)]
+pub struct U7Hart {
+    /// 每个CPU对应的id号
+    pub hart_id: usize,
+
     ///The task currently executing on the current processor
     current: Option<Arc<TaskControlBlock>>,
 }
 
-impl Processor {
-    ///Create an empty Processor
-    pub fn new() -> Self {
-        Self { current: None }
-    }
+impl U7Hart {
     ///Get current task in moving semanteme
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.current.take()
@@ -25,7 +28,7 @@ impl Processor {
     }
     /// Switch task context, including pagetable
     pub fn switch_task(&mut self, task: &mut Option<Arc<TaskControlBlock>>) {
-        //debug!("switch to {:?}", task.as_ref().unwrap().pid);
+        debug!("switch to {:?}", task.as_ref().unwrap().pid);
         // switch address space
         task.as_ref().unwrap().inner_lock().memory_set.activate();
         // switch `TaskControlBlock`
@@ -33,21 +36,37 @@ impl Processor {
     }
 }
 
-lazy_static! {
-    pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
+/// 把对应的静态引用的id初始化，new之后 tp放的就是对应的hart_addr的地址，直接可以拿来用
+pub fn new_local_hart(hart_id: usize) {
+    unsafe {
+        let sp: usize;
+        asm!("mv {}, sp", out(reg) sp);
+        let s = ((sp & !(PAGE_SIZE - 1)) - 15 * PAGE_SIZE) as *mut U7Hart; // todo :目前是硬编码
+        (*s).hart_id = hart_id;
+        asm!("mv tp, {}", in(reg) s as *const _ as usize);
+    }
+}
+
+/// tp里面装的每个CPU对应OS结构体的地址，看[`new_local_hart`]
+pub fn get_local_hart() -> &'static mut U7Hart {
+    unsafe {
+        let tp: usize;
+        asm!("mv {}, tp", out(reg) tp);
+        &mut *(tp as *mut U7Hart)
+    }
 }
 
 /// Switch task context, including pagetable
 pub fn switch_task(task: &mut Option<Arc<TaskControlBlock>>) {
-    PROCESSOR.exclusive_access().switch_task(task);
+    get_local_hart().switch_task(task);
 }
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().take_current()
+    get_local_hart().take_current()
 }
 ///Get running task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().current()
+    get_local_hart().current()
 }
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {

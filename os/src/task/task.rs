@@ -1,19 +1,19 @@
 //!Implementation of [`TaskControlBlock`]
 use super::{pid_alloc, PidHandle};
-use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, KERNEL_SPACE};
-use crate::mutex::SpinNoIrqLock;
-use crate::trap::TrapContext;
-use alloc::string::String;
+use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::sync::UPSafeCell;
+use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ops::DerefMut;
+use core::cell::RefMut;
+use log::error;
 
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
+    pub is_zombie: AtomicBool,
     // mutable
     inner: SpinNoIrqLock<TaskControlBlockInner>,
 }
@@ -58,7 +58,7 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    // pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
+
     pub fn inner_lock(&self) -> impl DerefMut<Target = TaskControlBlockInner> + '_ {
         self.inner.lock()
     }
@@ -66,6 +66,7 @@ impl TaskControlBlock {
     pub fn new_bare() -> Self {
         TaskControlBlock {
             pid: PidHandle(usize::MAX),
+            is_zombie: Default::default(),
             inner: SpinNoIrqLock::new(TaskControlBlockInner {
                 trap_cx: TrapContext::zero_init(),
                 base_size: 0,
@@ -89,10 +90,13 @@ impl TaskControlBlock {
         // *trap_cx = TrapContext::app_init_context(entry_point, user_sp, unsafe {
         //     KERNEL_SPACE.as_ref().unwrap().token()
         // });
-        let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
+
+        let kernel_satp = KERNEL_SPACE.lock().token();
+
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         let task_control_block = Self {
             pid: pid_handle,
+            is_zombie: Default::default(),
             inner: SpinNoIrqLock::new(TaskControlBlockInner {
                 trap_cx,
                 base_size: user_sp,
@@ -129,7 +133,7 @@ impl TaskControlBlock {
 
         // debug!("entry_point: {:x}", entry_point);
 
-        let kernel_satp = unsafe { KERNEL_SPACE.as_ref().unwrap().token() };
+        let kernel_satp = KERNEL_SPACE.lock().token();
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
         // **** access current TCB exclusively
         let mut inner = self.inner_lock();
@@ -163,6 +167,7 @@ impl TaskControlBlock {
         let cwd = parent_inner.cwd.clone();
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
+            is_zombie: Default::default(),
             inner: SpinNoIrqLock::new(TaskControlBlockInner {
                 trap_cx,
                 base_size: parent_inner.base_size,
@@ -186,11 +191,23 @@ impl TaskControlBlock {
         self.pid.0
     }
     pub fn is_zombie(&self) -> bool {
-        self.inner_lock().is_zombie()
+        self.is_zombie.load(Relaxed)
     }
     /// We can get whatever we want in the inner by providing a handler
     pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TaskControlBlockInner) -> T) -> T {
         f(&mut self.inner.lock())
+    }
+}
+
+impl TaskControlBlock {
+    /// for debug purpose
+    pub fn print_all_task(&self, indent: String) {
+        println!("{}{}", indent, self.pid.0);
+        unsafe {
+            for child in self.inner.unsafe_get().children.iter() {
+                child.print_all_task(indent.clone() + "  ")
+            }
+        }
     }
 }
 
