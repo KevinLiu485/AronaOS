@@ -10,7 +10,7 @@
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
 
-#![allow(unused)]
+// #![allow(unused)]
 #![allow(non_upper_case_globals)]
 
 const SYSCALL_OPEN: usize = 56;
@@ -77,10 +77,10 @@ use crate::config::SyscallRet;
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
-        SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
-        SYSCALL_CLOSE => sys_close(args[0]),
-        SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
-        SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
+        // SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
+        // SYSCALL_CLOSE => sys_close(args[0]),
+        // SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
+        // SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         // SYSCALL_YIELD => sys_yield().await,
         // SYSCALL_UNAME => sys_uname(args[0]),
@@ -91,14 +91,28 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_EXEC => sys_exec(args[0]).await,
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
 
-        SYS_getcwd => sys_getcwd(args[0], args[1]),
         SYS_uname => sys_uname(args[0]),
         SYS_gettimeofday => sys_get_time(args[0]),
         SYS_brk => sys_brk(args[0]),
         SYS_sched_yield => sys_yield().await,
         SYS_times => sys_times(args[0]),
         SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4] as i32, args[5]),
-        // SYS_chdir => sys_chdir(args[0] as *const u8),
+
+        SYS_getcwd => sys_getcwd(args[0], args[1]),
+        SYS_openat => sys_openat(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2] as u32,
+            args[3],
+        ),
+        SYS_read => sys_read(args[0], args[1], args[2]).await,
+        SYS_write => sys_write(args[0], args[1], args[2]).await,
+        SYS_mkdirat => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
+        SYS_chdir => sys_chdir(args[0] as *const u8),
+        SYS_close => sys_close(args[0]),
+        SYS_fstat => sys_fstat(args[0], args[1] as *const u8),
+        SYS_getdents64 => sys_getdents64(args[0], args[1] as *const u8, args[2]),
+        SYS_dup => sys_dup(args[0]),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }
