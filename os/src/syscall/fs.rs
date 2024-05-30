@@ -1,13 +1,17 @@
 //! File and filesystem-related syscalls
 
+use core::mem::size_of;
+use core::ptr;
+
 use log::info;
 
 use crate::config::SyscallRet;
 use crate::fs::inode::InodeMode;
 use crate::fs::path::Path;
-use crate::fs::{create_dir, open_file, open_inode, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
+use crate::fs::{create_dir, kstat, open_file, open_inode, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
 use crate::task::current_task;
 
+use crate::timer::TimeSpec;
 use crate::utils::c_str_to_string;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -124,8 +128,28 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     create_dir(dirfd, &path)
 }
 
-pub fn sys_fstat(_fd: usize, _buf: *const u8) -> SyscallRet {
-    
+pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
+    let stat = kstat {
+        st_dev: 0,
+        st_ino: 0,
+        st_mode: 0,
+        st_nlink: 0,
+        st_uid: 0,
+        st_gid: 0,
+        st_rdev: 0,
+        __pad1: 0,
+        st_size: 28,
+        st_blksize: 0,
+        __pad2: 0,
+        st_blocks: 0,
+        st_atim: TimeSpec::new(),
+        st_mtim: TimeSpec::new(),
+        st_ctim: TimeSpec::new(),
+    };
+    let kstat_ptr = buf as *mut kstat;
+    unsafe {
+        ptr::write(kstat_ptr, stat);
+    }
     Ok(0)
 }
 
