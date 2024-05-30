@@ -342,27 +342,22 @@ impl MemorySet {
     /// Todo: 未检查用户是否有权限删除
     pub fn do_unmap(&mut self, start: usize, len: usize) {
         let end = start + len;
-        let rm_range = VPNRange::new(
-            VirtAddr::from(start).floor(),
-            VirtAddr::from(end).ceil(),
-        );
+        let rm_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(end).ceil());
         let mut overlap_areas = Vec::new();
         let mut prev_area = Vec::new();
         self.areas.drain(..).for_each(|area| {
             if area.vpn_range.is_overlap(rm_range) {
                 overlap_areas.push(area);
-            }
-            else {
+            } else {
                 prev_area.push(area);
             }
         });
         // 删除overlap_areas在页表中的映射和释放对应的物理页帧
-        self.remove_areas(overlap_areas); 
+        self.remove_areas(overlap_areas);
         // 一定要刷表
         self.activate();
         // 更新memory_set.areas
         self.areas = prev_area;
-
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
@@ -494,7 +489,6 @@ impl MapArea {
         }
     }
 }
-
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
