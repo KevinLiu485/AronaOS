@@ -10,7 +10,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::lazy_static;
-use log::info;
+use log::{debug, info};
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -85,10 +85,17 @@ impl MemorySet {
     }
     /// Assume that no conflicts, 由caller保证
     pub fn insert_framed_area(&mut self, vpn_range: VPNRange, permission: MapPermission) {
+        debug!(
+            "[insert_framed_area]: insert {:?} - {:?}",
+            vpn_range.get_start(),
+            vpn_range.get_end()
+        );
         self.push(
             MapArea::from_vpn_range(vpn_range, MapType::Framed, permission),
             None,
         );
+        // 刷新TLB
+        self.activate();
     }
     ///Remove `MapArea` that starts with `start_vpn`
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
@@ -132,6 +139,11 @@ impl MemorySet {
     }
 
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
+        debug!(
+            "[MemorySet.push] map_area: {:?} - {:?}",
+            map_area.vpn_range.get_start(),
+            map_area.vpn_range.get_end()
+        );
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
             map_area.copy_data(&mut self.page_table, data);
@@ -264,7 +276,8 @@ impl MemorySet {
             None,
         );
         // map heap with U flags
-        let heap_bottom = user_stack_top;
+        // add guard page
+        let heap_bottom = user_stack_top + PAGE_SIZE;
         let heap_top = heap_bottom;
         memory_set.brk = heap_top;
         info!("user space heap_top: {:x}", heap_top);

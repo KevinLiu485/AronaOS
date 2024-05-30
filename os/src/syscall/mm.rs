@@ -1,4 +1,6 @@
-use crate::mm::VirtAddr;
+use core::iter::Map;
+
+use crate::mm::{MapPermission, VirtAddr};
 use crate::{config::SyscallRet, utils::SyscallErr};
 
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
@@ -67,7 +69,9 @@ pub async fn sys_mmap(
     }
     // mmap区域最低地址为MMAP_MIN_ADDR
     let mut start: usize = start.max(MMAP_MIN_ADDR);
-    let permission = prot.into();
+    let mut permission = prot.into();
+    // 注意加上U权限
+    permission |= MapPermission::U;
     // 匿名映射
     if flags.contains(MMAPFLAGS::MAP_ANONYMOUS) {
         //需要fd为-1, offset为0
@@ -91,17 +95,13 @@ pub async fn sys_mmap(
             .inner_handler(|inner| inner.fd_table[fd as usize].clone())
             .unwrap();
         let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
-        debug!(
-            "[sys_mmap] vpn_range: {:?} - {:?}",
-            vpn_range.get_start(),
-            vpn_range.get_end()
-        );
+        //task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         task.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
+
         start = VirtAddr::from(vpn_range.get_start()).into();
-        debug!("[sys_mmap] start = {}", start);
-        task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
+        // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
         let origin_offset = file.get_meta().offset;
         file.seek(offset);
@@ -111,8 +111,6 @@ pub async fn sys_mmap(
         file.seek(origin_offset);
         return Ok(start);
     }
-    debug!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
-
     // todo!()
 }
 
