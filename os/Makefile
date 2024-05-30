@@ -69,7 +69,11 @@ QEMU_ARGS := -machine virt \
 			 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0\
 			#  -smp 4
 
-run: build
+move-cargo:
+	@mv cargo .cargo
+
+run: move-cargo build
 	@qemu-system-riscv64 $(QEMU_ARGS)
+	@mv .cargo cargo
 
 .PHONY: run clean
