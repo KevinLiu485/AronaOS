@@ -89,8 +89,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_sched_yield => sys_yield().await,
         SYS_times => sys_times(args[0]),
 
-        // SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4] as i32, args[5]),
-        // SYS_munmap => sys_munmap(),
+        SYS_mmap => sys_mmap(args[0], args[1], args[2], args[3], args[4] as i32, args[5]).await,
+        SYS_munmap => sys_munmap(args[0], args[1]),
         SYS_getcwd => sys_getcwd(args[0], args[1]),
         SYS_openat => sys_openat(
             args[0] as isize,

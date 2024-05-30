@@ -102,6 +102,14 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    /// Remove MapAreas在页表中的映射和释放对应的物理页帧
+    /// **调用remove_areas后一定要刷新TLB**
+    /// especially used for sys_munmap
+    pub fn remove_areas(&mut self, areas: Vec<MapArea>) {
+        for mut area in areas {
+            area.unmap(&mut self.page_table);
+        }
+    }
     /// especially used for sys_mmap
     pub fn get_unmapped_area(&self, start: usize, len: usize) -> VPNRange {
         // fisrt, use start as a hint
@@ -329,6 +337,33 @@ impl MemorySet {
         self.areas.clear();
         self.heap = None;
     }
+    /// especially used for sys_munmap and sys_mmap
+    /// 参数合法性由调用者保证
+    /// Todo: 未检查用户是否有权限删除
+    pub fn do_unmap(&mut self, start: usize, len: usize) {
+        let end = start + len;
+        let rm_range = VPNRange::new(
+            VirtAddr::from(start).floor(),
+            VirtAddr::from(end).ceil(),
+        );
+        let mut overlap_areas = Vec::new();
+        let mut prev_area = Vec::new();
+        self.areas.drain(..).for_each(|area| {
+            if area.vpn_range.is_overlap(rm_range) {
+                overlap_areas.push(area);
+            }
+            else {
+                prev_area.push(area);
+            }
+        });
+        // 删除overlap_areas在页表中的映射和释放对应的物理页帧
+        self.remove_areas(overlap_areas); 
+        // 一定要刷表
+        self.activate();
+        // 更新memory_set.areas
+        self.areas = prev_area;
+
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -459,6 +494,7 @@ impl MapArea {
         }
     }
 }
+
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
