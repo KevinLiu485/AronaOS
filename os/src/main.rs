@@ -11,10 +11,16 @@
 // #![deny(missing_docs)]
 // #![deny(warnings)]
 // #![allow(unused_imports)]
+
+// #![deny(missing_docs)]
+// #![deny(warnings)]
+// #![allow(unused_imports)]
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![feature(error_in_core)]
+#![feature(negative_impls)]
 #![feature(error_in_core)]
 #![feature(negative_impls)]
 
@@ -30,7 +36,10 @@ mod board;
 mod console;
 mod config;
 pub mod ctypes;
+pub mod ctypes;
 mod drivers;
+mod executor;
+pub mod fat32;
 mod executor;
 pub mod fat32;
 pub mod fs;
@@ -38,6 +47,7 @@ pub mod lang_items;
 pub mod loader;
 pub mod logging;
 pub mod mm;
+pub mod mutex;
 pub mod mutex;
 pub mod sbi;
 pub mod sync;
@@ -69,6 +79,18 @@ fn clear_bss() {
     unsafe {
         core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
             .fill(0);
+    }
+}
+
+///
+#[no_mangle]
+pub fn fake_main(hart_id: usize) {
+    unsafe {
+        asm!("add sp, sp, {}", in(reg) KERNEL_BASE);
+        asm!("la t0, rust_main");
+        asm!("add t0, t0, {}", in(reg) KERNEL_BASE);
+        asm!("mv a0, {}", in(reg) hart_id);
+        asm!("jalr zero, 0(t0)");
     }
 }
 

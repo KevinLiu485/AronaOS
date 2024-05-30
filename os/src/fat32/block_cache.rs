@@ -1,3 +1,4 @@
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
 use super::block_dev::BlockDevice;
 use super::{FSMutex, BLOCK_CACHE_SIZE, BLOCK_SIZE};
 use alloc::collections::VecDeque;
@@ -7,6 +8,17 @@ use lazy_static::*;
 pub struct BlockCache {
     /// cached block data
     cache: [u8; BLOCK_SIZE],
+========
+use super::{BlockDevice, BLOCK_SZ};
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+use lazy_static::*;
+use spin::Mutex;
+/// Cached block inside memory
+pub struct BlockCache {
+    /// cached block data
+    cache: [u8; BLOCK_SZ],
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
     /// underlying block id
     block_id: usize,
     /// underlying block device
@@ -18,7 +30,11 @@ pub struct BlockCache {
 impl BlockCache {
     /// Load a new BlockCache from disk.
     pub fn new(block_id: usize, block_device: Arc<dyn BlockDevice>) -> Self {
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
         let mut cache = [0u8; BLOCK_SIZE];
+========
+        let mut cache = [0u8; BLOCK_SZ];
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
         block_device.read_block(block_id, &mut cache);
         Self {
             cache,
@@ -37,7 +53,11 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
         assert!(offset + type_size <= BLOCK_SIZE);
+========
+        assert!(offset + type_size <= BLOCK_SZ);
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
         let addr = self.addr_of_offset(offset);
         unsafe { &*(addr as *const T) }
     }
@@ -47,7 +67,11 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
         assert!(offset + type_size <= BLOCK_SIZE);
+========
+        assert!(offset + type_size <= BLOCK_SZ);
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
         self.modified = true;
         let addr = self.addr_of_offset(offset);
         unsafe { &mut *(addr as *mut T) }
@@ -74,9 +98,17 @@ impl Drop for BlockCache {
         self.sync()
     }
 }
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
 
 pub struct BlockCacheManager {
     queue: VecDeque<(usize, Arc<FSMutex<BlockCache>>)>,
+========
+/// Use a block cache of 16 blocks
+const BLOCK_CACHE_SIZE: usize = 16;
+
+pub struct BlockCacheManager {
+    queue: VecDeque<(usize, Arc<Mutex<BlockCache>>)>,
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
 }
 
 impl BlockCacheManager {
@@ -90,7 +122,11 @@ impl BlockCacheManager {
         &mut self,
         block_id: usize,
         block_device: Arc<dyn BlockDevice>,
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
     ) -> Arc<FSMutex<BlockCache>> {
+========
+    ) -> Arc<Mutex<BlockCache>> {
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
         if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
             Arc::clone(&pair.1)
         } else {
@@ -105,11 +141,19 @@ impl BlockCacheManager {
                 {
                     self.queue.drain(idx..=idx);
                 } else {
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
                     panic!("Run out of BLOCK_CACHE!");
                 }
             }
             // load block into mem and push back
             let block_cache = Arc::new(FSMutex::new(BlockCache::new(
+========
+                    panic!("Run out of BlockCache!");
+                }
+            }
+            // load block into mem and push back
+            let block_cache = Arc::new(Mutex::new(BlockCache::new(
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
                 block_id,
                 Arc::clone(&block_device),
             )));
@@ -121,20 +165,32 @@ impl BlockCacheManager {
 
 lazy_static! {
     /// The global block cache manager
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
     pub static ref BLOCK_CACHE_MANAGER: FSMutex<BlockCacheManager> =
         FSMutex::new(BlockCacheManager::new());
+========
+    pub static ref BLOCK_CACHE_MANAGER: Mutex<BlockCacheManager> =
+        Mutex::new(BlockCacheManager::new());
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
 }
 /// Get the block cache corresponding to the given block id and block device
 pub fn get_block_cache(
     block_id: usize,
     block_device: Arc<dyn BlockDevice>,
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
 ) -> Arc<FSMutex<BlockCache>> {
+========
+) -> Arc<Mutex<BlockCache>> {
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
     BLOCK_CACHE_MANAGER
         .lock()
         .get_block_cache(block_id, block_device)
 }
 /// Sync all block cache to block device
+<<<<<<<< HEAD:os/src/fat32/block_cache.rs
 #[allow(unused)]
+========
+>>>>>>>> d7119dbd9d129bb65fe16a642ae6bb85afb720b7:easy-fs/src/block_cache.rs
 pub fn block_cache_sync_all() {
     let manager = BLOCK_CACHE_MANAGER.lock();
     for (_, cache) in manager.queue.iter() {

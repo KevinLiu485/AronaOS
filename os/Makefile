@@ -1,10 +1,21 @@
 # this the Makefile for OS comp testing
 
+# this the Makefile for OS comp testing
+
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
+
+# Filesystem image
+FS_DIR := ../fs-img-src
+FS_IMG_ROOT := $(FS_DIR)/OScomp-testsuits
+FS_IMG := $(FS_DIR)/fs.img
+
+# Configs
+# LOG := ERROR
+KERNEL_FEATURES := submit
 
 # Filesystem image
 FS_DIR := ../fs-img-src
@@ -26,6 +37,7 @@ BOOTLOADER_ELF := ../bootloader/$(SBI)-$(BOARD)
 KERNEL_ENTRY_PA := 0x80200000
 
 # Binutils
+# OBJDUMP := rust-objdump --arch-name=riscv64
 # OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
