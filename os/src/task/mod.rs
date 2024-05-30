@@ -11,10 +11,8 @@ pub mod schedule;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
-use crate::fs::path::Path;
-use crate::fs::{open_file, OpenFlags, AT_FDCWD};
+use crate::loader::get_app_data_by_name;
 use crate::sbi::shutdown;
-use crate::utils::block_on::block_on;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -79,41 +77,30 @@ pub fn exit_current(exit_code: i32) {
     // **** release current PCB
 }
 
+#[cfg(feature = "submit")]
+lazy_static! {
+    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(
+        get_app_data_by_name("submit_script").unwrap()
+    ));
+}
+
+#[cfg(not(feature = "submit"))]
 lazy_static! {
     ///Globle process that init user shell
-    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
-        #[cfg(not(feature = "submit"))]
-        let inode = open_file(AT_FDCWD, &Path::from("/initproc"), OpenFlags::RDONLY).unwrap();
-
-        #[cfg(feature = "submit")]
-        let inode = open_file(AT_FDCWD, &Path::from("/testsuits"), OpenFlags::RDONLY).unwrap();
-
-        let v = block_on(inode.read_all());
-        TaskControlBlock::new(v.as_slice())
-    });
+    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(
+        get_app_data_by_name("initproc").unwrap()
+    ));
 }
 ///Add init process to the manager
 pub fn add_initproc() {
     schedule::spawn_thread(INITPROC.clone());
 }
 
-// #[allow(unused)]
-/// debug info about INITPROC TaskContorlBlock
-// pub fn initproc_test() {
-//     let init_proc = &INITPROC.inner.exclusive_access();
-//     let page_table = &init_proc.memory_set.page_table;
-//     assert_eq!(page_table.root_ppn, current_satp());
-//     let entry = init_proc.trap_cx.sepc;
-//     let va: VirtAddr = entry.into();
-//     let pte = page_table.find_pte(va.into()).unwrap();
-//     println!("{:?}", pte);
-//     println!("{}", pte.flags().readable_flags());
-// }
 use alloc::string::String;
 use core::sync::atomic::Ordering::Relaxed;
 
-#[allow(unused)]
 /// debug
+#[allow(unused)]
 pub fn elf_data_info(v: &Vec<u8>) {
     let mut elf_data = String::new();
     let len = v.len();

@@ -15,6 +15,7 @@ use crate::syscall::syscall;
 use crate::task::{current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
 use core::arch::global_asm;
+use log::error;
 use riscv::register::satp;
 use riscv::register::{
     mtvec::TrapMode,
@@ -79,7 +80,7 @@ pub async fn trap_handler() {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            println!(
+            error!(
                 "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 scause.cause(),
                 stval,
@@ -92,7 +93,7 @@ pub async fn trap_handler() {
             exit_current(-2);
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            println!("[kernel] IllegalInstruction in application, kernel killed it.");
+            error!("[kernel] IllegalInstruction in application, kernel killed it.");
             // illegal instruction exit code
             exit_current(-3);
         }
@@ -132,7 +133,7 @@ pub fn trap_return() {
 /// Todo: Chapter 9: I/O device
 pub fn trap_from_kernel() -> ! {
     use riscv::register::sepc;
-    println!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
+    error!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 

@@ -142,14 +142,14 @@ impl MemorySet {
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
         // map kernel sections
-        println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
-        println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
-        println!(
+        info!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+        info!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
+        info!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
+        info!(
             ".bss [{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
-        println!("mapping .text section");
+        info!("mapping .text section");
         memory_set.push(
             MapArea::new(
                 (stext as usize).into(),
@@ -159,7 +159,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .rodata section");
+        info!("mapping .rodata section");
         memory_set.push(
             MapArea::new(
                 (srodata as usize).into(),
@@ -169,7 +169,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .data section");
+        info!("mapping .data section");
         memory_set.push(
             MapArea::new(
                 (sdata as usize).into(),
@@ -179,7 +179,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping .bss section");
+        info!("mapping .bss section");
         memory_set.push(
             MapArea::new(
                 (sbss_with_stack as usize).into(),
@@ -189,7 +189,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping physical memory");
+        info!("mapping physical memory");
         memory_set.push(
             MapArea::new(
                 (ekernel as usize).into(),
@@ -199,7 +199,7 @@ impl MemorySet {
             ),
             None,
         );
-        println!("mapping memory-mapped registers");
+        info!("mapping memory-mapped registers");
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(
@@ -267,7 +267,7 @@ impl MemorySet {
         let heap_bottom = user_stack_top;
         let heap_top = heap_bottom;
         memory_set.brk = heap_top;
-        info!("user space heap_top: {:x}", heap_top);
+        // info!("user space heap_top: {:x}", heap_top);
         let mut heap_area = MapArea::new(
             heap_bottom.into(),
             heap_top.into(),

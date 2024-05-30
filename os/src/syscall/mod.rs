@@ -73,6 +73,7 @@ use fs::*;
 use log::error;
 use mm::*;
 use process::*;
+pub use process::{WaitFuture, WaitOption};
 use util::{sys_times, sys_uname};
 
 use crate::config::SyscallRet;

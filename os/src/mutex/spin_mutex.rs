@@ -7,6 +7,7 @@ use core::{
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
 };
+use log::error;
 
 // use riscv::register::sstatus;
 
@@ -89,8 +90,8 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
             core::hint::spin_loop();
             try_count += 1;
             if try_count == 0x1000000 {
-                println!("dead lock!!");
-                println!(
+                error!("dead lock!!");
+                error!(
                     "[CPU ID:{}] current task is {}",
                     get_local_hart().hart_id,
                     get_local_hart().current().unwrap().pid.0

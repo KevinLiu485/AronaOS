@@ -104,6 +104,16 @@ pub fn spawn_thread(task_control_block: Arc<TaskControlBlock>) {
     task.detach();
 }
 
+pub fn spawn_kernel_thread<F: Future + Send + 'static>(future: F)
+where
+    <F as Future>::Output: Send,
+{
+    // let future = UserTaskFuture::new(, thread_loop(task_control_block));
+    let (runnable, task) = executor::spawn(future);
+    runnable.schedule();
+    task.detach();
+}
+
 /// The main loop of a user thread
 pub async fn thread_loop(task: Arc<TaskControlBlock>) {
     loop {
@@ -117,10 +127,10 @@ pub async fn thread_loop(task: Arc<TaskControlBlock>) {
                 "process terminated, pid = {}",
                 current_task().unwrap().getpid()
             );
-            #[cfg(feature = "submit")]
-            if current_task().unwrap().getpid() == 0 {
-                crate::sbi::shutdown(false);
-            }
+            // #[cfg(feature = "submit")]
+            // if current_task().unwrap().getpid() == 0 {
+            //     crate::sbi::shutdown(false);
+            // }
             break;
         }
     }

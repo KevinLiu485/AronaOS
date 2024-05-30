@@ -22,14 +22,12 @@ pub use page_table::{
     PageTableEntry, /* UserBuffer, UserBufferIterator ,*/
 };
 
-use self::frame_allocator::frame_allocator_test;
-use self::heap_allocator::heap_test;
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
-    heap_test();
+    // heap_test();
     frame_allocator::init_frame_allocator();
-    frame_allocator_test();
+    // frame_allocator_test();
     //KERNEL_SPACE.exclusive_access().activate
 
     KERNEL_SPACE.lock().activate();

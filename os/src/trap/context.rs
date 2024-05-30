@@ -1,9 +1,9 @@
 //! Implementation of [`TrapContext`]
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
+///trap context structure containing sstatus, sepc and registers
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-///trap context structure containing sstatus, sepc and registers
 pub struct TrapContext {
     /// general regs[0..31]
     pub x: [usize; 32],

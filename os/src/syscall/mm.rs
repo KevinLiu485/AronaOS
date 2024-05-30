@@ -111,7 +111,7 @@ pub async fn sys_mmap(
         file.seek(origin_offset);
         return Ok(start);
     }
-    debug!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
+    // debug!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
 
     // todo!()
 }

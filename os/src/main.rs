@@ -35,6 +35,7 @@ mod executor;
 pub mod fat32;
 pub mod fs;
 pub mod lang_items;
+pub mod loader;
 pub mod logging;
 pub mod mm;
 pub mod mutex;
@@ -48,6 +49,7 @@ pub mod utils;
 
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};
+use log::info;
 use riscv::register::sstatus;
 
 use crate::config::*;
@@ -56,6 +58,8 @@ use crate::sbi::hart_start;
 use crate::task::processor::new_local_hart;
 
 global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("link_app.S"));
+
 /// clear BSS segment
 fn clear_bss() {
     extern "C" {
@@ -89,29 +93,38 @@ pub fn rust_main(hart_id: usize) -> ! {
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok()
     {
+        print!("\u{1B}[38;5;14m");
+        println!("");
+        println!("");
+        println!("    :::     :::::::::   ::::::::  ::::    :::     :::            ::::::::   ::::::::  ");
+        println!("  :+: :+:   :+:    :+: :+:    :+: :+:+:   :+:   :+: :+:         :+:    :+: :+:    :+: ");
+        println!(" +:+   +:+  +:+    +:+ +:+    +:+ :+:+:+  +:+  +:+   +:+        +:+    +:+ +:+        ");
+        println!("+#++:++#++: +#++:++#:  +#+    +:+ +#+ +:+ +#+ +#++:++#++:       +#+    +:+ +#++:++#++ ");
+        println!("+#+     +#+ +#+    +#+ +#+    +#+ +#+  +#+#+# +#+     +#+       +#+    +#+        +#+ ");
+        println!("#+#     #+# #+#    #+# #+#    #+# #+#   #+#+# #+#     #+#       #+#    #+# #+#    #+# ");
+        println!("###     ### ###    ###  ########  ###    #### ###     ###        ########   ########  ");
+        println!("");
+        println!("");
+        print!("\u{1B}[0m");
+
         clear_bss();
-
-        println!("[kernel] Hello, world!");
         logging::init();
-        // error!("current satp: {:?}", current_satp());
         mm::init();
-        // error!("current satp: {:?}", current_satp());
 
-        //mm::remap_test();
-        //mm::from_global_test();
-        //mm::dump_test();
         executor::init();
         trap::init();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-        // fat32::init();
         fs::list_apps();
         // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
         unsafe {
             sstatus::set_sum();
         }
+        loader::list_apps();
         task::add_initproc();
+
         INIT_FINISHED.store(true, Ordering::SeqCst);
+        #[cfg(not(feature = "submit"))]
         start_all_cpu(hart_id);
     } else {
         while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句，不过还是先留着。
@@ -125,10 +138,9 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         KERNEL_SPACE.lock().activate();
-        println!("cpu: {} start!", hart_id);
+        info!("cpu: {} start!", hart_id);
     }
 
-    // executor::run_forever();
     if hart_id == 0 {
         executor::run_forever();
     } else {
@@ -136,14 +148,15 @@ pub fn rust_main(hart_id: usize) -> ! {
     }
 }
 
+#[allow(unused)]
 fn start_all_cpu(hart_id: usize) {
-    println!("[kernel] cpu:{} Hello, world!", hart_id);
+    info!("[kernel] cpu:{} Hello, world!", hart_id);
     for i in 0..4 {
         if i == hart_id {
             continue;
         }
         let status = hart_start(i, 0x80200000);
-        println!(
+        info!(
             "[kernel] {} start to wake up hart {}... status {}",
             hart_id, i, status
         );

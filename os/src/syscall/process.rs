@@ -55,7 +55,10 @@ pub fn sys_getpid() -> SyscallRet {
 pub fn sys_getppid() -> SyscallRet {
     let parent_task = current_task().unwrap().inner_lock().parent.clone();
     match parent_task {
+        // #[cfg(not(feature = "submit"))]
         None => Ok(INITPROC.pid.0),
+        // #[cfg(feature = "submit")]
+        // None => Ok(0),
         Some(parent_process) => Ok(parent_process.upgrade().unwrap().pid.0),
     }
 }
@@ -79,11 +82,10 @@ pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
 }
 
 pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
-    // let token = current_user_token();
     let path = Path::from(c_str_to_string(path as *const u8));
     let mut args = args as *const usize;
     let mut envs = envs as *const usize;
-    println!("sys_exec path: {}", path);
+    info!("sys_exec path: {}", path);
 
     // 下面是手动处理输入的arg
     let mut args_vec: Vec<String> = Vec::new();
@@ -98,7 +100,7 @@ pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
             }
         }
     }
-    println!("{:?}", args_vec);
+    info!("{:?}", args_vec);
 
     // 下面是手动处理输入的 envs
     let mut envs_vec: Vec<String> = Vec::new();
@@ -128,7 +130,7 @@ pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
 }
 
 bitflags! {
-    struct WaitOption: i32 {
+    pub struct WaitOption: i32 {
         /// 这个选项用于非阻塞挂起。当与 wait 或 waitpid 一起使用时，如果没有任何子进程状态改变，
         /// 这些系统调用不会阻塞父进程，而是立即返回。在 Linux 中，如果没有子进程处于可等待的状态，wait 或 waitpid 会返回 0。
         const WNOHANG = 1;
@@ -148,14 +150,14 @@ pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> Syscal
     WaitFuture::new(options, pid, exit_code_ptr).await
 }
 
-struct WaitFuture {
+pub struct WaitFuture {
     options: WaitOption,
     pid: isize,
     exit_status_addr: usize,
 }
 
 impl WaitFuture {
-    fn new(options: WaitOption, pid: isize, exit_status_addr: usize) -> Self {
+    pub fn new(options: WaitOption, pid: isize, exit_status_addr: usize) -> Self {
         Self {
             options,
             pid,
@@ -188,7 +190,7 @@ impl Future for WaitFuture {
             .enumerate()
             .find(|(_, p)| p.is_zombie() && (self.pid == -1 || self.pid == p.getpid() as isize))
         {
-            println!("{}", child.pid.0);
+            info!("{}", child.pid.0);
             let child = inner.children.remove(idx);
             // confirm that child will be deallocated after being removed from children list
             let found_pid = child.getpid();

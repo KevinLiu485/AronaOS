@@ -112,7 +112,7 @@ pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
     let min = ((fat32_time.time >> 5) & 0x3F) as i64;
     let sec = (fat32_time.time & 0x1F) as i64;
     let millisec = (fat32_time.tenms as i64) * 10;
-    //    println!("year={}, month={}, day={}, hr={}, min={}, sec={}, millisec={}", year, month, day, hr, min, sec, millisec);
+    //    debug!("year={}, month={}, day={}, hr={}, min={}, sec={}, millisec={}", year, month, day, hr, min, sec, millisec);
     (year_to_day_count(year) + month_to_day_count(month, leap_year(year)) + day) * MILLISEC_PER_DAY
         + (((hr * MIN_PER_HR + min) * SEC_PER_MIN + sec * 2) * MILLISEC_PER_SEC)
         + millisec

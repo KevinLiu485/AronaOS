@@ -1,6 +1,5 @@
 //! File and filesystem-related syscalls
 
-use core::mem::size_of;
 use core::ptr;
 
 use log::info;
@@ -210,6 +209,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet
     }
 }
 
+#[allow(unused)]
 pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     todo!()
 }
