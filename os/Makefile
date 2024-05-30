@@ -55,7 +55,7 @@ kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
 	@cargo fmt
-	@cargo build --release --features "$(KERNEL_FEATURES)"
+	@cargo build --offline --release --features "$(KERNEL_FEATURES)"
 	@rm src/linker.ld
 
 clean:
