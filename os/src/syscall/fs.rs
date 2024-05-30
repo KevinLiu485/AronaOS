@@ -125,6 +125,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 }
 
 pub fn sys_fstat(_fd: usize, _buf: *const u8) -> SyscallRet {
+    
     Ok(0)
 }
 
