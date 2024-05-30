@@ -6,7 +6,7 @@ pub mod pipe;
 mod stdio;
 
 use crate::{
-    config::{AsyncResult, AsyncSyscallRet},
+    config::{AsyncResult, AsyncSyscallRet}, timer::TimeSpec,
     // mm::UserBuffer,
 };
 
@@ -35,6 +35,26 @@ pub trait File: Send + Sync {
     fn get_meta(&self) -> FileMeta;
 
     fn seek(&self, offset: usize);
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct kstat {
+    pub st_dev: u64,
+    pub st_ino: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
+    pub __pad1: usize,
+    pub st_size: u64,
+    pub st_blksize: u32,
+    pub __pad2: u32,
+    pub st_blocks: u64,
+    pub st_atim: TimeSpec,
+    pub st_mtim: TimeSpec,
+    pub st_ctim: TimeSpec,
 }
 
 pub const AT_FDCWD: isize = -100;
