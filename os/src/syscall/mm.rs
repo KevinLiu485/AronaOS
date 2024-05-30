@@ -1,10 +1,10 @@
-use crate::{config::SyscallRet, utils::SyscallErr};
 use crate::mm::VirtAddr;
+use crate::{config::SyscallRet, utils::SyscallErr};
 
+use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
+use crate::ctypes::{MMAPFLAGS, MMAPPROT};
 use crate::task::current_task;
 use log::{debug, info};
-use crate::ctypes::{MMAPFLAGS, MMAPPROT};
-use crate::config::{PAGE_SIZE, MMAP_MIN_ADDR};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -78,6 +78,8 @@ pub async fn sys_mmap(
         task.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
+        start = VirtAddr::from(vpn_range.get_start()).into();
+        return Ok(start);
     } else {
         // 文件映射
         // 需要offset为page aligned
@@ -89,7 +91,17 @@ pub async fn sys_mmap(
             .inner_handler(|inner| inner.fd_table[fd as usize].clone())
             .unwrap();
         let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
+        debug!(
+            "[sys_mmap] vpn_range: {:?} - {:?}",
+            vpn_range.get_start(),
+            vpn_range.get_end()
+        );
+        task.inner_lock()
+            .memory_set
+            .insert_framed_area(vpn_range, permission);
         start = VirtAddr::from(vpn_range.get_start()).into();
+        debug!("[sys_mmap] start = {}", start);
+        task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
         let origin_offset = file.get_meta().offset;
         file.seek(offset);
@@ -97,9 +109,11 @@ pub async fn sys_mmap(
             return Err(SyscallErr::EINVAL.into());
         }
         file.seek(origin_offset);
+        return Ok(start);
     }
     debug!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
-    todo!()
+
+    // todo!()
 }
 
 pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
@@ -107,8 +121,8 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
     if start % PAGE_SIZE != 0 || len == 0 || start < MMAP_MIN_ADDR {
         return Err(SyscallErr::EINVAL.into());
     }
-    current_task().unwrap().inner_handler(|inner| {
-        inner.memory_set.do_unmap(start, len)
-    });
-    Ok(0) 
+    current_task()
+        .unwrap()
+        .inner_handler(|inner| inner.memory_set.do_unmap(start, len));
+    Ok(0)
 }
