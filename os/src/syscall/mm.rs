@@ -1,8 +1,10 @@
-use crate::config::SyscallRet;
+use crate::{config::SyscallRet, utils::SyscallErr};
 use crate::mm::VirtAddr;
 
 use crate::task::current_task;
 use log::{debug, info};
+use crate::ctypes::{MMAPFLAGS, MMAPPROT};
+use crate::config::{PAGE_SIZE, MMAP_MIN_ADDR};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -45,4 +47,68 @@ pub fn sys_brk(brk: usize) -> SyscallRet {
         // Todo!: 设置errno为ENOMEM
         return Err(1);
     }
+}
+
+/// Todo: 支持MAP_FIXED
+pub async fn sys_mmap(
+    start: usize,
+    len: usize,
+    prot: usize,
+    flags: usize,
+    fd: i32,
+    offset: usize,
+) -> SyscallRet {
+    //处理参数
+    let prot = MMAPPROT::from_bits(prot as u32).unwrap();
+    let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
+    let task = current_task().unwrap();
+    if len == 0 {
+        return Err(SyscallErr::EINVAL.into());
+    }
+    // mmap区域最低地址为MMAP_MIN_ADDR
+    let mut start: usize = start.max(MMAP_MIN_ADDR);
+    let permission = prot.into();
+    // 匿名映射
+    if flags.contains(MMAPFLAGS::MAP_ANONYMOUS) {
+        //需要fd为-1, offset为0
+        if fd != -1 || offset != 0 {
+            return Err(SyscallErr::EINVAL.into());
+        }
+        let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
+        task.inner_lock()
+            .memory_set
+            .insert_framed_area(vpn_range, permission);
+    } else {
+        // 文件映射
+        // 需要offset为page aligned
+        if offset % PAGE_SIZE != 0 {
+            return Err(SyscallErr::EINVAL.into());
+        }
+        // 读取文件
+        let file = task
+            .inner_handler(|inner| inner.fd_table[fd as usize].clone())
+            .unwrap();
+        let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
+        start = VirtAddr::from(vpn_range.get_start()).into();
+        let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
+        let origin_offset = file.get_meta().offset;
+        file.seek(offset);
+        if file.read(buf).await.is_err() {
+            return Err(SyscallErr::EINVAL.into());
+        }
+        file.seek(origin_offset);
+    }
+    debug!("{} {} {:?} {:?} {} {}", start, len, prot, flags, fd, offset);
+    todo!()
+}
+
+pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
+    // start必须页对齐, 且要大于等于MMAP_MIN_ADDR
+    if start % PAGE_SIZE != 0 || len == 0 || start < MMAP_MIN_ADDR {
+        return Err(SyscallErr::EINVAL.into());
+    }
+    current_task().unwrap().inner_handler(|inner| {
+        inner.memory_set.do_unmap(start, len)
+    });
+    Ok(0) 
 }
