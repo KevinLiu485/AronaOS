@@ -29,7 +29,8 @@ KERNEL_ENTRY_PA := 0x80200000
 # OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
-build: env $(KERNEL_BIN)
+# build: env $(KERNEL_BIN)
+build: $(KERNEL_BIN)
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)

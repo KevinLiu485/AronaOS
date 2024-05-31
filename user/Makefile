@@ -12,8 +12,8 @@ CP := cp
 
 TEST ?= 
 
-elf: $(APPS)
-	@cargo build --release
+elf: $(APPS) 
+	@cargo build --offline --release
 ifeq ($(TEST), 1)
 	@$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc
 endif
@@ -21,7 +21,10 @@ endif
 binary: elf
 	@$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
 
-build: binary
+move-cargo:
+	@cp -r cargo .cargo
+
+build: move-cargo binary
 
 clean:
 	@cargo clean
