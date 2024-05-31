@@ -12,12 +12,12 @@ use super::{
     dentry::{FAT32DentryContent, FAT32DirEntry, ATTR_DIRECTORY},
     fat::FAT32FileAllocTable,
     file::FAT32File,
-    FSMutex,
+    SpinNoIrqLock,
 };
 
 pub struct FAT32Inode {
     fat: Arc<FAT32FileAllocTable>,
-    file: Arc<FSMutex<FAT32File>>,
+    file: Arc<SpinNoIrqLock<FAT32File>>,
     meta: Arc<InodeMeta>,
 }
 
@@ -31,7 +31,7 @@ impl FAT32Inode {
         let file = FAT32File::new(Arc::clone(&fat), first_cluster, None);
         Self {
             fat: Arc::clone(&fat),
-            file: Arc::new(FSMutex::new(file)),
+            file: Arc::new(SpinNoIrqLock::new(file)),
             meta: Arc::new(InodeMeta::new(
                 fa_inode,
                 path.clone(),
@@ -64,7 +64,7 @@ impl FAT32Inode {
         );
         Self {
             fat: Arc::clone(&fat),
-            file: Arc::new(FSMutex::new(file)),
+            file: Arc::new(SpinNoIrqLock::new(file)),
             meta: Arc::new(InodeMeta::new(
                 Some(fa_inode),
                 path,
@@ -97,7 +97,7 @@ impl FAT32Inode {
         );
         Self {
             fat: Arc::clone(&fat),
-            file: Arc::new(FSMutex::new(file)),
+            file: Arc::new(SpinNoIrqLock::new(file)),
             meta: Arc::new(InodeMeta::new(
                 Some(fa_inode),
                 Path::from(path.clone()),

@@ -9,7 +9,7 @@ use super::{
     fat::FAT32FileAllocTable,
     inode::FAT32Inode,
     layout::{FAT32BootSector, FAT32FSInfoSector},
-    FSMutex,
+    SpinNoIrqLock,
 };
 
 pub struct FAT32FileSystem {
@@ -18,7 +18,7 @@ pub struct FAT32FileSystem {
 }
 
 impl FAT32FileSystem {
-    pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<FSMutex<Self>> {
+    pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<SpinNoIrqLock<Self>> {
         debug!("FAT32FileSystem::open()");
         let fs_meta = get_block_cache(0, block_device.clone()).lock().read(
             0,
@@ -38,7 +38,7 @@ impl FAT32FileSystem {
                     fs_info_sector.is_valid(),
                     "FAT32FileSystem::open(): Error loading fs_info_sector!"
                 );
-                Arc::new(FSMutex::new(FAT32Info::new(fs_info_sector)))
+                Arc::new(SpinNoIrqLock::new(FAT32Info::new(fs_info_sector)))
             });
         let root_inode = Arc::new(FAT32Inode::new_root(
             Arc::new(FAT32FileAllocTable::new(
@@ -50,7 +50,7 @@ impl FAT32FileSystem {
             &Path::new_absolute(),
             fs_meta.root_cluster_id,
         ));
-        Arc::new(FSMutex::new(Self {
+        Arc::new(SpinNoIrqLock::new(Self {
             block_device,
             root_inode,
         }))

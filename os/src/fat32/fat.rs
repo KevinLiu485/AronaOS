@@ -5,7 +5,8 @@ use super::{
     block_cache::get_block_cache,
     block_dev::BlockDevice,
     fs::{FAT32Info, FAT32Meta},
-    FSMutex, FATENTRY_EOC, FATENTRY_MASK, FATENTRY_MIN_EOC, FATENTRY_PER_SECTOR, FSI_NOT_AVAILABLE,
+    SpinNoIrqLock, FATENTRY_EOC, FATENTRY_MASK, FATENTRY_MIN_EOC, FATENTRY_PER_SECTOR,
+    FSI_NOT_AVAILABLE,
 };
 
 struct FATSector {
@@ -33,14 +34,14 @@ impl FATSector {
 
 pub struct FAT32FileAllocTable {
     pub block_device: Arc<dyn BlockDevice>,
-    pub info: Arc<FSMutex<FAT32Info>>,
+    pub info: Arc<SpinNoIrqLock<FAT32Info>>,
     pub meta: Arc<FAT32Meta>,
 }
 
 impl FAT32FileAllocTable {
     pub fn new(
         block_device: Arc<dyn BlockDevice>,
-        info: Arc<FSMutex<FAT32Info>>,
+        info: Arc<SpinNoIrqLock<FAT32Info>>,
         meta: Arc<FAT32Meta>,
     ) -> Self {
         let ret = Self {

@@ -6,10 +6,11 @@ use self::spin_mutex::SpinMutex;
 /// SpinMutex
 pub mod spin_mutex;
 
-/// SpinLock
-pub type SpinLock<T> = SpinMutex<T, Spin>;
+/// let's use `SpinNoIrqLock`
 /// SpinNoIrqLock(Cannot be interrupted)
 pub type SpinNoIrqLock<T> = SpinMutex<T, SpinNoIrq>;
+/// SpinLock
+// pub type SpinLock<T> = SpinMutex<T, Spin>;
 
 /// Low-level support for mutex(spinlock, sleeplock, etc)
 pub trait MutexSupport {

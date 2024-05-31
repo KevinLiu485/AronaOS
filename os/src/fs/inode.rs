@@ -10,7 +10,7 @@ use log::debug;
 
 use crate::{
     config::{AsyncResult, SysResult},
-    fat32::FSMutex,
+    mutex::SpinNoIrqLock,
     timer::TimeSpec,
 };
 
@@ -128,7 +128,7 @@ pub struct InodeMeta {
     pub name: String,
     /// path
     pub path: Path,
-    pub inner: FSMutex<InodeMetaInner>,
+    pub inner: SpinNoIrqLock<InodeMetaInner>,
 }
 
 impl InodeMeta {
@@ -148,7 +148,7 @@ impl InodeMeta {
             mode,
             name: path.get_name(),
             path,
-            inner: FSMutex::new(InodeMetaInner {
+            inner: SpinNoIrqLock::new(InodeMetaInner {
                 st_atim: TimeSpec::new(),
                 st_mtim: TimeSpec::new(),
                 st_ctim: TimeSpec::new(),
