@@ -6,7 +6,7 @@ pub mod pipe;
 mod stdio;
 
 use crate::{
-    config::{AsyncResult, AsyncSyscallRet},
+    config::AsyncResult,
     timer::TimeSpec,
     // mm::UserBuffer,
 };
@@ -29,7 +29,7 @@ pub trait File: Send + Sync {
     /// If writable
     fn writable(&self) -> bool;
     /// Read file to `UserBuffer`
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncSyscallRet;
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize>;
     /// Write `UserBuffer` to file
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize>;
 
@@ -40,7 +40,7 @@ pub trait File: Send + Sync {
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct kstat {
+pub struct Kstat {
     pub st_dev: u64,
     pub st_ino: u64,
     pub st_mode: u32,

@@ -37,6 +37,7 @@ pub fn exit_current(exit_code: i32) {
     );
 
     let pid = task.getpid();
+    info!("[exit_current] pid = {}, exit_code = {}", pid, exit_code);
     if pid == IDLE_PID {
         println!(
             "[kernel] Idle process exit with exit_code {} ...",
@@ -75,6 +76,7 @@ pub fn exit_current(exit_code: i32) {
     // deallocate user space
     inner.memory_set.recycle_data_pages();
     // **** release current PCB
+    inner.fd_table.clear();
 }
 
 #[cfg(feature = "submit")]

@@ -88,7 +88,7 @@ pub async fn trap_handler() {
             );
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
-            // page_table.dump_all();
+            page_table.dump_all();
             // page fault exit code
             exit_current(-2);
         }
@@ -121,6 +121,7 @@ pub fn trap_return() {
     let cx = current_trap_cx();
     //let user_satp = current_user_token();
     extern "C" {
+        #[allow(improper_ctypes)]
         fn __return_to_user(cx: *mut TrapContext);
     }
     unsafe {

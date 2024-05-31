@@ -71,6 +71,11 @@ impl Path {
         self.is_relative
     }
 
+    /// i.e. the path can be a global name, used to exec kernel linked apps
+    pub fn is_global(&self) -> bool {
+        self.is_relative && self.len() == 1
+    }
+
     pub fn get_inner(&self) -> &Vec<String> {
         &self.inner
     }

@@ -22,6 +22,6 @@ qemu: all
 	-device virtio-net-device,netdev=net -netdev user,id=net
 
 all: 
-	@cd ./os && make run
+	@cd ./os && make submit SUBMIT=true
 
 .PHONY: all qemu qemu-origin

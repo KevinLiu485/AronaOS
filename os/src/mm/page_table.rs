@@ -7,7 +7,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 use core::fmt::{self, Debug, Formatter};
-use log::debug;
+use log::error;
 use riscv::register::satp;
 
 bitflags! {
@@ -256,7 +256,7 @@ impl PageTable {
     /// dump mapping va -> ppn in user address space
     #[allow(unused)]
     pub fn dump_all(&self) {
-        debug!("pagetable at {:?}", self.root_ppn);
+        error!("pagetable at {:?}", self.root_ppn);
         let pagetable = self.root_ppn.get_pte_array();
         let mut va = 0;
         // 一级页表
@@ -273,7 +273,7 @@ impl PageTable {
                         for (index, entry) in pagetable.iter().enumerate() {
                             if entry.is_valid() && entry.is_user() {
                                 va = va | index << 12;
-                                println!("--- va: {:x}: {:?}", va, entry);
+                                error!("--- va: {:x}: {:?}", va, entry);
                             }
                         }
                     }

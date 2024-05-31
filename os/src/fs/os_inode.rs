@@ -87,11 +87,13 @@ lazy_static! {
 }
 /// List all files in the filesystems
 pub fn list_apps() {
-    println!("/**** ROOT APPS ****");
+    // println!("/**** ROOT APPS ****");
+    println!("[kernel] ROOT FILES >>>");
     for app in ROOT_INODE.list(ROOT_INODE.clone()).unwrap() {
-        println!("{}", app.get_name());
+        print!("{} \t", app.get_name());
     }
-    println!("**************/");
+    println!("");
+    // println!("**************/");
 }
 
 bitflags! {
@@ -141,30 +143,6 @@ impl OpenFlags {
     }
 }
 
-///Open file with flags
-// pub fn open_file(name: &str, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
-//     let (readable, writable) = flags.read_write();
-//     if flags.contains(OpenFlags::CREATE) {
-//         if let Ok(inode) = ROOT_INODE.find(ROOT_INODE.clone(), name) {
-//             // clear size
-//             // inode.clear();
-//             Ok(Arc::new(OSInode::new(readable, writable, inode)))
-//         } else {
-//             // create file
-//             ROOT_INODE
-//                 .mknod_v(name, InodeMode::FileREG)
-//                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
-//         }
-//     } else {
-//         ROOT_INODE.find(ROOT_INODE.clone(), name).map(|inode| {
-//             if flags.contains(OpenFlags::TRUNC) {
-//                 inode.clear();
-//             }
-//             Arc::new(OSInode::new(readable, writable, inode))
-//         })
-//     }
-// }
-
 fn open_cwd(dirfd: isize, path: &Path) -> Arc<dyn Inode> {
     if !path.is_relative() {
         // absolute path
@@ -201,15 +179,6 @@ pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<
 
 pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
-    // match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
-    //     Ok(inode) => {
-    //         if flags.contains(OpenFlags::TRUNC) {
-    //             inode.clear();
-    //         }
-    //         Ok(Arc::new(OSInode::new(readable, writable, inode)))
-    //     }
-    //     Err(e) => Err(e),
-    // }
     match open_inode(dirfd, path, flags) {
         Ok(inode) => Ok(Arc::new(OSInode::new(readable, writable, inode))),
         Err(e) => Err(e),

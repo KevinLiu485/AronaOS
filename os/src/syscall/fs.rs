@@ -2,12 +2,13 @@
 
 use core::ptr;
 
-use log::info;
+use log::{info, trace};
 
 use crate::config::SyscallRet;
 use crate::fs::inode::InodeMode;
 use crate::fs::path::Path;
-use crate::fs::{create_dir, kstat, open_file, open_inode, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
+use crate::fs::pipe::Pipe;
+use crate::fs::{create_dir, open_file, open_inode, Kstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
 use crate::task::current_task;
 
 use crate::timer::TimeSpec;
@@ -59,26 +60,9 @@ pub async fn sys_read(
     }
 }
 
-// pub fn sys_open(path: *const u8, flags: u32) -> SyscallRet {
-//     let task = current_task().unwrap();
-//     let token = current_user_token();
-//     let path = c_str_to_string(path);
-//     if let Ok(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
-//         let mut inner = task.inner_lock();
-//         let fd = inner.alloc_fd();
-//         inner.fd_table[fd] = Some(inode);
-//         info!(
-//             "[sys_open] pid {} open file: {} -> fd: {}",
-//             task.pid, path, fd
-//         );
-//         Ok(fd)
-//     } else {
-//         Err(1)
-//     }
-// }
-
 pub fn sys_close(fd: usize) -> SyscallRet {
     let task = current_task().unwrap();
+    trace!("[sys_close] pid: {}, fd: {}", task.getpid(), fd);
     let mut inner = task.inner_lock();
     if fd >= inner.fd_table.len() {
         return Err(1);
@@ -127,12 +111,13 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     create_dir(dirfd, &path)
 }
 
+/// fake
 pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
-    let stat = kstat {
+    let stat = Kstat {
         st_dev: 0,
         st_ino: 0,
         st_mode: 0,
-        st_nlink: 0,
+        st_nlink: 1,
         st_uid: 0,
         st_gid: 0,
         st_rdev: 0,
@@ -145,18 +130,19 @@ pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
         st_mtim: TimeSpec::new(),
         st_ctim: TimeSpec::new(),
     };
-    let kstat_ptr = buf as *mut kstat;
+    let kstat_ptr = buf as *mut Kstat;
     unsafe {
         ptr::write(kstat_ptr, stat);
     }
     Ok(0)
 }
 
+/// fake
 pub fn sys_getdents64(_fd: usize, buf: *const u8, len: usize) -> SyscallRet {
     let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
     let dent = "12345678123456781211";
     slice[..20].copy_from_slice(dent.as_bytes());
-    Ok(0)
+    Ok(2)
 }
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
@@ -209,7 +195,29 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet
     }
 }
 
-#[allow(unused)]
 pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
-    todo!()
+    let task = current_task().unwrap();
+    let pipe_pair = Pipe::new_pair();
+    let fdret = task.inner_handler(|inner| {
+        let fd1 = inner.alloc_fd();
+        inner.fd_table[fd1] = Some(pipe_pair.0.clone());
+        let fd2 = inner.alloc_fd();
+        inner.fd_table[fd2] = Some(pipe_pair.1.clone());
+        (fd1, fd2)
+    });
+    /* the FUCKING user fd is `i32` type! */
+    let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    let fdset_ptr = fdset as *mut [i32; 2];
+    unsafe {
+        ptr::write(fdset_ptr, fdret);
+    }
+    Ok(0)
+}
+/// fake
+pub fn sys_mount() -> SyscallRet {
+    Ok(0)
+}
+/// fake
+pub fn sys_umount2() -> SyscallRet {
+    Ok(0)
 }
