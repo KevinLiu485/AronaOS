@@ -124,7 +124,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         task::add_initproc();
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
-        #[cfg(not(feature = "submit"))]
+        // #[cfg(not(feature = "submit"))]
         start_all_cpu(hart_id);
     } else {
         while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句，不过还是先留着。

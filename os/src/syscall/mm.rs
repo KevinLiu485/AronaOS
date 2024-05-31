@@ -101,7 +101,7 @@ pub async fn sys_mmap(
             .insert_framed_area(vpn_range, permission);
         start = VirtAddr::from(vpn_range.get_start()).into();
         debug!("[sys_mmap] start = {}", start);
-        task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
+        // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
         let origin_offset = file.get_meta().offset;
         file.seek(offset);

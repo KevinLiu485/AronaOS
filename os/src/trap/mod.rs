@@ -88,7 +88,7 @@ pub async fn trap_handler() {
             );
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
-            page_table.dump_all();
+            // page_table.dump_all();
             // page fault exit code
             exit_current(-2);
         }

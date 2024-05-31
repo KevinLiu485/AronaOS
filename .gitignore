@@ -1,6 +1,7 @@
 .*/*
 !.github/*
 !.devcontainer/devcontainer.json
+.vscode/*
 
 .idea
 **/target/
@@ -13,6 +14,6 @@ user/target/*
 testsuits-for-oskernel/*
 fs-img-src/*
 
-kernel-qemu
-sbi-qemu
-sdcard.img
+./kernel-qemu
+./sbi-qemu
+./sdcard.img
