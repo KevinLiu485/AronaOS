@@ -29,7 +29,6 @@
 // #[allow(non_upper_case_globals)]
 const SYS_GETCWD: usize = 17;
 const SYS_PIPE2: usize = 59;
-
 const SYS_DUP: usize = 23;
 const SYS_DUP3: usize = 24;
 const SYS_CHDIR: usize = 49;
