@@ -12,7 +12,11 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
+use core::slice;
+
+use alloc::{string::String, vec};
 use buddy_system_allocator::LockedHeap;
+use num_enum::TryFromPrimitive;
 use syscall::*;
 
 const USER_HEAP_SIZE: usize = 32768;
@@ -98,8 +102,8 @@ bitflags! {
     }
 }
 
-pub const AT_FDCWD: isize = -100;
-pub const AT_REMOVEDIR: u32 = 0x200;
+pub const AT_FDCWD: i32 = -100;
+pub const AT_REMOVEDIR: i32 = 0x200;
 
 /// sys_times, 单位都是us
 #[repr(C)]
@@ -128,7 +132,6 @@ pub struct Utsname {
     pub machine: [u8; 65],
 }
 
-
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct TimeSpec {
@@ -152,8 +155,452 @@ bitflags! {
     }
 }
 
+#[derive(Debug)]
+#[repr(C)]
+pub struct Kstat {
+    pub st_dev: u64,
+    pub st_ino: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
+    pub __pad1: usize,
+    pub st_size: u64,
+    pub st_blksize: u32,
+    pub __pad2: u32,
+    pub st_blocks: u64,
+    pub st_atim: TimeSpec,
+    pub st_mtim: TimeSpec,
+    pub st_ctim: TimeSpec,
+}
+
+#[derive(Debug)]
+pub enum SyscallErr {
+    EUNDEF = 0,
+    EPERM = 1,
+    ENOENT = 2,
+    ESRCH = 3,
+    EINTR = 4,
+    EIO = 5,
+    ENXIO = 6,
+    E2BIG = 7,
+    ENOEXEC = 8,
+    EBADF = 9,
+    ECHILD = 10,
+    EAGAIN = 11,
+    ENOMEM = 12,
+    EACCES = 13,
+    EFAULT = 14,
+    ENOTBLK = 15,
+    EBUSY = 16,
+    EEXIST = 17,
+    EXDEV = 18,
+    ENODEV = 19,
+    ENOTDIR = 20,
+    EISDIR = 21,
+    EINVAL = 22,
+    ENFILE = 23,
+    EMFILE = 24,
+    ENOTTY = 25,
+    ETXTBSY = 26,
+    EFBIG = 27,
+    ENOSPC = 28,
+    ESPIPE = 29,
+    EROFS = 30,
+    EMLINK = 31,
+    EPIPE = 32,
+    EDOM = 33,
+    ERANGE = 34,
+    EDEADLK = 35,
+    ENAMETOOLONG = 36,
+    ENOLCK = 37,
+    ENOSYS = 38,
+    ENOTEMPTY = 39,
+    ELOOP = 40,
+    // EWOULDBLOCK = 11,
+    ENOMSG = 42,
+    EIDRM = 43,
+    ECHRNG = 44,
+    EL2NSYNC = 45,
+    EL3HLT = 46,
+    EL3RST = 47,
+    ELNRNG = 48,
+    EUNATCH = 49,
+    ENOCSI = 50,
+    EL2HLT = 51,
+    EBADE = 52,
+    EBADR = 53,
+    EXFULL = 54,
+    ENOANO = 55,
+    EBADRQC = 56,
+    EBADSLT = 57,
+    // EDEADLOCK = EDEADLK,
+    EBFONT = 59,
+    ENOSTR = 60,
+    ENODATA = 61,
+    ETIME = 62,
+    ENOSR = 63,
+    ENONET = 64,
+    ENOPKG = 65,
+    EREMOTE = 66,
+    ENOLINK = 67,
+    EADV = 68,
+    ESRMNT = 69,
+    ECOMM = 70,
+    EPROTO = 71,
+    EMULTIHOP = 72,
+    EDOTDOT = 73,
+    EBADMSG = 74,
+    EOVERFLOW = 75,
+    ENOTUNIQ = 76,
+    EBADFD = 77,
+    EREMCHG = 78,
+    ELIBACC = 79,
+    ELIBBAD = 80,
+    ELIBSCN = 81,
+    ELIBMAX = 82,
+    ELIBEXEC = 83,
+    EILSEQ = 84,
+    ERESTART = 85,
+    ESTRPIPE = 86,
+    EUSERS = 87,
+    ENOTSOCK = 88,
+    EDESTADDRREQ = 89,
+    EMSGSIZE = 90,
+    EPROTOTYPE = 91,
+    ENOPROTOOPT = 92,
+    EPROTONOSUPPORT = 93,
+    ESOCKTNOSUPPORT = 94,
+    EOPNOTSUPP = 95,
+    EPFNOSUPPORT = 96,
+    EAFNOSUPPORT = 97,
+    EADDRINUSE = 98,
+    EADDRNOTAVAIL = 99,
+    ENETDOWN = 100,
+    ENETUNREACH = 101,
+    ENETRESET = 102,
+    ECONNABORTED = 103,
+    ECONNRESET = 104,
+    ENOBUFS = 105,
+    EISCONN = 106,
+    ENOTCONN = 107,
+    ESHUTDOWN = 108,
+    ETOOMANYREFS = 109,
+    ETIMEDOUT = 110,
+    ECONNREFUSED = 111,
+    EHOSTDOWN = 112,
+    EHOSTUNREACH = 113,
+    EALREADY = 114,
+    EINPROGRESS = 115,
+    ESTALE = 116,
+    EUCLEAN = 117,
+    ENOTNAM = 118,
+    ENAVAIL = 119,
+    EISNAM = 120,
+    EREMOTEIO = 121,
+    EDQUOT = 122,
+    ENOMEDIUM = 123,
+    EMEDIUMTYPE = 124,
+    ECANCELED = 125,
+    ENOKEY = 126,
+    EKEYEXPIRED = 127,
+    EKEYREVOKED = 128,
+    EKEYREJECTED = 129,
+    EOWNERDEAD = 130,
+    ENOTRECOVERABLE = 131,
+    ERFKILL = 132,
+    EHWPOISON = 133,
+}
+
+impl From<isize> for SyscallErr {
+    fn from(value: isize) -> Self {
+        let ret = SyscallErr;
+    }
+}
+
 pub const NSEC_PER_SEC: usize = 10_0000_0000;
 
+pub type SyscallResult<T> = Result<T, SyscallErr>;
+
+#[derive(Debug, Clone)]
+pub struct File {
+    fd: i32,
+}
+
+impl File {
+    pub fn get_fd(&self) -> i32 {
+        self.fd
+    }
+
+    pub fn open(path: &str, flags: OpenFlags) -> SyscallResult<File> {
+        match sys_openat(AT_FDCWD, path, flags, 0) as i32 {
+            fd if fd >= 0 => Ok(File { fd }),
+            fd => Err(bitflags::_core::a),
+        }
+    }
+
+    pub fn open_at(&self, path: &str, flags: OpenFlags) -> SyscallResult<File> {
+        match sys_openat(self.fd, path, flags, 0) as i32 {
+            fd if fd >= 0 => Ok(File { fd }),
+            fd => Err(-fd as usize),
+        }
+    }
+
+    pub fn read(&self, buf: &mut [u8]) -> SyscallResult<usize> {
+        match sys_read(self.fd, buf) {
+            n if n >= 0 => Ok(n as usize),
+            n => Err(-n as usize),
+        }
+    }
+
+    pub fn write(&self, buf: &[u8]) -> SyscallResult<usize> {
+        match sys_write(self.fd, buf) {
+            n if n >= 0 => Ok(n as usize),
+            n => Err(-n as usize),
+        }
+    }
+
+    /// return (read_pipe, write_pipe)
+    pub fn pipe() -> SyscallResult<(File, File)> {
+        let mut fds = [0; 2];
+        match sys_pipe2(fds) {
+            ret if ret >= 0 => Ok((File { fd: fds[0] }, File { fd: fds[1] })),
+            ret => Err(-ret as usize),
+        }
+    }
+
+    pub fn dup(&self) -> SyscallResult<File> {
+        match sys_dup(self.fd) as i32 {
+            fd if fd >= 0 => Ok(File { fd }),
+            fd => Err(-fd as usize),
+        }
+    }
+
+    pub fn unlink_at(&self, path: &str) -> SyscallResult<()> {
+        match sys_unlinkat(self.fd, path, AT_REMOVEDIR) {
+            ret if ret > 0 => Ok(()),
+            ret => Err(-ret as usize),
+        }
+    }
+
+    pub fn mkdir_at(&self, path: &str) -> SyscallResult<()> {
+        match sys_mkdirat(self.fd, path, 0) {
+            ret if ret > 0 => Ok(()),
+            ret => Err(-ret as usize),
+        }
+    }
+}
+
+impl Drop for File {
+    fn drop(&mut self) {
+        sys_close(self.fd);
+    }
+}
+
+/// Get path to current working directory
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn getcwd() -> SyscallResult<String> {
+    let mut buffer: vec::Vec<u8> = vec![0u8; 4096];
+    match sys_getcwd(buffer.as_mut_slice()) {
+        ptr if ptr == 0 as *const u8 => Err(1),
+        _ => Ok(String::from_utf8(buffer).unwrap()),
+    }
+}
+
+/// Changes the current working directory to the specified path.
+///
+/// # Arguments
+///
+/// * `path` - A string slice that holds the path of the directory to change to.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn chdir(path: &str) -> SyscallResult<()> {
+    match sys_chdir(path) {
+        ret if ret > 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Removes a specified directory or file.
+///
+/// # Arguments
+///
+/// * `path` - A string slice that holds the path of the file or directory to be removed.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn unlink(path: &str) -> SyscallResult<()> {
+    match sys_unlinkat(AT_FDCWD, path, AT_REMOVEDIR) {
+        ret if ret > 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Creates a new directory.
+///
+/// # Arguments
+///
+/// * `path` - A string slice that holds the path of the directory to be created.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn mkdir(path: &str) -> SyscallResult<()> {
+    match sys_mkdirat(AT_FDCWD, path, 0) {
+        ret if ret > 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Creates a child process in a manner similar to `fork`, but provides more precise control over what pieces of execution context are shared
+/// between the calling process and the child process.
+///
+/// # Arguments
+///
+/// * `flags` - A bit mask that specifies the behavior of the new process.
+/// * `stack` - The address of the stack the new process will use.
+/// * `ptid` - The location where the parent process ID will be stored.
+/// * `tls` - The new value for the Thread Local Storage (TLS).
+/// * `ctid` - The location where the child process ID will be stored.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn clone(flags: i32, stack: usize, ptid: usize, tls: usize, ctid: usize) -> SyscallResult<()> {
+    match sys_clone(flags, stack, ptid, tls, ctid) {
+        ret if ret > 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Replaces the current process image with a new process image.
+///
+/// # Arguments
+///
+/// * `path` - A string slice that holds the path of the new program.
+/// * `argv` - An array of string slices that represent the argument list to the new program.
+/// * `envp` - An array of string slices that represent the environment for the new program.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn execve(path: &str, argv: &[&str], envp: &[&str]) -> SyscallResult<()> {
+    match sys_execve(path, argv, envp) {
+        ret if ret > 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Waits for a child process to change state.
+///
+/// # Arguments
+///
+/// * `pid` - The process ID of the child process to wait for. If `pid` is -1, the wait call waits for any child process.
+/// * `exit_code` - The location where the exit code of the child process will be stored.
+/// * `options` - see [`WaitOption`]
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn waitpid(pid: i32, exit_code: &mut i32, options: WaitOption) -> SyscallResult<usize> {
+    match sys_wait4(pid as isize, exit_code, options) {
+        ret if ret > 0 => Ok(ret as usize),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Exit current process and never returns
+///
+/// # Arguments
+///
+/// * `exit_code` - The exit code of the process.
+pub fn exit(exit_code: i32) -> ! {
+    sys_exit(exit_code)
+}
+
+/// Get the current process ID.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn getpid() -> SyscallResult<u32> {
+    match sys_getpid() {
+        ret if ret >= 0 => Ok(ret as u32),
+        ret => Err(-ret as usize),
+    }
+}
+
+/// Get the current parent process ID.
+///
+/// # Errors
+///
+/// on error, return `Err(errno)`
+pub fn getppid() -> SyscallResult<u32> {
+    match sys_getppid() {
+        ret if ret >= 0 => Ok(ret as u32),
+        ret => Err(-ret as usize),
+    }
+}
+
+pub fn brk(brk: *const u8) -> SyscallResult<()> {
+    match sys_brk(brk) {
+        ret if ret >= 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+pub fn mmap(
+    len: usize,
+    prot: MMAPPROT,
+    flags: MMAPFLAGS,
+    file: &File,
+    offset: usize,
+) -> SyscallResult<&mut [u8]> {
+    match sys_mmap(0 as *const u8, len, prot, flags, file.get_fd(), offset) {
+        ret if ret >= 0 => Ok(unsafe { slice::from_raw_parts_mut(ret as *mut u8, len) }),
+        ret => Err(-ret as usize),
+    }
+}
+
+pub fn munmap(region: &[u8]) -> SyscallResult<()> {
+    match sys_munmap(region.as_ptr() as *const u8, region.len()) {
+        ret if ret >= 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+pub fn gettime() -> SyscallResult<TimeSpec> {
+    let mut time = TimeSpec { sec: 0, nsec: 0 };
+    match sys_gettimeofday(&mut time) {
+        ret if ret >= 0 => Ok(time),
+        ret => Err(-ret as usize),
+    }
+}
+
+pub fn sched_yield() -> SyscallResult<()> {
+    match sys_sched_yield() {
+        ret if ret >= 0 => Ok(()),
+        ret => Err(-ret as usize),
+    }
+}
+
+pub fn nanosleep(req: &TimeSpec) -> SyscallResult<Option<TimeSpec>> {
+    let rem = &mut TimeSpec { sec: 0, nsec: 0 };
+    match sys_nanosleep(req, rem) {
+        ret if ret >= 0 => Ok(None),
+        ret if ret == (SyscallErr::EINTR as isize) => Ok(Some(*rem)),
+        ret => Err(-ret as usize),
+    }
+}
+
+// pub fn 
 // pub fn open(path: &str, flags: OpenFlags) -> isize {
 //     sys_open(path, flags.bits)
 // }

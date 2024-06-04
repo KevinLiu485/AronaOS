@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use crate::{Dirent, OpenFlags, TimeSpec, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
+use crate::{Dirent, Kstat, OpenFlags, TimeSpec, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
 
 // const SYSCALL_OPEN: usize = 56;
 // const SYSCALL_CLOSE: usize = 57;
@@ -64,7 +64,7 @@ fn syscall(id: usize, args: [usize; 6]) -> isize {
     ret
 }
 
-pub fn sys_getcwd(buffer: &[u8]) -> *const u8 {
+pub fn sys_getcwd(buffer: &mut [u8]) -> *const u8 {
     syscall(
         SYS_GETCWD,
         [buffer.as_ptr() as usize, buffer.len(), 0, 0, 0, 0],
@@ -105,22 +105,22 @@ pub fn sys_close(fd: i32) -> isize {
     syscall(SYS_CLOSE, [fd as usize, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_getdents64(fd: i32, dirent_buf: &[Dirent]) -> isize {
-    todo!()
-    // syscall(
-    //     SYS_GETDENTS64,
-    //     [
-    //         fd as usize,
-    //         dirent_buf.as_ptr() as usize,
-    //         dirent_buf.len(),
-    //         0,
-    //         0,
-    //         0,
-    //     ],
-    // )
+/// fake
+pub fn sys_getdents64(fd: i32, dirent_buf: &mut [Dirent]) -> isize {
+    syscall(
+        SYS_GETDENTS64,
+        [
+            fd as usize,
+            dirent_buf.as_ptr() as usize,
+            dirent_buf.len(),
+            0,
+            0,
+            0,
+        ],
+    )
 }
 
-pub fn sys_read(fd: i32, buf: &[u8]) -> isize {
+pub fn sys_read(fd: i32, buf: &mut [u8]) -> isize {
     syscall(
         SYS_READ,
         [fd as usize, buf.as_ptr() as usize, buf.len(), 0, 0, 0],
@@ -134,8 +134,9 @@ pub fn sys_write(fd: i32, buf: &[u8]) -> isize {
     )
 }
 
+/// fake
 pub fn sys_linkat() -> isize {
-    todo!()
+    syscall(SYS_LINKAT, [0, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_unlinkat(dirfd: i32, path: &str, flags: i32) -> isize {
@@ -166,16 +167,19 @@ pub fn sys_mkdirat(dirfd: i32, path: &str, mode: i32) -> isize {
     )
 }
 
+/// fake
 pub fn sys_umount2() -> isize {
-    todo!()
+    syscall(SYS_UMOUNT2, [0, 0, 0, 0, 0, 0])
 }
 
+/// fake
 pub fn sys_mount() -> isize {
-    todo!()
+    syscall(SYS_MOUNT, [0, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_fstat() -> isize {
-    todo!()
+/// fake
+pub fn sys_fstat(fd: usize, buf: &mut Kstat) -> isize {
+    syscall(SYS_FSTAT, [fd, buf as *const _ as usize, 0, 0, 0, 0])
 }
 
 pub fn sys_clone(flags: i32, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
@@ -196,11 +200,11 @@ pub fn sys_execve(path: &str, argv: &[&str], envp: &[&str]) -> isize {
     )
 }
 
-pub fn sys_wait4(pid: usize, status: &i32, options: WaitOption) -> isize {
+pub fn sys_wait4(pid: isize, status: &mut i32, options: WaitOption) -> isize {
     syscall(
         SYS_WAIT4,
         [
-            pid,
+            pid as usize,
             status as *const i32 as usize,
             options.bits as usize,
             0,
@@ -210,8 +214,9 @@ pub fn sys_wait4(pid: usize, status: &i32, options: WaitOption) -> isize {
     )
 }
 
-pub fn sys_exit(exit_code: i32) -> isize {
-    syscall(SYS_EXIT, [exit_code as usize, 0, 0, 0, 0, 0])
+pub fn sys_exit(exit_code: i32) -> ! {
+    syscall(SYS_EXIT, [exit_code as usize, 0, 0, 0, 0, 0]);
+    unreachable!("sys_exit never returns!");
 }
 
 pub fn sys_getppid() -> isize {
@@ -251,11 +256,12 @@ pub fn sys_mmap(
     )
 }
 
-pub fn sys_times(tms: &Tms) -> isize {
+/// fake
+pub fn sys_times(tms: &mut Tms) -> isize {
     syscall(SYS_TIMES, [tms as *const Tms as usize, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_uname(uts: &Utsname) -> isize {
+pub fn sys_uname(uts: &mut Utsname) -> isize {
     syscall(SYS_UNAME, [uts as *const Utsname as usize, 0, 0, 0, 0, 0])
 }
 
@@ -263,14 +269,14 @@ pub fn sys_sched_yield() -> isize {
     syscall(SYS_SCHED_YIELD, [0, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_gettimeofday(ts: &TimeSpec) -> isize {
+pub fn sys_gettimeofday(ts: &mut TimeSpec) -> isize {
     syscall(
         SYS_GETTIMEOFDAY,
         [ts as *const TimeSpec as usize, 0, 0, 0, 0, 0],
     )
 }
 
-pub fn sys_nanosleep(req: &TimeSpec, rem: &TimeSpec) -> isize {
+pub fn sys_nanosleep(req: &TimeSpec, rem: &mut TimeSpec) -> isize {
     syscall(
         SYS_NANOSLEEP,
         [
