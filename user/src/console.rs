@@ -1,15 +1,17 @@
 use core::fmt::{self, Write};
 
+use crate::{sys_read, sys_write};
+
 const STDIN: usize = 0;
 const STDOUT: usize = 1;
 
-use super::{read, write};
+// use super::{read, write};
 
 struct Stdout;
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        write(STDOUT, s.as_bytes());
+        sys_write(STDOUT as i32, s.as_bytes());
         Ok(())
     }
 }
@@ -34,6 +36,6 @@ macro_rules! println {
 
 pub fn getchar() -> u8 {
     let mut c = [0u8; 1];
-    read(STDIN, &mut c);
+    sys_read(STDIN as i32, &mut c);
     c[0]
 }

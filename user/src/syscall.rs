@@ -1,6 +1,8 @@
+#![allow(unused)]
+
 use core::arch::asm;
 
-use crate::{Dirent, Kstat, OpenFlags, TimeSpec, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
+use crate::{CloneFlags, Dirent, Kstat, OpenFlags, TimeSpec, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
 
 // const SYSCALL_OPEN: usize = 56;
 // const SYSCALL_CLOSE: usize = 57;
@@ -71,7 +73,7 @@ pub fn sys_getcwd(buffer: &mut [u8]) -> *const u8 {
     ) as *const u8
 }
 
-pub fn sys_pipe2(fd: [i32; 2]) -> isize {
+pub fn sys_pipe2(fd: &mut [i32; 2]) -> isize {
     syscall(SYS_PIPE2, [fd.as_ptr() as usize, 0, 0, 0, 0, 0])
 }
 
@@ -93,7 +95,7 @@ pub fn sys_openat(fd: i32, filename: &str, flags: OpenFlags, mode: i32) -> isize
         [
             fd as usize,
             filename.as_ptr() as usize,
-            flags.bits as usize,
+            flags.bits() as usize,
             mode as usize,
             0,
             0,
@@ -182,8 +184,8 @@ pub fn sys_fstat(fd: usize, buf: &mut Kstat) -> isize {
     syscall(SYS_FSTAT, [fd, buf as *const _ as usize, 0, 0, 0, 0])
 }
 
-pub fn sys_clone(flags: i32, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
-    syscall(SYS_CLONE, [flags as usize, stack, ptid, tls, ctid, 0])
+pub fn sys_clone(flags: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
+    syscall(SYS_CLONE, [flags.bits() as usize, stack, ptid, tls, ctid, 0])
 }
 
 pub fn sys_execve(path: &str, argv: &[&str], envp: &[&str]) -> isize {
@@ -206,7 +208,7 @@ pub fn sys_wait4(pid: isize, status: &mut i32, options: WaitOption) -> isize {
         [
             pid as usize,
             status as *const i32 as usize,
-            options.bits as usize,
+            options.bits() as usize,
             0,
             0,
             0,
@@ -248,8 +250,8 @@ pub fn sys_mmap(
         [
             start as usize,
             len,
-            prot.bits as usize,
-            flags.bits as usize,
+            prot.bits() as usize,
+            flags.bits() as usize,
             fd as usize,
             offset as usize,
         ],

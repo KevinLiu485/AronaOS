@@ -1,27 +1,39 @@
 #![no_std]
 #![no_main]
 
+use user_lib::{defs::WaitOption, execve, fork, sched_yield, waitpid};
+
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{exec, fork, wait, yield_};
-
 #[no_mangle]
 fn main() -> i32 {
-    if fork() == 0 {
-        exec("user_shell\0");
+    if fork().expect("[initproc] Fail to fork Arona Shell") == 0 {
+        execve("arona_shell\0", &["arona_shell\0", "\0"], &["\0"]).expect("[initproc] Fail to exec Arona Shell");
     } else {
         loop {
             let mut exit_code: i32 = 0;
-            let pid = wait(&mut exit_code);
-            if pid == -1 {
-                yield_();
-                continue;
+            match waitpid(-1, &mut exit_code, WaitOption::empty()) {
+                Err(erron) => {
+                    print!("[initproc] waitpid error: {:?}\n", erron);
+                    sched_yield().unwrap();
+                    continue;
+                }
+                Ok(pid) => {
+                    println!(
+                        "[initproc] Released a zombie process, pid={}, exit_code={}",
+                        pid, exit_code
+                    );
+                }
             }
-            println!(
-                "[initproc] Released a zombie process, pid={}, exit_code={}",
-                pid, exit_code,
-            );
+            // if pid == -1 {
+            //     sched_yield();
+            //     continue;
+            // }
+            // println!(
+            //     "[initproc] Released a zombie process, pid={}, exit_code={}",
+            //     pid, exit_code,
+            // );
         }
     }
     0
