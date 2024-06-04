@@ -46,13 +46,13 @@ pub fn init() {
         "[kernel] logger initialized with LOG={:?}",
         option_env!("LOG")
     );
-    // #[cfg(feature = "kernel_tests")]
-    // {
-    //     println!("[test] logging test starts");
-    //     log::error!("log::error!");
-    //     log::warn!("log::warn!");
-    //     log::info!("log::info!");
-    //     log::debug!("log::debug!");
-    //     log::trace!("log::trace!");
-    // }
+    #[cfg(feature = "kernel_tests")]
+    {
+        println!("[test] logging test starts");
+        log::error!("log::error!");
+        log::warn!("log::warn!");
+        log::info!("log::info!");
+        log::debug!("log::debug!");
+        log::trace!("log::trace!");
+    }
 }

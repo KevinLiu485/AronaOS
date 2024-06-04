@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+use user_lib::{defs::WaitOption, execve, fork, waitpid};
+
 extern crate user_lib;
 
 static APP_LIST: &[&str] = &[
@@ -38,18 +40,18 @@ static APP_LIST: &[&str] = &[
     "/yield\0",
 ];
 
-use user_lib::{exec, fork, waitpid};
+// use user_lib::{exec, fork, waitpid};
 
 #[no_mangle]
 pub fn main() -> i32 {
     for app_name in APP_LIST {
-        let pid = fork();
+        let pid = fork().unwrap();
         if pid == 0 {
-            exec(app_name);
+            execve(&app_name, &[&app_name, "\0"], &["\0"]).unwrap();
             panic!("unreachable!");
         } else {
             let mut exit_code = 0;
-            let _wait_pid = waitpid(pid as usize, &mut exit_code);
+            let _wait_pid = waitpid(pid as i32, &mut exit_code, WaitOption::empty()).unwrap();
         }
     }
     return 0;

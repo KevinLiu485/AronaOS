@@ -1,3 +1,5 @@
+use crate::println;
+
 use super::exit;
 
 #[panic_handler]
