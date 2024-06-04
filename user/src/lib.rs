@@ -63,7 +63,7 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A string slice that holds the path of the file to be opened, can either be absolute or relative to cwd
+    /// * `path` - A NULL-TERMINATED string slice that holds the path of the file to be opened, can either be absolute or relative to cwd
     /// * `flags` - See [`OpenFlags`]
     /// 
     /// # Returns
@@ -84,7 +84,7 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A string slice that holds the path of the file to be opened, can either be absolute or relative to this file descriptor
+    /// * `path` - A NULL-TERMINATED string slice that holds the path of the file to be opened, can either be absolute or relative to this file descriptor
     /// * `flags` - See [`OpenFlags`]
     /// 
     /// # Returns
@@ -178,7 +178,7 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A string slice that holds the path of the file or directory to be removed, can either be absolute or relative to this file descriptor
+    /// * `path` - A NULL-TERMINATED string slice that holds the path of the file or directory to be removed, can either be absolute or relative to this file descriptor
     /// 
     /// # Errors
     /// 
@@ -194,7 +194,7 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A string slice that holds the path of the directory to be created, can either be absolute or relative to this file descriptor
+    /// * `path` - A NULL-TERMINATED string slice that holds the path of the directory to be created, can either be absolute or relative to this file descriptor
     /// 
     /// # Errors
     /// 
@@ -232,7 +232,7 @@ pub fn getcwd() -> SyscallResult<String> {
 ///
 /// # Arguments
 ///
-/// * `path` - A string slice that holds the path of the directory to change to.
+/// * `path` - A NULL-TERMINATED string slice that holds the path of the directory to change to.
 ///
 /// # Errors
 ///
@@ -248,7 +248,7 @@ pub fn chdir(path: &str) -> SyscallResult<()> {
 ///
 /// # Arguments
 ///
-/// * `path` - A string slice that holds the path of the file or directory to be removed.
+/// * `path` - A NULL-TERMINATED string slice that holds the path of the file or directory to be removed.
 ///
 /// # Errors
 ///
@@ -264,7 +264,7 @@ pub fn unlink(path: &str) -> SyscallResult<()> {
 ///
 /// # Arguments
 ///
-/// * `path` - A string slice that holds the path of the directory to be created.
+/// * `path` - A NULL-TERMINATED string slice that holds the path of the directory to be created.
 ///
 /// # Errors
 ///
@@ -308,9 +308,9 @@ pub fn fork() -> SyscallResult<u32> {
 ///
 /// # Arguments
 ///
-/// * `path` - A string slice that holds the path of the new program.
-/// * `argv` - An array of string slices that represent the argument list to the new program.
-/// * `envp` - An array of string slices that represent the environment for the new program.
+/// * `path` - A NULL-TERMINATED string slice that holds the path of the new program.
+/// * `argv` - An array of string slices that represent the argument list to the new program. TRAILING NULL IS NOT NEEDED.
+/// * `envp` - An array of string slices that represent the environment for the new program. TRAILING NULL IS NOT NEEDED.
 ///
 /// # Errors
 ///
