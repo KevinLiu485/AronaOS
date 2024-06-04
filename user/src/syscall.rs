@@ -188,7 +188,7 @@ pub fn sys_clone(flags: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid:
     syscall(SYS_CLONE, [flags.bits() as usize, stack, ptid, tls, ctid, 0])
 }
 
-pub fn sys_execve(path: &str, argv: &[&str], envp: &[&str]) -> isize {
+pub fn sys_execve(path: &str, argv: &[*const u8], envp: &[*const u8]) -> isize {
     syscall(
         SYS_EXECVE,
         [

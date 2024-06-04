@@ -8,8 +8,9 @@ extern crate user_lib;
 
 #[no_mangle]
 fn main() -> i32 {
+    println!("[initproc] started");
     if fork().expect("[initproc] Fail to fork Arona Shell") == 0 {
-        execve("arona_shell\0", &["arona_shell\0", "\0"], &["\0"]).expect("[initproc] Fail to exec Arona Shell");
+        execve("arona_shell\0", &["arona_shell\0"], &[]).expect("[initproc] Fail to exec Arona Shell");
     } else {
         loop {
             let mut exit_code: i32 = 0;

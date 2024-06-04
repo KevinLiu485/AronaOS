@@ -26,8 +26,8 @@ fn print_prompt() {
 
 #[no_mangle]
 pub fn main() -> i32 {
-    // println!("{}Welcome to Arona OS, sensei!{}", THEME_COLOR, RESET_COLOR);
-    println!("{}おかえりなさい、先生!{}", THEME_COLOR, RESET_COLOR);
+    // println!("{}おかえりなさい、先生!{}", THEME_COLOR, RESET_COLOR);
+    println!("{}Welcome to Arona OS, sensei!{}", THEME_COLOR, RESET_COLOR);
     let mut line: String = String::new();
     print_prompt();
     loop {
@@ -37,15 +37,10 @@ pub fn main() -> i32 {
                 println!("");
                 if !line.is_empty() {
                     line.push('\0');
-                    let pid = fork().expect("[Arona] wuuum...Sensei, fork seems not working?");
+                    let pid = fork().expect("[Arona] Wuuum...Sensei, fork seems not working?");
                     if pid == 0 {
-                        execve(line.as_str(), &[line.as_str(), "\0"], &["\0"]).expect("[Arona] wuuum...Sensei, I can't execve this command");
                         // child process
-                        // if execve(line.as_str(), &[line.as_str()], &["\0"]) == -1 {
-                        //     println!("Error when executing!");
-                        //     return -4;
-                        // }
-                        // unreachable!();
+                        execve(line.as_str(), &[line.as_str()], &[]).expect("[Arona] Wuuum...Sensei, I can't execve this command");
                     } else {
                         let mut exit_code: i32 = 0;
                         match waitpid(pid as i32, &mut exit_code, WaitOption::empty()) {
@@ -57,9 +52,6 @@ pub fn main() -> i32 {
                                 println!("[Arona] Some error occurs to waitpid...: {:?}", erron);
                             }
                         }
-                        // println!("pid: {}, exit_pid: {}", pid, exit_pid);
-                        // assert_eq!(pid, exit_pid);
-                        // println!("Shell: Process {} exited with code {}", pid, exit_code);
                     }
                     line.clear();
                 }

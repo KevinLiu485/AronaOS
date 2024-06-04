@@ -148,14 +148,14 @@ pub fn rust_main(hart_id: usize) -> ! {
 
 #[allow(unused)]
 fn start_all_cpu(hart_id: usize) {
-    info!("[kernel] cpu:{} Hello, world!", hart_id);
+    info!("cpu:{} Hello, world!", hart_id);
     for i in 0..4 {
         if i == hart_id {
             continue;
         }
         let status = hart_start(i, 0x80200000);
         info!(
-            "[kernel] {} start to wake up hart {}... status {}",
+            "hart {} start to wake up hart {}... status {}",
             hart_id, i, status
         );
     }

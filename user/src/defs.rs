@@ -186,6 +186,8 @@ pub const NSEC_PER_SEC: usize = 10_0000_0000;
 
 pub type SyscallResult<T> = Result<T, SyscallErr>;
 
+// pub const null_str: *const str = core::ptr::null();
+
 #[derive(Debug)]
 pub enum SyscallErr {
     EUNDEF = 0,

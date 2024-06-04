@@ -13,9 +13,9 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-use core::slice;
+use core::{ptr::null, slice};
 
-use alloc::{string::String, vec};
+use alloc::{string::String, vec::Vec, vec};
 use buddy_system_allocator::LockedHeap;
 use defs::*;
 use syscall::*;
@@ -220,7 +220,8 @@ impl Drop for File {
 ///
 /// on error, return POSIX errno
 pub fn getcwd() -> SyscallResult<String> {
-    let mut buffer: vec::Vec<u8> = vec![0u8; 4096];
+    // let mut buffer: Vec<u8> = vec![0u8; 4096];
+    let mut buffer = vec![0u8; 4096];
     match sys_getcwd(buffer.as_mut_slice()) {
         ptr if ptr == 0 as *const u8 => Err(SyscallErr::EFAULT),
         _ => Ok(String::from_utf8(buffer).unwrap()),
@@ -315,7 +316,11 @@ pub fn fork() -> SyscallResult<u32> {
 ///
 /// on error, return POSIX errno
 pub fn execve(path: &str, argv: &[&str], envp: &[&str]) -> SyscallResult<()> {
-    match sys_execve(path, argv, envp) {
+    let mut argv: Vec<*const u8> = argv.iter().map(|s| s.as_ptr() as *const u8).collect();
+    argv.push(null());
+    let mut envp: Vec<*const u8> = envp.iter().map(|s| s.as_ptr() as *const u8).collect();
+    envp.push(null());
+    match sys_execve(path, &argv, &envp) {
         ret if ret > 0 => Ok(()),
         ret => Err(ret.into()),
     }

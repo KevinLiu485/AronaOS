@@ -20,9 +20,9 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-FS_IMG_ROOT := $(FS_DIR)/OScomp-testsuits
-# FS_IMG := $(FS_DIR)/fs.img
-FS_IMG := ../sdcard.img
+FS_IMG_ROOT := $(FS_DIR)/root
+FS_IMG := $(FS_DIR)/fs.img
+# FS_IMG := ../sdcard.img
 
 # Configs
 LOG := ERROR
@@ -54,7 +54,7 @@ endif
 # endif
 
 # build: env $(KERNEL_BIN)
-build: $(KERNEL_BIN)
+build: $(KERNEL_BIN) fs-img
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
@@ -66,17 +66,17 @@ $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 # Pack FS_IMG_ROOT into FAT32 fs.img
-# fs-img: 
-# 	@mkdir -p $(FS_IMG_ROOT)
-# 	@rm -rf $(FS_IMG)
-# 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
-# 	@mkfs.vfat -F 32 $(FS_IMG)
-# 	@mkdir -p mnt
-# 	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
-# 	@cp -r $(FS_IMG_ROOT)/* mnt
-# 	@sudo umount -v mnt
-# 	@rm -rf mnt
-# 	@echo "finish pack fs-img"
+fs-img: 
+	@mkdir -p $(FS_IMG_ROOT)
+	@rm -rf $(FS_IMG)
+	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+	@mkfs.vfat -F 32 $(FS_IMG)
+	@mkdir -p mnt
+	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
+	@cp -r $(FS_IMG_ROOT)/* mnt
+	@sudo umount -v mnt
+	@rm -rf mnt
+	@echo "finish pack fs-img"
 
 build-user: 
 ifeq ($(SUBMIT), true)
@@ -129,7 +129,7 @@ move-cargo:
 
 submit: move-cargo build move-bin
 
-run: env build
+run: env build 
 	@qemu-system-riscv64 $(QEMU_ARGS)
 
 run-only:
