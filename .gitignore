@@ -11,8 +11,6 @@ os/src/linker.ld
 user/build
 user/target/*
 
-testsuits-for-oskernel/*
-# fs-img-src/*
 fs-img-src/fs.img
 
 ./kernel-qemu

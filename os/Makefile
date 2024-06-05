@@ -9,6 +9,8 @@
 #		By default, AronaOS will run on `opensbi`.
 # - `MODE`: Run with `Mode=debug` to build in debug mode.
 #  		By default, AronaOS will run in release mode.
+# - `IMG`: Run with `IMG=fs.img` to specify the filesystem image, without packing img.
+#		By default, AronaOS will first pack then run with `$(FS_DIR)/fs.img`.
 
 # Building
 TARGET := riscv64gc-unknown-none-elf
@@ -26,10 +28,10 @@ FS_IMG := $(FS_DIR)/fs.img
 
 # Configs
 LOG := ERROR
-# FEATURES := 
 SUBMIT :=
 KTEST :=
 SMP := 2
+IMG := 
 
 # BOARD
 BOARD := qemu
@@ -54,7 +56,13 @@ endif
 # endif
 
 # build: env $(KERNEL_BIN)
+
+ifeq ($(IMG), )
 build: $(KERNEL_BIN) fs-img
+else
+FS_IMG = $(IMG)
+build: $(KERNEL_BIN)
+endif
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
