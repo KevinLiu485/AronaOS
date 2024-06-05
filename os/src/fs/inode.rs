@@ -50,7 +50,7 @@ impl dyn Inode {
 
     pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
         let child = self.mknod(self.clone(), name, mode)?;
-        log::info!("[mkdir_v] child inode name {}", name);
+        log::info!("[Inode::mkdir_v] child inode name {}", name);
         self.get_meta()
             .inner
             .lock()

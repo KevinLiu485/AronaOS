@@ -2,7 +2,7 @@
 
 use core::ptr;
 
-use log::{info, trace};
+use log::trace;
 
 use crate::config::SyscallRet;
 use crate::fs::inode::InodeMode;
@@ -62,7 +62,7 @@ pub async fn sys_read(
 
 pub fn sys_close(fd: usize) -> SyscallRet {
     let task = current_task().unwrap();
-    trace!("[sys_close] pid: {}, fd: {}", task.getpid(), fd);
+    trace!("[sys_close] enter. pid: {}, fd: {}", task.getpid(), fd);
     let mut inner = task.inner_lock();
     if fd >= inner.fd_table.len() {
         return Err(1);
@@ -75,25 +75,33 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 }
 
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -> SyscallRet {
+    trace!("[sys_openat] enter");
     let task = current_task().unwrap();
     let path = Path::from(c_str_to_string(pathname));
     if let Ok(inode) = open_file(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_lock();
         let fd = inner.alloc_fd();
         inner.fd_table[fd] = Some(inode);
-        info!(
+        trace!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
-            task.pid, path, fd
+            task.pid,
+            path,
+            fd
         );
         Ok(fd)
     } else {
-        info!("[sys_openat] pid {} fail to open file: {}", task.pid, path);
+        trace!("[sys_openat] pid {} fail to open file: {}", task.pid, path);
         Err(1)
     }
 }
 
 pub fn sys_chdir(pathname: *const u8) -> SyscallRet {
     let path = Path::from(c_str_to_string(pathname));
+    trace!(
+        "[sys_chdir] pid: {}, pathname: {}",
+        current_task().unwrap().getpid(),
+        path
+    );
     // simply examine validity of the path
     match open_file(AT_FDCWD, &path, OpenFlags::empty()) {
         Ok(inode) => {
@@ -107,7 +115,9 @@ pub fn sys_chdir(pathname: *const u8) -> SyscallRet {
 }
 
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRet {
+    trace!("[sys_mkdirat] enter");
     let path = Path::from(c_str_to_string(pathname));
+    trace!("[sys_mkdirat] dirfd: {}, pathname: {}", dirfd, path);
     create_dir(dirfd, &path)
 }
 

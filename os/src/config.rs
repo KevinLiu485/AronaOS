@@ -3,7 +3,8 @@
 
 pub const USER_STACK_SIZE: usize = 4096 * 2;
 //pub const USER_HEAP_SIZE: usize = 4096 * 2;
-pub const KERNEL_HEAP_SIZE: usize = 0x20_0000;
+// pub const KERNEL_HEAP_SIZE: usize = 0x2_00000;   // 2MB
+pub const KERNEL_HEAP_SIZE: usize = 0x30_00000; // 48MB
 
 pub const KERNEL_BASE: usize = 0xffff_ffc0_0000_0000;
 pub const KERNEL_DIRECT_OFFSET: usize = 0xffff_ffc0_0000_0;

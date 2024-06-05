@@ -6,11 +6,15 @@ use user_lib::{defs::WaitOption, execve, fork, sched_yield, waitpid};
 #[macro_use]
 extern crate user_lib;
 
+const SHELL: &str = "busybox\0";
+// const SHELL: &str = "arona_shell\0";
+
 #[no_mangle]
 fn main() -> i32 {
     println!("[initproc] started");
     if fork().expect("[initproc] Fail to fork Arona Shell") == 0 {
-        execve("arona_shell\0", &["arona_shell\0"], &[]).expect("[initproc] Fail to exec Arona Shell");
+        // execve("arona_shell\0", &["arona_shell\0"], &[]).expect("[initproc] Fail to exec Arona Shell");
+        execve(SHELL, &[SHELL], &[]).expect("[initproc] Fail to exec Arona Shell");
     } else {
         loop {
             let mut exit_code: i32 = 0;

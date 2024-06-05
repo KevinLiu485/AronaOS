@@ -130,7 +130,7 @@ impl FAT32FileAllocTable {
         if let Some(ret) = self.alloc_cluster_inner() {
             if let Some(pre) = prev {
                 if self.read_fat(pre).unwrap() < FATENTRY_MIN_EOC {
-                    info!("write data at non fat link tail!");
+                    info!("[FAT::alloc_cluster] write data at non fat link tail!");
                 }
                 self.write_fat(pre, ret as u32);
             }
@@ -144,7 +144,7 @@ impl FAT32FileAllocTable {
     pub fn free_cluster(&self, cluster_id: usize, prev: Option<usize>) -> Option<()> {
         if let Some(pre) = prev {
             if self.read_fat(pre).unwrap() as usize != cluster_id {
-                info!("not a right pre!");
+                info!("[FAT::free_cluster] not a right pre!");
                 return None;
             }
             self.write_fat(pre, 0x0FFFFFFF);

@@ -13,9 +13,10 @@ use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
 use core::time::Duration;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
+    trace!("[sys_exit] enter");
     exit_current(exit_code);
     Ok(0)
 }
@@ -65,9 +66,15 @@ pub fn sys_getppid() -> SyscallRet {
 }
 
 pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
+    trace!("[sys_fork] enter");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork(stack);
     let new_pid = new_task.pid.0;
+    trace!(
+        "[sys_fork] pid: {}, new_pid: {}",
+        current_task.getpid(),
+        new_pid
+    );
 
     // modify trap context of new_task, because it returns immediately after switching
     let trap_cx = new_task.inner_lock().get_trap_cx();
@@ -83,10 +90,10 @@ pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
 }
 
 pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
+    trace!("[sys_exec] enter");
     let path = Path::from(c_str_to_string(path as *const u8));
     let mut args = args as *const usize;
     let mut envs = envs as *const usize;
-    info!("sys_exec path: {}", path);
 
     // 下面是手动处理输入的arg
     let mut args_vec: Vec<String> = Vec::new();
@@ -101,7 +108,7 @@ pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
             }
         }
     }
-    info!("{:?}", args_vec);
+    trace!("[sys_exec] path: {}, argv: {:?}", path, args_vec);
 
     // 下面是手动处理输入的 envs
     let mut envs_vec: Vec<String> = Vec::new();
@@ -112,7 +119,7 @@ pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
                     break;
                 }
                 envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
-                debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
+                // debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
                 unsafe {
                     envs = envs.add(1);
                 }
@@ -157,6 +164,7 @@ bitflags! {
 }
 
 pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> SyscallRet {
+    trace!("[sys_wait4] enter");
     let options = WaitOption::from_bits(options).unwrap();
     WaitFuture::new(options, pid, exit_code_ptr).await
 }
@@ -201,7 +209,7 @@ impl Future for WaitFuture {
             .enumerate()
             .find(|(_, p)| p.is_zombie() && (self.pid == -1 || self.pid == p.getpid() as isize))
         {
-            info!("{}", child.pid.0);
+            // info!("{}", child.pid.0);
             let child = inner.children.remove(idx);
             // confirm that child will be deallocated after being removed from children list
             let found_pid = child.getpid();
@@ -250,6 +258,7 @@ pub fn sys_clone(
     _tls_ptr: usize,
     _chilren_tid_ptr: usize,
 ) -> SyscallRet {
+    trace!("[sys_clone] enter");
     let clone_flags = match CloneFlags::from_bits(flags as u32) {
         None => {
             error!("clone flags is None: {}", flags);

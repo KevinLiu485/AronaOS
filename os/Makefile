@@ -32,6 +32,7 @@ SUBMIT :=
 KTEST :=
 SMP := 2
 IMG := 
+MEM_SIZE = 128M
 
 # BOARD
 BOARD := qemu
@@ -119,7 +120,7 @@ clean:
 
 QEMU_ARGS := -machine virt \
 			 -kernel $(KERNEL_BIN) \
-			 -m 128M -nographic \
+			 -m $(MEM_SIZE) -nographic \
 			 -smp $(SMP) \
 			 -bios $(BOOTLOADER_ELF) \
 			 -drive file=$(FS_IMG),if=none,format=raw,id=x0 \
