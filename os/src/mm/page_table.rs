@@ -7,7 +7,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 use core::fmt::{self, Debug, Formatter};
-use log::error;
+use log::{error, trace};
 use riscv::register::satp;
 
 bitflags! {
@@ -224,8 +224,11 @@ impl PageTable {
     #[allow(unused)]
     /// Create a mapping form `vpn` to `ppn`
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        //debug!("map vpn{:?} to ppn{:?}", vpn, ppn);
+        if vpn.0 & 0x4000000 == 0 {
+            trace!("[PageTable::map] map: {:?} -> {:?}", vpn, ppn);
+        }
         let pte = self.find_pte_create(vpn).unwrap();
+        //let pte = self.find_pte(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
@@ -256,6 +259,7 @@ impl PageTable {
     /// dump mapping va -> ppn in user address space
     #[allow(unused)]
     pub fn dump_all(&self) {
+        trace!("[dump_all]");
         error!("pagetable at {:?}", self.root_ppn);
         let pagetable = self.root_ppn.get_pte_array();
         let mut va = 0;
@@ -274,11 +278,14 @@ impl PageTable {
                             if entry.is_valid() && entry.is_user() {
                                 va = va | index << 12;
                                 error!("--- va: {:x}: {:?}", va, entry);
+                                va = va & !(index << 12);
                             }
                         }
                     }
+                    va = va & !(index << 21);
                 }
             }
+            va = va & !(index << 30);
         }
     }
     #[allow(unused)]
