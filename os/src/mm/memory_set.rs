@@ -9,8 +9,9 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
+use core::fmt::Debug;
 use lazy_static::lazy_static;
-use log::{info, trace, warn};
+use log::{debug, info, trace};
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -242,7 +243,6 @@ impl MemorySet {
                 }
                 let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
                 max_end_vpn = map_area.vpn_range.get_end();
-                //trace!("[MemroySet::from_elf] map {:?} : {:?}", start_va, end_va);
                 trace!(
                     "[MemorySet::from_elf] map [{:?}, {:?})",
                     map_area.vpn_range.get_start(),
@@ -260,10 +260,9 @@ impl MemorySet {
         // guard page
         user_stack_bottom += PAGE_SIZE;
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        trace!(
+        debug!(
             "[MemorySet::from_elf] user stack [{:#x}, {:#x})",
-            user_stack_bottom,
-            user_stack_top
+            user_stack_bottom, user_stack_top
         );
         memory_set.push(
             MapArea::new(
@@ -275,7 +274,8 @@ impl MemorySet {
             None,
         );
         // map heap with U flags
-        let heap_bottom = user_stack_top;
+        // add guard page
+        let heap_bottom = user_stack_top + PAGE_SIZE;
         let heap_top = heap_bottom;
         memory_set.brk = heap_top;
         // info!("user space heap_top: {:x}", heap_top);
@@ -285,20 +285,19 @@ impl MemorySet {
             MapType::Framed,
             MapPermission::R | MapPermission::W | MapPermission::U,
         );
-        trace!(
+        debug!(
             "[MemorySet::from_elf] heap [{:#x}, {:#x})",
-            heap_bottom,
-            heap_top
+            heap_bottom, heap_top
         );
         heap_area.map(&mut memory_set.page_table);
         memory_set.heap = Some(heap_area);
 
         // temp: check memory set sanity
-        memory_set.page_table.dump_all();
+        // memory_set.page_table.dump_all();
 
         (
             memory_set,
-            user_stack_top - 8,
+            user_stack_top - 32,
             elf.header.pt2.entry_point() as usize,
         )
     }
