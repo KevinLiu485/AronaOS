@@ -22,9 +22,9 @@ fn main() -> i32 {
             match waitpid(-1, &mut exit_code, WaitOption::empty()) {
                 Err(erron) => {
                     print!("[initproc] waitpid error: {:?}\n", erron);
-                    panic!("[initproc] waitpid error")
-                    // sched_yield().unwrap();
-                    // continue;
+                    // panic!("[initproc] waitpid error")
+                    sched_yield().unwrap();
+                    continue;
                 }
                 Ok(pid) => {
                     println!(
