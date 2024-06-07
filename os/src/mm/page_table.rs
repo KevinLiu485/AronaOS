@@ -224,9 +224,9 @@ impl PageTable {
     #[allow(unused)]
     /// Create a mapping form `vpn` to `ppn`
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        if vpn.0 & 0x4000000 == 0 {
-            trace!("[PageTable::map] map: {:?} -> {:?}", vpn, ppn);
-        }
+        // if vpn.0 & 0x4000000 == 0 {
+        //     trace!("[PageTable::map] map: {:?} -> {:?}", vpn, ppn);
+        // }
         let pte = self.find_pte_create(vpn).unwrap();
         //let pte = self.find_pte(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);

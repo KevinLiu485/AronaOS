@@ -12,6 +12,8 @@ user/build
 user/target/*
 
 fs-img-src/fs.img
+tmp
+utils
 
 ./kernel-qemu
 ./sbi-qemu

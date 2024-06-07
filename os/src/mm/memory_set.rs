@@ -243,11 +243,11 @@ impl MemorySet {
                 }
                 let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
                 max_end_vpn = map_area.vpn_range.get_end();
-                trace!(
-                    "[MemorySet::from_elf] map [{:?}, {:?})",
-                    map_area.vpn_range.get_start(),
-                    map_area.vpn_range.get_end(),
-                );
+                // trace!(
+                //     "[MemorySet::from_elf] map [{:?}, {:?})",
+                //     map_area.vpn_range.get_start(),
+                //     map_area.vpn_range.get_end(),
+                // );
                 memory_set.push(
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
@@ -476,9 +476,9 @@ impl MapArea {
     }
     pub fn map(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
-            if vpn.0 & 0x4000000 == 0 {
-                trace!("[MapArea::map] mapping user space {:?}", vpn);
-            }
+            // if vpn.0 & 0x4000000 == 0 {
+            //     trace!("[MapArea::map] mapping user space {:?}", vpn);
+            // }
             self.map_one(page_table, vpn);
         }
     }

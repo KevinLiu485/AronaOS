@@ -344,3 +344,10 @@ bitflags! {
         const CLONE_IO = 1 << 31;
     }
 }
+
+/// fake
+pub fn sys_set_tid_address(_tidptr: *const usize) -> SyscallRet {
+    trace!("[sys_set_tid_address] enter");
+    let task = current_task().unwrap();
+    Ok(task.getpid())
+}

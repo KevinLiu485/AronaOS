@@ -58,8 +58,9 @@ const SYS_TIMES: usize = 153;
 const SYS_UNAME: usize = 160;
 const SYS_SCHED_YIELD: usize = 124;
 const SYS_GETTIMEOFDAY: usize = 169;
-
 const SYS_NANOSLEEP: usize = 101;
+
+const SYS_SET_TID_ADDRESS: usize = 96;
 
 mod fs;
 mod mm;
@@ -114,6 +115,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYS_GETPPID => sys_getppid(),
         SYS_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
+
+        SYS_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *const usize),
         _ => unsupported(syscall_id),
     }
 }
