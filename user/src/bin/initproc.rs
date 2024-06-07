@@ -12,17 +12,19 @@ const SHELL: &str = "busybox\0";
 #[no_mangle]
 fn main() -> i32 {
     println!("[initproc] started");
-    if fork().expect("[initproc] Fail to fork Arona Shell") == 0 {
+    if fork().expect("[initproc] Fail to fork shell") == 0 {
         // execve("arona_shell\0", &["arona_shell\0"], &[]).expect("[initproc] Fail to exec Arona Shell");
-        execve(SHELL, &[SHELL], &[]).expect("[initproc] Fail to exec Arona Shell");
+        execve(SHELL, &[SHELL], &[]).expect("[initproc] Fail to exec shell");
+        unreachable!("[initproc] execve should never return")
     } else {
         loop {
             let mut exit_code: i32 = 0;
             match waitpid(-1, &mut exit_code, WaitOption::empty()) {
                 Err(erron) => {
                     print!("[initproc] waitpid error: {:?}\n", erron);
-                    sched_yield().unwrap();
-                    continue;
+                    panic!()
+                    // sched_yield().unwrap();
+                    // continue;
                 }
                 Ok(pid) => {
                     println!(
@@ -41,5 +43,5 @@ fn main() -> i32 {
             // );
         }
     }
-    0
+    // 0
 }

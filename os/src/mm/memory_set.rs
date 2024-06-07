@@ -277,9 +277,11 @@ impl MemorySet {
         heap_area.map(&mut memory_set.page_table);
         memory_set.heap = Some(heap_area);
 
+        memory_set.page_table.dump_all();
         (
             memory_set,
-            user_stack_top - 8,
+            // user_stack_top - 8,
+            user_stack_top - 24,
             elf.header.pt2.entry_point() as usize,
         )
     }

@@ -106,9 +106,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_DUP => sys_dup(args[0]),
         SYS_DUP3 => sys_dup3(args[0], args[1]),
         SYS_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
-        // SYS_PIPE2 => sys_pipe2(args[0] as *const u8),
         SYS_PIPE2 => sys_pipe2(args[0] as *const u8),
-        // SYS_PIPE2 => unsupported(SYS_PIPE2),
         SYS_LINKAT => unsupported(SYS_LINKAT),
         SYS_MOUNT => sys_mount(),
         SYS_UMOUNT2 => sys_umount2(),
@@ -121,7 +119,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
 }
 
 fn unsupported(syscall_id: usize) -> SyscallRet {
-    error!("Unsupported syscall_id: {}", syscall_id);
-    let _ = sys_exit(0);
-    Ok(0)
+    panic!("Unsupported syscall_id: {}", syscall_id);
+    // error!("Unsupported syscall_id: {}", syscall_id);
+    // let _ = sys_exit(0);
+    // Ok(0)
 }

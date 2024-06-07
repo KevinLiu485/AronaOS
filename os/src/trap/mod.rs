@@ -80,15 +80,15 @@ pub async fn trap_handler() {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
+            let satp = satp::read().bits();
+            let page_table = PageTable::from_token(satp);
+            page_table.dump_all();
             error!(
                 "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 scause.cause(),
                 stval,
                 current_trap_cx().sepc,
             );
-            let satp = satp::read().bits();
-            let page_table = PageTable::from_token(satp);
-            page_table.dump_all();
             // page fault exit code
             exit_current(-2);
         }

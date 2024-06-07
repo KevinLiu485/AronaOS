@@ -135,7 +135,10 @@ impl TaskControlBlock {
         // activate user space
         memory_set.activate();
 
-        info!("[TCB::exec] entry_point: {:x}", entry_point);
+        info!(
+            "[TCB::exec] entry_point: {:x}, user_sp: {:x}",
+            entry_point, user_sp
+        );
 
         let kernel_satp = KERNEL_SPACE.lock().token();
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
