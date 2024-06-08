@@ -4,7 +4,7 @@ use crate::{config::SyscallRet, utils::SyscallErr};
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MMAPFLAGS, MMAPPROT};
 use crate::task::current_task;
-use log::{debug, trace};
+use log::{debug, trace, warn};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -59,6 +59,8 @@ pub async fn sys_mmap(
     offset: usize,
 ) -> SyscallRet {
     trace!("[sys_mmap] enter");
+    warn!("[sys_mmap] not fully implemented");
+
     //处理参数
     let prot = MMAPPROT::from_bits(prot as u32).unwrap();
     let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();

@@ -8,9 +8,9 @@ use user_lib::{defs::WaitOption, execve, fork, sched_yield, waitpid};
 extern crate user_lib;
 
 // const SHELL: &str = "busybox_Titanix\0";
-const SHELL: &str = "busybox\0";
+// const SHELL: &str = "busybox\0";
 // const SHELL: &str = "busybox_rebuild\0";
-// const SHELL: &str = "arona_shell\0";
+const SHELL: &str = "arona_shell\0";
 
 #[no_mangle]
 fn main() -> i32 {
@@ -24,10 +24,10 @@ fn main() -> i32 {
             let mut exit_code: i32 = 0;
             match waitpid(-1, &mut exit_code, WaitOption::empty()) {
                 Err(erron) => {
-                    // print!("[initproc] waitpid error: {:?}\n", erron);
-                    panic!("[initproc] waitpid error: {:?}\n", erron)
-                    // sched_yield().unwrap();
-                    // continue;
+                    // panic!("[initproc] waitpid error: {:?}\n", erron)
+                    print!("[initproc] waitpid error: {:?}\n", erron);
+                    sched_yield().unwrap();
+                    continue;
                 }
                 Ok(pid) => {
                     println!(

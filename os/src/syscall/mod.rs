@@ -61,6 +61,9 @@ const SYS_GETTIMEOFDAY: usize = 169;
 const SYS_NANOSLEEP: usize = 101;
 
 const SYS_SET_TID_ADDRESS: usize = 96;
+const SYS_GETUID: usize = 174;
+const SYS_IOCTL: usize = 29;
+const SYS_EXIT_GROUP: usize = 94;
 
 mod fs;
 mod mm;
@@ -117,6 +120,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
 
         SYS_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *const usize),
+        SYS_GETUID => sys_getuid(),
+        SYS_IOCTL => sys_ioctl(),
+        SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
         _ => unsupported(syscall_id),
     }
 }

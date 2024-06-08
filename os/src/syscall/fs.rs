@@ -2,7 +2,7 @@
 
 use core::ptr;
 
-use log::trace;
+use log::{trace, warn};
 
 use crate::config::SyscallRet;
 use crate::fs::inode::InodeMode;
@@ -124,6 +124,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 /// fake
 pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
     trace!("[sys_fstat] enter");
+    warn!("[sys_fstat] not implemented");
     let stat = Kstat {
         st_dev: 0,
         st_ino: 0,
@@ -151,6 +152,7 @@ pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
 /// fake
 pub fn sys_getdents64(_fd: usize, buf: *const u8, len: usize) -> SyscallRet {
     trace!("[sys_getdents64] enter");
+    warn!("[sys_getdents64] not implemented");
     let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
     let dent = "12345678123456781211";
     slice[..20].copy_from_slice(dent.as_bytes());
@@ -195,6 +197,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize) -> SyscallRet {
 
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet {
     trace!("[sys_unlinkat] enter");
+    warn!("[sys_unlinkat] not fully implemented");
     let path = Path::from(c_str_to_string(pathname));
     match open_inode(dirfd, &path, OpenFlags::empty()) {
         Ok(inode) => {
@@ -229,13 +232,21 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     }
     Ok(0)
 }
-/// fake
+
 pub fn sys_mount() -> SyscallRet {
     trace!("[sys_mount] enter");
+    warn!("[sys_mount] not implemented");
     Ok(0)
 }
-/// fake
+
 pub fn sys_umount2() -> SyscallRet {
     trace!("[sys_umount2] enter");
+    warn!("[sys_umount2] not implemented");
+    Ok(0)
+}
+
+pub fn sys_ioctl() -> SyscallRet {
+    trace!("[sys_ioctl] enter");
+    warn!("[sys_ioctl] not implemented");
     Ok(0)
 }
