@@ -28,6 +28,7 @@ pub async fn sys_yield() -> SyscallRet {
 
 /// Todo!: manage Sum register
 pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
+    trace!("[sys_get_time] enter");
     let time_val_ptr = time_val_ptr as *mut TimeVal;
     let current_time_ms = get_time_ms();
     let time_val = TimeVal {
@@ -42,6 +43,7 @@ pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
 }
 
 pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
+    trace!("[sys_nanosleep] enter");
     let sleep_ms = {
         let time_val_ptr = time_val_ptr as *const TimeSpec;
         let time_val = unsafe { &(*time_val_ptr) };
@@ -51,11 +53,13 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
 }
 
 pub fn sys_getpid() -> SyscallRet {
+    trace!("[sys_getpid] enter");
     Ok(current_task().unwrap().pid.0)
 }
 
 /// fake
 pub fn sys_getppid() -> SyscallRet {
+    trace!("[sys_getppid] enter");
     let parent_task = current_task().unwrap().inner_lock().parent.clone();
     match parent_task {
         None => Ok(INITPROC.pid.0),
@@ -203,7 +207,7 @@ impl Future for WaitFuture {
             return Poll::Ready(Err(1));
         }
 
-        if let Some((idx, child)) = inner
+        if let Some((idx, _child)) = inner
             .children
             .iter()
             .enumerate()
@@ -234,6 +238,7 @@ impl Future for WaitFuture {
 }
 
 pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
+    trace!("[sys_getcwd] enter");
     // let token = current_user_token();
     let task = current_task().unwrap();
     let cwd = task.inner_handler(|inner| inner.cwd.to_string());
@@ -348,6 +353,7 @@ bitflags! {
 /// fake
 pub fn sys_set_tid_address(_tidptr: *const usize) -> SyscallRet {
     trace!("[sys_set_tid_address] enter");
+    info!("[sys_set_tid_address] tidptr: {:?}", _tidptr);
     let task = current_task().unwrap();
     Ok(task.getpid())
 }

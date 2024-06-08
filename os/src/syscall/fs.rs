@@ -123,6 +123,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 
 /// fake
 pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
+    trace!("[sys_fstat] enter");
     let stat = Kstat {
         st_dev: 0,
         st_ino: 0,
@@ -149,6 +150,7 @@ pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
 
 /// fake
 pub fn sys_getdents64(_fd: usize, buf: *const u8, len: usize) -> SyscallRet {
+    trace!("[sys_getdents64] enter");
     let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
     let dent = "12345678123456781211";
     slice[..20].copy_from_slice(dent.as_bytes());
@@ -156,6 +158,7 @@ pub fn sys_getdents64(_fd: usize, buf: *const u8, len: usize) -> SyscallRet {
 }
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
+    trace!("[sys_dup] enter");
     let task = current_task().unwrap();
     task.inner_handler(|inner| {
         if inner.fd_table.len() <= fd {
@@ -173,6 +176,7 @@ pub fn sys_dup(fd: usize) -> SyscallRet {
 }
 
 pub fn sys_dup3(oldfd: usize, newfd: usize) -> SyscallRet {
+    trace!("[sys_dup3] enter");
     let task = current_task().unwrap();
     task.inner_handler(|inner| {
         if inner.fd_table.len() <= oldfd {
@@ -190,6 +194,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize) -> SyscallRet {
 }
 
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet {
+    trace!("[sys_unlinkat] enter");
     let path = Path::from(c_str_to_string(pathname));
     match open_inode(dirfd, &path, OpenFlags::empty()) {
         Ok(inode) => {
@@ -206,6 +211,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet
 }
 
 pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
+    trace!("[sys_pipe2] enter");
     let task = current_task().unwrap();
     let pipe_pair = Pipe::new_pair();
     let fdret = task.inner_handler(|inner| {
@@ -225,9 +231,11 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
 }
 /// fake
 pub fn sys_mount() -> SyscallRet {
+    trace!("[sys_mount] enter");
     Ok(0)
 }
 /// fake
 pub fn sys_umount2() -> SyscallRet {
+    trace!("[sys_umount2] enter");
     Ok(0)
 }

@@ -1,12 +1,15 @@
 #![no_std]
 #![no_main]
 
+#[allow(unused)]
 use user_lib::{defs::WaitOption, execve, fork, sched_yield, waitpid};
 
 #[macro_use]
 extern crate user_lib;
 
+// const SHELL: &str = "busybox_Titanix\0";
 const SHELL: &str = "busybox\0";
+// const SHELL: &str = "busybox_rebuild\0";
 // const SHELL: &str = "arona_shell\0";
 
 #[no_mangle]

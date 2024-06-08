@@ -6,11 +6,9 @@ use core::{
 };
 
 use alloc::sync::Arc;
-use log::warn;
 
 use crate::{
     executor,
-    task::current_task,
     trap::{trap_handler, trap_return},
 };
 
@@ -123,10 +121,10 @@ pub async fn thread_loop(task: Arc<TaskControlBlock>) {
         trap_handler().await;
         // debug!("thread_loop(): back from trap_handler");
         if task.is_zombie() {
-            warn!(
-                "process terminated, pid = {}",
-                current_task().unwrap().getpid()
-            );
+            // info!(
+            //     "process terminated, pid = {}",
+            //     current_task().unwrap().getpid()
+            // );
             // #[cfg(feature = "submit")]
             // if current_task().unwrap().getpid() == 0 {
             //     crate::sbi::shutdown(false);
