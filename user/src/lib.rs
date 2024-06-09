@@ -15,7 +15,7 @@ extern crate bitflags;
 
 use core::{ptr::null, slice};
 
-use alloc::{string::String, vec::Vec, vec};
+use alloc::{string::{String, ToString}, vec::Vec, vec};
 use buddy_system_allocator::LockedHeap;
 use defs::*;
 use syscall::*;
@@ -48,6 +48,10 @@ fn main() -> i32 {
     panic!("Cannot find main!");
 }
 
+fn to_c_string(s: &str) -> String {
+    s.to_string() + "\0"
+}
+
 #[derive(Debug, Clone)]
 pub struct File {
     fd: i32,
@@ -63,7 +67,7 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A NULL-TERMINATED string slice that holds the path of the file to be opened, can either be absolute or relative to cwd
+    /// * `path` - A string slice that holds the path of the file to be opened, can either be absolute or relative to cwd
     /// * `flags` - See [`OpenFlags`]
     /// 
     /// # Returns
@@ -74,7 +78,7 @@ impl File {
     /// 
     /// on error, return POSIX errno
     pub fn open(path: &str, flags: OpenFlags) -> SyscallResult<File> {
-        match sys_openat(AT_FDCWD, path, flags, 0) {
+        match sys_openat(AT_FDCWD, &to_c_string(path), flags, 0) {
             ret if ret >= 0 => Ok(File { fd: ret as i32 }),
             ret => Err(ret.into()),
         }
@@ -84,7 +88,7 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A NULL-TERMINATED string slice that holds the path of the file to be opened, can either be absolute or relative to this file descriptor
+    /// * `path` - A string slice that holds the path of the file to be opened, can either be absolute or relative to this file descriptor
     /// * `flags` - See [`OpenFlags`]
     /// 
     /// # Returns
@@ -95,7 +99,7 @@ impl File {
     /// 
     /// on error, return POSIX errno
     pub fn open_at(&self, path: &str, flags: OpenFlags) -> SyscallResult<File> {
-        match sys_openat(self.fd, path, flags, 0) {
+        match sys_openat(self.fd, &to_c_string(path), flags, 0) {
             ret if ret >= 0 => Ok(File { fd: ret as i32 }),
             ret => Err(ret.into()),
         }
@@ -178,14 +182,14 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A NULL-TERMINATED string slice that holds the path of the file or directory to be removed, can either be absolute or relative to this file descriptor
+    /// * `path` - A string slice that holds the path of the file or directory to be removed, can either be absolute or relative to this file descriptor
     /// 
     /// # Errors
     /// 
     /// on error, return POSIX errno
     pub fn unlink_at(&self, path: &str) -> SyscallResult<()> {
-        match sys_unlinkat(self.fd, path, AT_REMOVEDIR) {
-            ret if ret > 0 => Ok(()),
+        match sys_unlinkat(self.fd, &to_c_string(path), AT_REMOVEDIR) {
+            ret if ret >= 0 => Ok(()),
             ret => Err(ret.into()),
         }
     }
@@ -194,14 +198,14 @@ impl File {
     /// 
     /// # Arguments
     /// 
-    /// * `path` - A NULL-TERMINATED string slice that holds the path of the directory to be created, can either be absolute or relative to this file descriptor
+    /// * `path` - A string slice that holds the path of the directory to be created, can either be absolute or relative to this file descriptor
     /// 
     /// # Errors
     /// 
     /// on error, return POSIX errno
     pub fn mkdir_at(&self, path: &str) -> SyscallResult<()> {
-        match sys_mkdirat(self.fd, path, 0) {
-            ret if ret > 0 => Ok(()),
+        match sys_mkdirat(self.fd, &to_c_string(path), 0) {
+            ret if ret >= 0 => Ok(()),
             ret => Err(ret.into()),
         }
     }
@@ -232,14 +236,14 @@ pub fn getcwd() -> SyscallResult<String> {
 ///
 /// # Arguments
 ///
-/// * `path` - A NULL-TERMINATED string slice that holds the path of the directory to change to.
+/// * `path` - A string slice that holds the path of the directory to change to.
 ///
 /// # Errors
 ///
 /// on error, return POSIX errno
 pub fn chdir(path: &str) -> SyscallResult<()> {
-    match sys_chdir(path) {
-        ret if ret > 0 => Ok(()),
+    match sys_chdir(&to_c_string(path)) {
+        ret if ret >= 0 => Ok(()),
         ret => Err(ret.into()),
     }
 }
@@ -248,14 +252,14 @@ pub fn chdir(path: &str) -> SyscallResult<()> {
 ///
 /// # Arguments
 ///
-/// * `path` - A NULL-TERMINATED string slice that holds the path of the file or directory to be removed.
+/// * `path` - A string slice that holds the path of the file or directory to be removed.
 ///
 /// # Errors
 ///
 /// on error, return POSIX errno
 pub fn unlink(path: &str) -> SyscallResult<()> {
-    match sys_unlinkat(AT_FDCWD, path, AT_REMOVEDIR) {
-        ret if ret > 0 => Ok(()),
+    match sys_unlinkat(AT_FDCWD, &to_c_string(path), AT_REMOVEDIR) {
+        ret if ret >= 0 => Ok(()),
         ret => Err(ret.into()),
     }
 }
@@ -264,14 +268,14 @@ pub fn unlink(path: &str) -> SyscallResult<()> {
 ///
 /// # Arguments
 ///
-/// * `path` - A NULL-TERMINATED string slice that holds the path of the directory to be created.
+/// * `path` - A string slice that holds the path of the directory to be created.
 ///
 /// # Errors
 ///
 /// on error, return POSIX errno
 pub fn mkdir(path: &str) -> SyscallResult<()> {
-    match sys_mkdirat(AT_FDCWD, path, 0) {
-        ret if ret > 0 => Ok(()),
+    match sys_mkdirat(AT_FDCWD, &to_c_string(path), 0) {
+        ret if ret >= 0 => Ok(()),
         ret => Err(ret.into()),
     }
 }
@@ -292,7 +296,7 @@ pub fn mkdir(path: &str) -> SyscallResult<()> {
 /// on error, return POSIX errno
 pub fn clone(flags: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid: usize) -> SyscallResult<()> {
     match sys_clone(flags, stack, ptid, tls, ctid) {
-        ret if ret > 0 => Ok(()),
+        ret if ret >= 0 => Ok(()),
         ret => Err(ret.into()),
     }
 }
@@ -308,20 +312,22 @@ pub fn fork() -> SyscallResult<u32> {
 ///
 /// # Arguments
 ///
-/// * `path` - A NULL-TERMINATED string slice that holds the path of the new program.
-/// * `argv` - An array of string slices that represent the argument list to the new program. TRAILING NULL IS NOT NEEDED.
-/// * `envp` - An array of string slices that represent the environment for the new program. TRAILING NULL IS NOT NEEDED.
+/// * `path` - A string slice that holds the path of the new program.
+/// * `argv` - An array of string slices that represent the argument list to the new program.
+/// * `envp` - An array of string slices that represent the environment for the new program.
 ///
 /// # Errors
 ///
 /// on error, return POSIX errno
 pub fn execve(path: &str, argv: &[&str], envp: &[&str]) -> SyscallResult<()> {
+    let argv: Vec<String> = argv.iter().map(|s| to_c_string(s)).collect();
     let mut argv: Vec<*const u8> = argv.iter().map(|s| s.as_ptr() as *const u8).collect();
     argv.push(null());
+    let envp: Vec<String> = envp.iter().map(|s| to_c_string(s)).collect();
     let mut envp: Vec<*const u8> = envp.iter().map(|s| s.as_ptr() as *const u8).collect();
     envp.push(null());
-    match sys_execve(path, &argv, &envp) {
-        ret if ret > 0 => Ok(()),
+    match sys_execve(&to_c_string(path), &argv, &envp) {
+        ret if ret >= 0 => Ok(()),
         ret => Err(ret.into()),
     }
 }
@@ -339,7 +345,7 @@ pub fn execve(path: &str, argv: &[&str], envp: &[&str]) -> SyscallResult<()> {
 /// on error, return POSIX errno
 pub fn waitpid(pid: i32, exit_code: &mut i32, options: WaitOption) -> SyscallResult<usize> {
     match sys_wait4(pid as isize, exit_code, options) {
-        ret if ret > 0 => Ok(ret as usize),
+        ret if ret >= 0 => Ok(ret as usize),
         ret => Err(ret.into()),
     }
 }
@@ -444,13 +450,13 @@ pub fn munmap(region: &[u8]) -> SyscallResult<()> {
 /// 
 /// # Returns
 /// 
-/// A [`TimeSpec`] struct that holds the current time
+/// A [`TimeVal`] struct that holds the current time
 /// 
 /// # Errors
 /// 
 /// on error, return POSIX errno
-pub fn gettime() -> SyscallResult<TimeSpec> {
-    let mut time = TimeSpec { sec: 0, nsec: 0 };
+pub fn gettime() -> SyscallResult<TimeVal> {
+    let mut time = TimeVal { sec: 0, usec: 0 };
     match sys_gettimeofday(&mut time) {
         ret if ret >= 0 => Ok(time),
         ret => Err(ret.into()),
