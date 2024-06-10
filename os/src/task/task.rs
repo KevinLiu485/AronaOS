@@ -48,16 +48,25 @@ impl TaskControlBlockInner {
     pub fn get_status(&self) -> TaskStatus {
         self.task_status
     }
-    pub fn alloc_fd(&mut self) -> usize {
-        if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-            fd
+
+    /// alloc lowest-numbered available fd greater than or equal to least_fd
+    pub fn alloc_fd(&mut self, least_fd: usize) -> usize {
+        if least_fd < self.fd_table.len() {
+            if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
+                fd
+            } else {
+                self.fd_table.push(None);
+                self.fd_table.len() - 1
+            }
         } else {
-            self.fd_table.push(None);
-            self.fd_table.len() - 1
+            self.reserve_fd(least_fd);
+            self.fd_table[least_fd] = None;
+            least_fd
         }
     }
     pub fn reserve_fd(&mut self, fd: usize) {
-        if fd >= self.fd_table.len() {
+        // len is at least (fd + 1)
+        if fd + 1 > self.fd_table.len() {
             self.fd_table.resize(fd + 1, None);
         }
     }

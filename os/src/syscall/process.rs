@@ -371,3 +371,15 @@ pub fn sys_exit_group(exit_code: i32) -> SyscallRet {
     exit_current(exit_code);
     Ok(0)
 }
+
+pub fn sys_sigaction() -> SyscallRet {
+    trace!("[sys_sigaction] enter");
+    warn!("[sys_sigaction] not implemented");
+    Ok(0)
+}
+
+pub fn sys_sigprocmask() -> SyscallRet {
+    trace!("[sys_sigprocmask] enter");
+    warn!("[sys_sigprocmask] not implemented");
+    Ok(0)
+}

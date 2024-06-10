@@ -6,6 +6,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;
 use crate::task::aux::*;
+use crate::MMAP_MIN_ADDR;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -58,6 +59,10 @@ pub struct MemorySet {
     /// Option是因为Kernel没有, from_global是不分配heap
     pub heap: Option<MapArea>,
     pub brk: usize,
+    /// we take a simple but powerful strategy to manage mmap
+    /// mmap starts from [`MMAP_MIN_ADDR`], only increases, never decreases
+    /// in this way, no memory waste, no conflict, only [`MMAPFLAGS::MAP_FIXED`] cannot be supported
+    pub mmap_start: usize,
 }
 
 impl MemorySet {
@@ -68,6 +73,7 @@ impl MemorySet {
             areas: Vec::new(),
             heap: None,
             brk: 0,
+            mmap_start: MMAP_MIN_ADDR,
         }
     }
     /// Create a user `MemorySet` that owns the global kernel mapping
@@ -79,6 +85,7 @@ impl MemorySet {
             heap: None,
             // user的brk在from_elf和from_existed_user中设置
             brk: 0,
+            mmap_start: MMAP_MIN_ADDR,
         }
     }
     ///Get pagetable `root_ppn`
@@ -114,25 +121,37 @@ impl MemorySet {
         }
     }
     /// especially used for sys_mmap
+    /// no conflict will happen, because mmap_start is monotonically increasing
     pub fn get_unmapped_area(&self, start: usize, len: usize) -> VPNRange {
-        // fisrt, use start as a hint
         let end = start + len;
         let start_vpn = VirtAddr::from(start).floor();
         let end_vpn = VirtAddr::from(end).ceil();
-        let range = VPNRange::new(start_vpn, end_vpn);
-        if !self.check_vpn_range_conflict(range) {
-            return range;
-        } else {
-            // second, find a gap between prev_area and cur_area that is large enough
-            panic!("unimplemented!")
-        }
+        debug!(
+            "[MemorySet::get_unmapped_area] mapping [{:?}, {:?})",
+            {
+                let start_va: VirtAddr = start_vpn.into();
+                start_va
+            },
+            {
+                let end_va: VirtAddr = end_vpn.into();
+                end_va
+            }
+        );
+        VPNRange::new(start_vpn, end_vpn)
+        // if !self.check_vpn_range_conflict(range) {
+        //     return range;
+        // } else {
+        //     info!("[MemorySet::get_unmapped_area] conflict with existed areas, another area is chosen.");
+
+        //     panic!("[MemorySet::get_unmapped_area] unimplemented!")
+        // }
     }
     /// especially used for sys_mmap, pretty **slow**
-    fn check_vpn_range_conflict(&self, range: VPNRange) -> bool {
-        self.areas
-            .iter()
-            .any(|area| area.vpn_range.is_overlap(range))
-    }
+    // fn check_vpn_range_conflict(&self, range: VPNRange) -> bool {
+    //     self.areas
+    //         .iter()
+    //         .any(|area| area.vpn_range.is_overlap(range))
+    // }
     /// map_offset says data's offset in the first page
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>, map_offset: usize) {
         map_area.map(&mut self.page_table);

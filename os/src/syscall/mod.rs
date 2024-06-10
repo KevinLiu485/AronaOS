@@ -64,6 +64,9 @@ const SYS_SET_TID_ADDRESS: usize = 96;
 const SYS_GETUID: usize = 174;
 const SYS_IOCTL: usize = 29;
 const SYS_EXIT_GROUP: usize = 94;
+const SYS_SIGACTION: usize = 134;
+const SYS_SIGPROCMASK: usize = 135;
+const SYS_FCNTL: usize = 25;
 
 mod fs;
 mod mm;
@@ -123,6 +126,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_GETUID => sys_getuid(),
         SYS_IOCTL => sys_ioctl(),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
+        SYS_SIGACTION => sys_sigaction(),
+        SYS_SIGPROCMASK => sys_sigprocmask(),
+        SYS_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2]),
         _ => unsupported(syscall_id),
     }
 }

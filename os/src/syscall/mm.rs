@@ -25,7 +25,7 @@ pub fn sys_brk(brk: usize) -> SyscallRet {
     let start = heap_area.vpn_range.get_start();
     let end = heap_area.vpn_range.get_end();
     current_memory_set.brk = brk;
-    debug!("brk: {:x}", brk);
+    // debug!("brk: {:x}", brk);
     let new_end = VirtAddr::from(brk).ceil();
     // 页内偏移, 不用分配新页
     if new_end == end {
@@ -66,22 +66,28 @@ pub async fn sys_mmap(
     let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
     let task = current_task().unwrap();
     trace!(
-        "[sys_mmap] start: {:x}, len: {:x}, fd: {}, offset: {:x}",
+        "[sys_mmap] start: {:x}, len: {:x}, fd: {}, offset: {:x}, flags: {:?}",
         start,
         len,
         fd,
-        offset
+        offset,
+        flags
     );
     if len == 0 {
         return Err(SyscallErr::EINVAL.into());
     }
+    if flags.contains(MMAPFLAGS::MAP_FIXED) {
+        unimplemented!("[sys_mmap] MAP_FIXED")
+    }
     // mmap区域最低地址为MMAP_MIN_ADDR
-    let mut start: usize = start.max(MMAP_MIN_ADDR);
+    // let mut start: usize = start.max(MMAP_MIN_ADDR);
+    let mut start = task.inner_handler(|inner| inner.memory_set.mmap_start);
     let mut permission = prot.into();
     // 注意加上U权限
     permission |= MapPermission::U;
     // 匿名映射
     if flags.contains(MMAPFLAGS::MAP_ANONYMOUS) {
+        debug!("[sys_mmap] anonymous mmap");
         //需要fd为-1, offset为0
         if fd != -1 || offset != 0 {
             return Err(SyscallErr::EINVAL.into());
@@ -90,9 +96,13 @@ pub async fn sys_mmap(
         task.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
+
+        let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
+        task.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
         return Ok(start);
     } else {
+        debug!("[sys_mmap] file mmap");
         // 文件映射
         // 需要offset为page aligned
         if offset % PAGE_SIZE != 0 {

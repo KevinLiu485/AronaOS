@@ -3,6 +3,8 @@
 
 use core::arch::asm;
 
+use crate::task::current_task;
+
 // EID, FID
 const SBI_HART_START: (usize, usize) = (0x48534d, 0);
 const SBI_HART_STOP: (usize, usize) = (0x48534d, 1);
@@ -22,6 +24,7 @@ const SBI_SHUTDOWN: (usize, usize) = (8, 0);
 /// general sbi call
 #[inline(always)]
 fn sbi_call(eid_fid: (usize, usize), arg0: usize, arg1: usize, arg2: usize) -> usize {
+    current_task()
     let mut ret;
     unsafe {
         asm!(

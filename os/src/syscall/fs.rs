@@ -2,6 +2,7 @@
 
 use core::ptr;
 
+use alloc::task;
 use log::{trace, warn};
 
 use crate::config::SyscallRet;
@@ -80,7 +81,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
     let path = Path::from(c_str_to_string(pathname));
     if let Ok(inode) = open_file(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_lock();
-        let fd = inner.alloc_fd();
+        let fd = inner.alloc_fd(0);
         inner.fd_table[fd] = Some(inode);
         trace!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
@@ -169,7 +170,7 @@ pub fn sys_dup(fd: usize) -> SyscallRet {
         inner.fd_table[fd]
             .clone()
             .map(|file| {
-                let new_fd = inner.alloc_fd();
+                let new_fd = inner.alloc_fd(0);
                 inner.fd_table[new_fd] = Some(file);
                 Ok(new_fd)
             })
@@ -218,9 +219,9 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     let task = current_task().unwrap();
     let pipe_pair = Pipe::new_pair();
     let fdret = task.inner_handler(|inner| {
-        let fd1 = inner.alloc_fd();
+        let fd1 = inner.alloc_fd(0);
         inner.fd_table[fd1] = Some(pipe_pair.0.clone());
-        let fd2 = inner.alloc_fd();
+        let fd2 = inner.alloc_fd(0);
         inner.fd_table[fd2] = Some(pipe_pair.1.clone());
         (fd1, fd2)
     });
@@ -248,5 +249,44 @@ pub fn sys_umount2() -> SyscallRet {
 pub fn sys_ioctl() -> SyscallRet {
     trace!("[sys_ioctl] enter");
     warn!("[sys_ioctl] not implemented");
+    Ok(0)
+}
+
+bitflags! {
+    pub struct FcntlFlags: u32 {
+        const FD_CLOEXEC = 1;
+        const AT_EMPTY_PATH = 1 << 0;
+        const AT_SYMLINK_NOFOLLOW = 1 << 8;
+        const AT_EACCESS = 1 << 9;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_DUMMY = 1 << 12;
+    }
+}
+
+const F_DUPFD: i32 = 0;
+const F_DUPFD_CLOEXEC: i32 = 1030;
+const F_GETFD: i32 = 1;
+const F_SETFD: i32 = 2;
+const F_GETFL: i32 = 3;
+const F_SETFL: i32 = 4;
+
+pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
+    trace!("[sys_fcntl] enter. fd: {}, cmd: {}, arg: {}", fd, cmd, arg);
+    match cmd {
+        F_DUPFD => {
+            let least_fd = arg;
+            let task = current_task().unwrap();
+            return Ok(task.inner_handler(|inner| {
+                inner.alloc_fd(least_fd)
+            });)
+        };
+        F_DUPFD_CLOEXEC => {}
+        F_GETFD => {}
+        F_SETFD => {}
+        F_GETFL => {}
+        F_SETFL => {}
+        _ => return Err(0),
+    }
+    warn!("[sys_fcntl] not implemented");
     Ok(0)
 }

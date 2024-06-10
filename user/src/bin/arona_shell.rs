@@ -229,10 +229,10 @@ pub fn main() -> i32 {
         match c {
             LF | CR => {
                 println!("");
+                TIMER.lock().start();
                 if !line.is_empty() {
                     {
                         HISTORY.lock().add(line.as_str());
-                        TIMER.lock().start();
                     }
                     parse(line.as_str());
                     line.clear();
