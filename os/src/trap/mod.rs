@@ -15,6 +15,7 @@ use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
 use alloc::sync::Arc;
+use core::arch::asm;
 use core::arch::global_asm;
 use log::{debug, error};
 use riscv::register::satp;
@@ -76,7 +77,6 @@ pub async fn trap_handler() {
             cx.x[10] = result.unwrap_or_else(|err_code| (-(err_code as isize)) as usize);
         }
         Trap::Exception(Exception::StoreFault)
-        | Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::InstructionFault)
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault) => {
@@ -92,7 +92,7 @@ pub async fn trap_handler() {
             // page fault exit code
             exit_current(-2);
         }
-        Trap::Exception(Exception::LoadPageFault) => {
+        Trap::Exception(Exception::LoadPageFault) | Trap::Exception(Exception::StorePageFault) => {
             // recoverable page fault:
             // 1. fork COW area
             // 2. lazy allocation
@@ -113,7 +113,8 @@ pub async fn trap_handler() {
                     debug!("handle cow page fault(cow), vpn {:#x}", vpn.0);
                     let current_task = current_task().unwrap();
                     let memory_set = &mut current_task.inner_lock().memory_set;
-                    for area in memory_set.areas.iter_mut() {
+                    // rev是因为一般来说, COW区域都是后续创建的(如mmap)
+                    for area in memory_set.areas.iter_mut().rev() {
                         if area.vpn_range.contains(vpn) {
                             // 根据VPN找到对应的data_frame, 并查看Arc的引用计数
                             let data_frame = area.data_frames.get(&vpn).unwrap();
@@ -137,8 +138,17 @@ pub async fn trap_handler() {
                                 *pte = PageTableEntry::new(frame.ppn, flags);
                                 // update MemorySet -> MapArea -> data_frames
                                 area.data_frames.insert(vpn, Arc::new(frame));
-                                // todo?: flush TLB
                             }
+                            // todo?: flush TLB
+                            /*
+                            unsafe {
+                                asm!(
+                                    "sfence.vma x0, x0",
+                                    options(nomem, nostack, preserves_flags)
+                                );
+                            }
+                            */
+                            break;
                         }
                     }
                 } else {

@@ -8,7 +8,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 use core::fmt::{self, Debug, Formatter};
-use log::{error, trace};
+use log::{debug, error, trace};
 use riscv::register::satp;
 
 bitflags! {
@@ -68,7 +68,7 @@ pub struct PageTableEntry {
 
 impl Debug for PageTableEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let ppn = self.bits >> 12;
+        let ppn = self.bits >> 10;
         let flags = self.flags().readable_flags();
 
         write!(f, "PTE {{ ppn: 0x{:X}, flags: {} }}", ppn, flags)
@@ -158,13 +158,13 @@ impl PageTable {
         let mut frames: Vec<FrameTracker> = Vec::new();
         let prt_root_ppn = par_pagtbl.root_ppn;
         // parent and child root page table
-        let prt_1_table = cld_root_frame.ppn.get_pte_array();
-        let cld_1_table = prt_root_ppn.get_pte_array();
+        let cld_1_table = cld_root_frame.ppn.get_pte_array();
+        let prt_1_table = prt_root_ppn.get_pte_array();
 
         // 1. Copy only kernel mapping from parent root page table
         let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
         let kernel_start_idx1 = kernel_start_vpn.indexes()[0];
-        prt_1_table[kernel_start_idx1..].copy_from_slice(&cld_1_table[kernel_start_idx1..]);
+        cld_1_table[kernel_start_idx1..].copy_from_slice(&prt_1_table[kernel_start_idx1..]);
 
         // 2. copy user mapping from parent root page table and 2nd level page table
         // todo: 考虑优化, 将level_1_idx作为常量
@@ -184,8 +184,9 @@ impl PageTable {
                 // add frame to child pagetable(是子进程独有的)
                 frames.push(frame);
 
-                for prt_2_entry in prt_2_table.iter_mut() {
+                for (idx2, prt_2_entry) in prt_2_table.iter_mut().enumerate() {
                     if prt_2_entry.is_valid() {
+                        let cld_2_pte = &mut cld_2_table[idx2];
                         let prt_3_table = prt_2_entry.ppn().get_pte_array();
                         // 3. clear PTE_W and set PTE_COW in parent 3rd level pagetable
                         for ptr_3_entry in prt_3_table.iter_mut() {
@@ -199,7 +200,7 @@ impl PageTable {
                         let cld_3_table = frame.ppn.get_pte_array();
                         cld_3_table.copy_from_slice(&prt_3_table);
                         // add mapping to child 2nd level page table
-                        *prt_2_entry = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                        *cld_2_pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
                         // add frame to child pagetable(是子进程独有的)
                         frames.push(frame);
                     }
@@ -374,11 +375,11 @@ impl PageTable {
     #[allow(unused)]
     /// dump entry only in the given page table
     pub fn dump(&self) {
-        println!("pagetable at {:?}", self.root_ppn);
+        debug!("[PageTable::dump]pagetable at {:?}", self.root_ppn);
         let pagetable = self.root_ppn.get_pte_array();
         for (index, entry) in pagetable.iter().enumerate() {
             if entry.is_valid() {
-                println!("{}: {:?}", index, entry);
+                debug!("{}: {:?}", index, entry);
             }
         }
     }

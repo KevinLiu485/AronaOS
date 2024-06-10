@@ -397,7 +397,7 @@ pub struct MapArea {
     // 数据页, 要共享
     pub data_frames: BTreeMap<VirtPageNum, Arc<FrameTracker>>,
     map_type: MapType,
-    // 在map_one时使用, 在COW不修改
+    // 在map_one时使用, 在COW时不修改
     map_perm: MapPermission,
 }
 

@@ -13,8 +13,8 @@ const SHELL: &str = "busybox\0";
 fn main() -> i32 {
     println!("[initproc] started");
     if fork().expect("[initproc] Fail to fork shell") == 0 {
-        // execve("arona_shell\0", &["arona_shell\0"], &[]).expect("[initproc] Fail to exec Arona Shell");
-        execve(SHELL, &[SHELL], &[]).expect("[initproc] Fail to exec shell");
+        execve("arona_shell\0", &["arona_shell\0"], &[]).expect("[initproc] Fail to exec Arona Shell");
+        // execve(SHELL, &[SHELL], &[]).expect("[initproc] Fail to exec shell");
         unreachable!("[initproc] execve should never return")
     } else {
         loop {
