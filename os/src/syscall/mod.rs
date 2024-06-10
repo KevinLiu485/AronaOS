@@ -68,7 +68,6 @@ mod process;
 mod util;
 
 use fs::*;
-use log::error;
 use mm::*;
 use process::*;
 pub use process::{WaitFuture, WaitOption};

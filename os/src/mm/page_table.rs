@@ -2,6 +2,7 @@
 use super::{
     frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE,
 };
+use crate::{KERNEL_DIRECT_OFFSET, USER_MAX_VA};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -11,7 +12,7 @@ use log::{error, trace};
 use riscv::register::satp;
 
 bitflags! {
-    pub struct PTEFlags: u8 {
+    pub struct PTEFlags: u16 {
         const V = 1 << 0;
         const R = 1 << 1;
         const W = 1 << 2;
@@ -20,6 +21,7 @@ bitflags! {
         const G = 1 << 5;
         const A = 1 << 6;
         const D = 1 << 7;
+        const COW = 1 << 8;
     }
 }
 
@@ -49,6 +51,9 @@ impl PTEFlags {
         if *self & PTEFlags::D != PTEFlags::empty() {
             ret.push_str("D");
         }
+        if *self & PTEFlags::COW != PTEFlags::empty() {
+            ret.push_str("C");
+        }
         ret
     }
 }
@@ -77,6 +82,16 @@ impl PageTableEntry {
             bits: ppn.0 << 10 | flags.bits as usize,
         }
     }
+    /// Create a PTE from exist PTE, but clear PTE_W and set PTE_COW
+    /// especially for COW
+    pub fn from_pte_cow(pte: PageTableEntry) -> Self {
+        let mut flags = pte.flags();
+        flags.remove(PTEFlags::W);
+        flags.insert(PTEFlags::COW);
+        PageTableEntry {
+            bits: pte.ppn().0 << 10 | flags.bits as usize,
+        }
+    }
     ///Return an empty PTE
     pub fn empty() -> Self {
         PageTableEntry { bits: 0 }
@@ -87,7 +102,8 @@ impl PageTableEntry {
     }
     ///Return 10bit flag
     pub fn flags(&self) -> PTEFlags {
-        PTEFlags::from_bits(self.bits as u8).unwrap()
+        // PTEFlags::from_bits(self.bits as u16).unwrap()
+        PTEFlags::from_bits_truncate(self.bits as u16)
     }
     ///Check PTE valid
     pub fn is_valid(&self) -> bool {
@@ -109,6 +125,10 @@ impl PageTableEntry {
     pub fn is_user(&self) -> bool {
         (self.flags() & PTEFlags::U) != PTEFlags::empty()
     }
+    /// Check PTE COW
+    pub fn is_cow(&self) -> bool {
+        (self.flags() & PTEFlags::COW) != PTEFlags::empty()
+    }
 }
 
 #[derive(Debug)]
@@ -116,17 +136,82 @@ impl PageTableEntry {
 pub struct PageTable {
     /// Todo*: pub for debug
     pub root_ppn: PhysPageNum,
+    // 三级页表都是独占的
     frames: Vec<FrameTracker>,
 }
 
 /// Assume that it won't oom when creating/mapping.
 impl PageTable {
-    /// Create an empty `PageTable`
+    /// Create an empty `PageTable`, only own its root page table
     pub fn new() -> Self {
         let frame = frame_alloc().unwrap();
         PageTable {
             root_ppn: frame.ppn,
+            // all Page-size pagetable are owned by the pagetable
             frames: vec![frame],
+        }
+    }
+    /// Create a page table from existed user space, especially for `fork`(COW)
+    pub fn from_existed_user(par_pagtbl: &PageTable) -> Self {
+        let cld_root_frame = frame_alloc().unwrap();
+        let cld_root_ppn = cld_root_frame.ppn;
+        let mut frames: Vec<FrameTracker> = Vec::new();
+        let prt_root_ppn = par_pagtbl.root_ppn;
+        // parent and child root page table
+        let prt_1_table = cld_root_frame.ppn.get_pte_array();
+        let cld_1_table = prt_root_ppn.get_pte_array();
+
+        // 1. Copy only kernel mapping from parent root page table
+        let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
+        let kernel_start_idx1 = kernel_start_vpn.indexes()[0];
+        prt_1_table[kernel_start_idx1..].copy_from_slice(&cld_1_table[kernel_start_idx1..]);
+
+        // 2. copy user mapping from parent root page table and 2nd level page table
+        // todo: 考虑优化, 将level_1_idx作为常量
+        let user_end_vpn = VirtAddr::from(USER_MAX_VA).ceil();
+        let user_end_idx1 = user_end_vpn.indexes()[0];
+        let prt_1_table_user = &prt_1_table[..user_end_idx1];
+        for (idx1, prt_1_entry) in prt_1_table_user.iter().enumerate() {
+            if prt_1_entry.is_valid() {
+                let cld_1_pte = &mut cld_1_table[idx1];
+                let frame = frame_alloc().unwrap();
+                // Copy parent's 2nd level page table
+                let prt_2_table = prt_1_entry.ppn().get_pte_array();
+                let cld_2_table = frame.ppn.get_pte_array();
+                cld_2_table.copy_from_slice(&prt_2_table);
+                // add mapping to child 1st level page table
+                *cld_1_pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                // add frame to child pagetable(是子进程独有的)
+                frames.push(frame);
+
+                for prt_2_entry in prt_2_table.iter_mut() {
+                    if prt_2_entry.is_valid() {
+                        let prt_3_table = prt_2_entry.ppn().get_pte_array();
+                        // 3. clear PTE_W and set PTE_COW in parent 3rd level pagetable
+                        for ptr_3_entry in prt_3_table.iter_mut() {
+                            if ptr_3_entry.writable() {
+                                // todo: 优化 modify in place
+                                *ptr_3_entry = PageTableEntry::from_pte_cow(*ptr_3_entry);
+                            }
+                        }
+                        // 4. copy parent's 3rd level page table
+                        let frame = frame_alloc().unwrap();
+                        let cld_3_table = frame.ppn.get_pte_array();
+                        cld_3_table.copy_from_slice(&prt_3_table);
+                        // add mapping to child 2nd level page table
+                        *prt_2_entry = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                        // add frame to child pagetable(是子进程独有的)
+                        frames.push(frame);
+                    }
+                }
+            }
+        }
+
+        frames.push(cld_root_frame);
+        // 子进程的页表拥有自己的所有三级页表
+        PageTable {
+            root_ppn: cld_root_ppn,
+            frames,
         }
     }
 
@@ -135,19 +220,17 @@ impl PageTable {
         let frame = frame_alloc().unwrap();
         let global_root_ppn = KERNEL_SPACE.lock().page_table.root_ppn;
 
-        // Map kernel space
-        // deep copy before page_fault handler implementation(Note that we just need shallow copy here)
-
-        // Todo*:优化, 先整个进行copy
-        //let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
-        //let level_1_index = kernel_start_vpn.indexes()[0];
-        let level_1_index = 0;
+        // Map kernel space, just need shallow copy
+        // only copy the kernel mapping
+        let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
+        let level_1_index = kernel_start_vpn.indexes()[0];
 
         // Copy from root page table
         let dst_1_table = &mut frame.ppn.get_pte_array()[level_1_index..];
         let src_1_table = global_root_ppn.get_pte_array();
         dst_1_table.copy_from_slice(&src_1_table[level_1_index..]);
 
+        /*
         // Copy valid entries in level 1 table
         for (level_1_entry_index, entry) in dst_1_table.iter_mut().enumerate() {
             if entry.is_valid() {
@@ -167,7 +250,7 @@ impl PageTable {
                 }
             }
         }
-
+        */
         // the new pagetable only owns the ownership of its own root ppn
         PageTable {
             root_ppn: frame.ppn,

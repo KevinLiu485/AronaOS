@@ -358,7 +358,13 @@ where
 pub type VPNRange = SimpleRange<VirtPageNum>;
 
 impl VPNRange {
+    /// check whether the given range is overlap with self
     pub fn is_overlap(self, other: VPNRange) -> bool {
         self.get_start() < other.get_end() && self.get_end() > other.get_start()
+    }
+    /// check whether the given virtual page number is in self
+    /// used for page fault handler
+    pub fn contains(self, other: VirtPageNum) -> bool {
+        self.get_start() <= other && other < self.get_end()
     }
 }

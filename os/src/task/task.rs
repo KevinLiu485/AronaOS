@@ -155,6 +155,8 @@ impl TaskControlBlock {
         let mut parent_inner = self.inner_lock();
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        // COW
+        // let memory_set = MemorySet::from_existed_user_lazily(&parent_inner.memory_set);
 
         //still parent's user space, not child
         parent_inner.memory_set.activate();
