@@ -164,7 +164,7 @@ bitflags! {
 }
 
 pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> SyscallRet {
-    trace!("[sys_wait4] enter");
+    trace!("[sys_wait4] enter. waiting for pid: {}", );
     let options = WaitOption::from_bits(options).unwrap();
     WaitFuture::new(options, pid, exit_code_ptr).await
 }

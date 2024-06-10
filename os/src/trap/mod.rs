@@ -121,6 +121,7 @@ pub async fn trap_handler() {
                             if Arc::strong_count(data_frame) == 1 {
                                 // 直接修改pte
                                 // clear COW bit and set valid bit
+                                debug!("ref_cnt = 1");
                                 let mut flags = pte.flags();
                                 flags.remove(PTEFlags::COW);
                                 flags.insert(PTEFlags::W);

@@ -12,6 +12,7 @@ user/build
 user/target/*
 
 fs-img-src/fs.img
+fs-img-src/sdcard-pre.img
 tmp
 utils
 

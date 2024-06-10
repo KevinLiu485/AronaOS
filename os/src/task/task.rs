@@ -156,7 +156,7 @@ impl TaskControlBlock {
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_lock();
         // copy user space(include trap context)
-        // let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        //let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
         let memory_set = MemorySet::from_existed_user_lazily(&parent_inner.memory_set);
         info!(
             "[TCB::fork] parent pagtbl: {:x}, child pagtbl: {:x}",
