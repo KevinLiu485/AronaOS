@@ -3,41 +3,41 @@
 # busybox testcode syscalls
 busybox testcode 实际调用的系统调用列表，少于busybox使用的系统调用。
 <!-- brk -->
- - clock_gettime
+ - clock_gettime 133
 <!-- close -->
 <!-- dup3 -->
 <!-- execve -->
- - faccessat
- - fcntl
- - fstat
+ - faccessat 48
+ - fcntl 25
+ - fstat 80
 <!-- getcwd -->
- - getdents64
+ - getdents64 61
 <!-- getpid -->
 <!-- getppid -->
- - getuid
- - ioctl
- - kill
- - lseek
+ <!-- - getuid 174 -->
+ <!-- - ioctl 29 -->
+ - kill 129
+ - lseek 62
 <!-- mkdirat -->
 <!-- mmap -->
- - mprotect
+ - mprotect 226
 <!-- munmap -->
 <!-- nanosleep -->
- - newfstatat
+ - newfstatat 79
 <!-- openat -->
 <!-- read -->
- - readv
- - renameat2
- - rt_sigaction
- - rt_sigprocmask
- - sendfile
- - set_tid_address
- - statfs
- - sysinfo
- - syslog
+ - readv 65
+ - renameat2 276
+ - rt_sigaction 134
+ - rt_sigprocmask 135
+ - sendfile 71
+ - set_tid_address 96
+ - statfs 43
+ - sysinfo 179
+ - syslog 116
 <!-- uname -->
 <!-- unlinkat -->
- - utimensat
+ - utimensat 88
 <!-- write -->
- - writev
+ - writev 66
 

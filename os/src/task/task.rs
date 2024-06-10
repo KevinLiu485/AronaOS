@@ -1,4 +1,5 @@
 //!Implementation of [`TaskControlBlock`]
+use super::aux::*;
 use super::{pid_alloc, PidHandle};
 use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
@@ -86,7 +87,7 @@ impl TaskControlBlock {
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let (memory_set, user_sp, entry_point, _) = MemorySet::from_elf(elf_data);
         // println!("  entry_point: {}", entry_point);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
@@ -129,9 +130,9 @@ impl TaskControlBlock {
         // );
         task_control_block
     }
-    pub fn exec(&self, elf_data: &[u8], _args_vec: Vec<String>, _envs_vec: Vec<String>) {
+    pub fn exec(&self, elf_data: &[u8], args_vec: Vec<String>, envs_vec: Vec<String>) {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let (memory_set, user_sp, entry_point, aux_vec) = MemorySet::from_elf(elf_data);
         // activate user space
         memory_set.activate();
 
@@ -142,8 +143,26 @@ impl TaskControlBlock {
             memory_set.token()
         );
 
+        let (argv_base, envp_base, auxv_base, user_sp) =
+            pass_init_vec(&args_vec, &envs_vec, aux_vec, user_sp);
+
         let kernel_satp = KERNEL_SPACE.lock().token();
-        let trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
+        let mut trap_cx = TrapContext::app_init_context(entry_point, user_sp, kernel_satp);
+        // trap_cx.user_x[10] = user_sp;
+        // a0 -> argc, a1 -> argv, a2 -> envp
+        trap_cx.x[10] = args_vec.len();
+        trap_cx.x[11] = argv_base;
+        trap_cx.x[12] = envp_base;
+        trap_cx.x[13] = auxv_base;
+        info!(
+            "[TCB::exec] a0(argc) {:#x}, a1(argv) {:#x}, a2(envp) {:#x} a3(auxv) {:#x} sp {:#x}",
+            args_vec.len(),
+            argv_base,
+            envp_base,
+            auxv_base,
+            trap_cx.x[2],
+        );
+
         // **** access current TCB exclusively
         let mut inner = self.inner_lock();
         // substitute memory_set
@@ -231,4 +250,135 @@ pub enum TaskStatus {
     Ready,
     Running,
     Zombie,
+}
+
+/// pass `Process Initial Vector`(i.e. argv, envp, auxv + argc) to user space, at the top of the user stack, above user sp.
+/// returns changed user_sp
+fn pass_init_vec(
+    args_vec: &Vec<String>,
+    envs_vec: &Vec<String>,
+    mut auxs_vec: Vec<AuxHeader>,
+    mut user_sp: usize,
+) -> (usize, usize, usize, usize) {
+    // argv is a vector of each arg's addr
+    let mut argv = vec![0; args_vec.len()];
+    // envp is a vector of each env's addr
+    let mut envp = vec![0; envs_vec.len()];
+
+    // Copy each env to the newly allocated stack
+    for i in 0..envs_vec.len() {
+        // Here we leave one byte to store a '\0' as a terminator
+        user_sp -= envs_vec[i].len() + 1;
+        // UserCheck::new().check_writable_slice(user_sp as *mut u8, envs_vec[i].len() + 1)?;
+        let p = user_sp as *mut u8;
+        unsafe {
+            envp[i] = user_sp;
+            p.copy_from(envs_vec[i].as_ptr(), envs_vec[i].len());
+            *((p as usize + envs_vec[i].len()) as *mut u8) = 0;
+        }
+    }
+    user_sp -= user_sp % core::mem::size_of::<usize>();
+
+    // stack_trace!();
+    // Copy each arg to the newly allocated stack
+    for i in 0..args_vec.len() {
+        // Here we leave one byte to store a '\0' as a terminator
+        user_sp -= args_vec[i].len() + 1;
+        // UserCheck::new().check_writable_slice(user_sp as *mut u8, args_vec[i].len() + 1)?;
+        let p = user_sp as *mut u8;
+        unsafe {
+            argv[i] = user_sp;
+            p.copy_from(args_vec[i].as_ptr(), args_vec[i].len());
+            *((p as usize + args_vec[i].len()) as *mut u8) = 0;
+        }
+    }
+    user_sp -= user_sp % core::mem::size_of::<usize>();
+
+    // stack_trace!();
+
+    // Copy `platform`
+    let platform = "RISC-V64";
+    user_sp -= platform.len() + 1;
+    user_sp -= user_sp % core::mem::size_of::<usize>();
+    let p = user_sp as *mut u8;
+    // UserCheck::new().check_writable_slice(p as *mut u8, platform.len())?;
+    unsafe {
+        p.copy_from(platform.as_ptr(), platform.len());
+        *((p as usize + platform.len()) as *mut u8) = 0;
+    }
+
+    // stack_trace!();
+    // Copy 16 random bytes(here is 0)
+    user_sp -= 16;
+    // UserCheck::new().check_writable_slice(user_sp as *mut u8, 16)?;
+    auxs_vec.push(AuxHeader {
+        aux_type: AT_RANDOM,
+        value: user_sp,
+    });
+
+    // stack_trace!();
+    // Padding
+    user_sp -= user_sp % 16;
+
+    auxs_vec.push(AuxHeader {
+        aux_type: AT_EXECFN,
+        value: argv[0],
+    }); // file name
+    auxs_vec.push(AuxHeader {
+        aux_type: AT_NULL,
+        value: 0,
+    }); // end
+
+    // stack_trace!();
+    // Construct auxv
+    info!("[pass_init_vec] auxv len {}", auxs_vec.len());
+    let len = auxs_vec.len() * core::mem::size_of::<AuxHeader>();
+    user_sp -= len;
+    // UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
+    let auxv_base = user_sp;
+    for i in 0..auxs_vec.len() {
+        unsafe {
+            // *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut AuxHeader) = auxs[i];
+            *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut usize) =
+                auxs_vec[i].aux_type;
+            *((user_sp + i * core::mem::size_of::<AuxHeader>() + core::mem::size_of::<usize>())
+                as *mut usize) = auxs_vec[i].value;
+        }
+    }
+    // stack_trace!();
+    // Construct envp
+    let len = (envs_vec.len() + 1) * core::mem::size_of::<usize>();
+    user_sp -= len;
+    // UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
+    let envp_base = user_sp;
+    for i in 0..envs_vec.len() {
+        unsafe {
+            *((envp_base + i * core::mem::size_of::<usize>()) as *mut usize) = envp[i];
+        }
+    }
+    unsafe {
+        *((envp_base + envs_vec.len() * core::mem::size_of::<usize>()) as *mut usize) = 0;
+    }
+    // Construct argv
+    let len = (args_vec.len() + 1) * core::mem::size_of::<usize>();
+    user_sp -= len;
+    // UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
+    let argv_base = user_sp;
+    for i in 0..args_vec.len() {
+        unsafe {
+            *((argv_base + i * core::mem::size_of::<usize>()) as *mut usize) = argv[i];
+        }
+    }
+    unsafe {
+        *((argv_base + args_vec.len() * core::mem::size_of::<usize>()) as *mut usize) = 0;
+    }
+    // We save the argc just below the argv_base.
+    // Note that this is required by POSIX
+    user_sp -= core::mem::size_of::<usize>();
+    // UserCheck::new().check_writable_slice(user_sp as *mut u8, core::mem::size_of::<usize>())?;
+    // write argc
+    unsafe {
+        *(user_sp as *mut usize) = args_vec.len();
+    }
+    (argv_base, envp_base, auxv_base, user_sp)
 }

@@ -4,6 +4,7 @@
 //! [`PidAllocator`]（单例）分配所有的 pid
 //! 用了异步无栈协程进行对应的相关调度
 
+pub mod aux;
 mod pid;
 pub(crate) mod processor;
 pub mod schedule;
@@ -32,7 +33,7 @@ pub fn exit_current(exit_code: i32) {
     let task = current_task().unwrap();
 
     info!(
-        "exit task's pagetable: {:?}",
+        "[exit_current] exit task's pagetable: {:?}",
         task.inner_lock().memory_set.page_table.root_ppn
     );
 

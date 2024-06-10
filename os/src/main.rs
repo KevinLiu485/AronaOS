@@ -49,7 +49,7 @@ pub mod utils;
 
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};
-use log::info;
+
 use riscv::register::sstatus;
 
 use crate::config::*;
@@ -136,7 +136,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         KERNEL_SPACE.lock().activate();
-        info!("cpu: {} start!", hart_id);
+        // info!("cpu: {} start!", hart_id);
     }
 
     if hart_id == 0 {
@@ -148,16 +148,16 @@ pub fn rust_main(hart_id: usize) -> ! {
 
 #[allow(unused)]
 fn start_all_cpu(hart_id: usize) {
-    info!("cpu:{} Hello, world!", hart_id);
+    // info!("cpu:{} Hello, world!", hart_id);
     for i in 0..4 {
         if i == hart_id {
             continue;
         }
         let status = hart_start(i, 0x80200000);
-        info!(
-            "hart {} start to wake up hart {}... status {}",
-            hart_id, i, status
-        );
+        // info!(
+        //     "hart {} start to wake up hart {}... status {}",
+        //     hart_id, i, status
+        // );
     }
 }
 

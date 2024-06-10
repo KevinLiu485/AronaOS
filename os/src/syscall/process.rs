@@ -13,7 +13,7 @@ use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
 use core::time::Duration;
-use log::{debug, error, info, trace};
+use log::{error, info, trace, warn};
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
     trace!("[sys_exit] enter");
@@ -28,13 +28,14 @@ pub async fn sys_yield() -> SyscallRet {
 
 /// Todo!: manage Sum register
 pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
+    trace!("[sys_get_time] enter");
     let time_val_ptr = time_val_ptr as *mut TimeVal;
     let current_time_ms = get_time_ms();
     let time_val = TimeVal {
         sec: current_time_ms / 1000,
         usec: current_time_ms % 1000 * 1000,
     };
-    debug!("get time of day, time(ms): {}", current_time_ms);
+    // debug!("get time of day, time(ms): {}", current_time_ms);
     unsafe {
         time_val_ptr.write_volatile(time_val);
     }
@@ -42,6 +43,7 @@ pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
 }
 
 pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
+    trace!("[sys_nanosleep] enter");
     let sleep_ms = {
         let time_val_ptr = time_val_ptr as *const TimeSpec;
         let time_val = unsafe { &(*time_val_ptr) };
@@ -51,17 +53,20 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
 }
 
 pub fn sys_getpid() -> SyscallRet {
+    trace!("[sys_getpid] enter");
     Ok(current_task().unwrap().pid.0)
 }
 
 /// fake
 pub fn sys_getppid() -> SyscallRet {
+    trace!("[sys_getppid] enter");
     let parent_task = current_task().unwrap().inner_lock().parent.clone();
     match parent_task {
         None => Ok(INITPROC.pid.0),
-        // Some(parent_process) => Ok(parent_process.upgrade().unwrap().pid.0),
-        // fake this way can pass test
-        Some(_parent_process) => Ok(1),
+        Some(parent_task) => match parent_task.upgrade() {
+            None => Ok(INITPROC.pid.0),
+            Some(parent_task) => Ok(parent_task.pid.0),
+        },
     }
 }
 
@@ -203,7 +208,7 @@ impl Future for WaitFuture {
             return Poll::Ready(Err(1));
         }
 
-        if let Some((idx, child)) = inner
+        if let Some((idx, _child)) = inner
             .children
             .iter()
             .enumerate()
@@ -234,6 +239,7 @@ impl Future for WaitFuture {
 }
 
 pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
+    trace!("[sys_getcwd] enter");
     // let token = current_user_token();
     let task = current_task().unwrap();
     let cwd = task.inner_handler(|inner| inner.cwd.to_string());
@@ -259,6 +265,7 @@ pub fn sys_clone(
     _chilren_tid_ptr: usize,
 ) -> SyscallRet {
     trace!("[sys_clone] enter");
+    warn!("[sys_clone] not fully implemented");
     let clone_flags = match CloneFlags::from_bits(flags as u32) {
         None => {
             error!("clone flags is None: {}", flags);
@@ -345,9 +352,22 @@ bitflags! {
     }
 }
 
-/// fake
 pub fn sys_set_tid_address(_tidptr: *const usize) -> SyscallRet {
-    trace!("[sys_set_tid_address] enter");
+    trace!("[sys_set_tid_address] enter, tidptr: {:?}", _tidptr);
+    warn!("[sys_set_tid_address] not fully implemented");
+    // info!("[sys_set_tid_address] tidptr: {:?}", _tidptr);
     let task = current_task().unwrap();
     Ok(task.getpid())
+}
+
+pub fn sys_getuid() -> SyscallRet {
+    trace!("[sys_getuid] enter");
+    warn!("[sys_getuid] not fully implemented");
+    Ok(0)
+}
+
+pub fn sys_exit_group(exit_code: i32) -> SyscallRet {
+    trace!("[sys_exit_group] enter");
+    exit_current(exit_code);
+    Ok(0)
 }

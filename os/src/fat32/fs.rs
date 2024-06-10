@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use log::debug;
+use log::info;
 
 use crate::fs::{inode::Inode, path::Path};
 
@@ -19,14 +19,14 @@ pub struct FAT32FileSystem {
 
 impl FAT32FileSystem {
     pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<SpinNoIrqLock<Self>> {
-        debug!("FAT32FileSystem::open()");
+        // debug!("FAT32FileSystem::open()");
         let fs_meta = get_block_cache(0, block_device.clone()).lock().read(
             0,
             |boot_sector: &FAT32BootSector| {
-                debug!("FAT32FileSystem::open(): boot_sector: {:?}", boot_sector);
+                info!("[FAT32FileSystem::open] boot_sector: {:?}", boot_sector);
                 assert!(
                     boot_sector.is_valid(),
-                    "FAT32FileSystem::open(): Error loading boot_sector!"
+                    "[FAT32FileSystem::open] Error loading boot_sector!"
                 );
                 Arc::new(FAT32Meta::new(boot_sector))
             },
