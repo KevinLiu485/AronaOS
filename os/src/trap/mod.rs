@@ -10,7 +10,9 @@
 //! to [`syscall()`].
 mod context;
 
-use crate::mm::{frame_alloc, PTEFlags, PageTable, PageTableEntry, VirtAddr};
+use crate::mm::{
+    frame_alloc, handle_recoverable_page_fault, PTEFlags, PageTable, PageTableEntry, VirtAddr,
+};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
@@ -36,7 +38,7 @@ pub fn init() {
     set_kernel_trap_entry();
 }
 
-fn set_kernel_trap_entry() {
+pub fn set_kernel_trap_entry() {
     unsafe {
         stvec::write(trap_from_kernel as usize, TrapMode::Direct);
     }
@@ -106,58 +108,14 @@ pub async fn trap_handler() {
             let vpn = VirtAddr::from(stval).floor();
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
-            if let Some(pte) = page_table.find_pte(vpn) {
-                if pte.is_cow() {
-                    // fork COW area
-                    // 如果refcnt == 1, 则直接修改pte, 否则, 分配新的frame, 修改pte, 更新MemorySet
-                    debug!("handle cow page fault(cow), vpn {:#x}", vpn.0);
-                    let current_task = current_task().unwrap();
-                    let memory_set = &mut current_task.inner_lock().memory_set;
-                    // rev是因为一般来说, COW区域都是后续创建的(如mmap)
-                    for area in memory_set.areas.iter_mut().rev() {
-                        if area.vpn_range.contains(vpn) {
-                            // 根据VPN找到对应的data_frame, 并查看Arc的引用计数
-                            let data_frame = area.data_frames.get(&vpn).unwrap();
-                            if Arc::strong_count(data_frame) == 1 {
-                                // 直接修改pte
-                                // clear COW bit and set valid bit
-                                debug!("ref_cnt = 1");
-                                let mut flags = pte.flags();
-                                flags.remove(PTEFlags::COW);
-                                flags.insert(PTEFlags::W);
-                                *pte = PageTableEntry::new(pte.ppn(), flags);
-                            } else {
-                                // 分配新的frame, 修改pte, 更新MemorySet
-                                let frame = frame_alloc().unwrap();
-                                let src_frame = pte.ppn().get_bytes_array();
-                                let dst_frame = frame.ppn.get_bytes_array();
-                                dst_frame.copy_from_slice(src_frame);
-                                // clear COW bit and set valid bit, update pte
-                                let mut flags = pte.flags();
-                                flags.remove(PTEFlags::COW);
-                                flags.insert(PTEFlags::W);
-                                *pte = PageTableEntry::new(frame.ppn, flags);
-                                // update MemorySet -> MapArea -> data_frames
-                                area.data_frames.insert(vpn, Arc::new(frame));
-                            }
-                            // todo?: flush TLB
-                            /*
-                            unsafe {
-                                asm!(
-                                    "sfence.vma x0, x0",
-                                    options(nomem, nostack, preserves_flags)
-                                );
-                            }
-                            */
-                            break;
-                        }
-                    }
-                } else {
-                    // lazy allocation
-                    todo!("unimplemented lazy allocation");
-                }
-            } else {
-                error!("page fault but can't find valid pte");
+            if handle_recoverable_page_fault(&page_table, vpn).is_err() {
+                error!(
+                    "[kernel] unrecoverable page fault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    stval,
+                    current_trap_cx().sepc,
+                );
+                // page fault exit code
+                exit_current(-2);
             }
             // we should jump back to the faulting instruction after handling the page fault
         }
