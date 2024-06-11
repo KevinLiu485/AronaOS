@@ -143,38 +143,59 @@ impl OpenFlags {
     }
 }
 
-fn open_cwd(dirfd: isize, path: &Path) -> Arc<dyn Inode> {
+fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
     if !path.is_relative() {
         // absolute path
-        ROOT_INODE.clone()
+        Ok(ROOT_INODE.clone())
     } else if dirfd == AT_FDCWD {
         // relative to cwd
         let task = current_task().unwrap();
         let cwd = &task.inner_lock().cwd;
-        ROOT_INODE.open_path(cwd, false, false).unwrap()
+        ROOT_INODE.open_path(cwd, false, false)
     } else {
         // relative to dirfd
         let task = current_task().unwrap();
-        let ret = task.inner_lock().fd_table[dirfd as usize]
-            .clone()
-            .unwrap()
-            .get_meta()
-            .inode
-            .unwrap();
+        // let ret = task.inner_lock().fd_table[dirfd as usize]
+        //     .clone()
+        //     .unwrap()
+        //     .get_meta()
+        //     .inode
+        //     .unwrap();
+        // ret
+        let ret = task
+            .inner_lock()
+            .fd_table
+            .get(dirfd as usize)
+            .map_or(Err(1), |fdinfo| {
+                fdinfo
+                    .file
+                    .get_meta()
+                    .inode
+                    .map_or(Err(1), |inode| Ok(inode))
+            });
         ret
     }
 }
 
 pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<dyn Inode>> {
-    match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
-        Ok(inode) => {
-            if flags.contains(OpenFlags::TRUNC) {
-                inode.clear();
-            }
-            Ok(inode)
-        }
-        Err(e) => Err(e),
-    }
+    // match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
+    //     Ok(inode) => {
+    //         if flags.contains(OpenFlags::TRUNC) {
+    //             inode.clear();
+    //         }
+    //         Ok(inode)
+    //     }
+    //     Err(e) => Err(e),
+    // }
+    open_cwd(dirfd, path).and_then(|cwd| {
+        cwd.open_path(path, flags.contains(OpenFlags::CREATE), false)
+            .and_then(|inode| {
+                if flags.contains(OpenFlags::TRUNC) {
+                    inode.clear();
+                }
+                Ok(inode)
+            })
+    })
 }
 
 pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
@@ -186,10 +207,11 @@ pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<O
 }
 
 pub fn create_dir(dirfd: isize, path: &Path) -> SyscallRet {
-    match open_cwd(dirfd, path).open_path(path, false, true) {
-        Ok(_) => Ok(0),
-        Err(e) => Err(e),
-    }
+    // match open_cwd(dirfd, path).open_path(path, false, true) {
+    //     Ok(_) => Ok(0),
+    //     Err(e) => Err(e),
+    // }
+    open_cwd(dirfd, path).and_then(|cwd| cwd.open_path(path, false, true).and_then(|_| Ok(0)))
 }
 
 impl File for OSInode {

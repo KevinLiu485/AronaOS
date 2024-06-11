@@ -79,8 +79,10 @@ impl History {
     }
 
     fn add(&mut self, cmd: &str) {
-        self.commands.push(cmd.to_owned());
-        self.index = self.commands.len();
+        if cmd != self.commands.last().unwrap_or(&"".to_string()) {
+            self.commands.push(cmd.to_owned());
+            self.index = self.commands.len();
+        }
     }
 
     fn up(&mut self) -> Option<String> {

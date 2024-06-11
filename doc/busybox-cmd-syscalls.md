@@ -8,7 +8,7 @@ busybox testcode 实际调用的系统调用列表，少于busybox使用的系�
 <!-- dup3 -->
 <!-- execve -->
  - faccessat 48
- - fcntl 25
+ <!-- - fcntl 25 -->
  - fstat 80
 <!-- getcwd -->
  - getdents64 61

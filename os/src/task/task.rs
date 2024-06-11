@@ -1,8 +1,9 @@
 //!Implementation of [`TaskControlBlock`]
 use super::aux::*;
 use super::{pid_alloc, PidHandle};
+use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
-use crate::fs::{File, Stdin, Stdout};
+use crate::fs::{Stdin, Stdout};
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::trap::TrapContext;
@@ -31,7 +32,8 @@ pub struct TaskControlBlockInner {
     pub parent: Option<Weak<TaskControlBlock>>,
     pub children: Vec<Arc<TaskControlBlock>>,
     pub exit_code: i32,
-    pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    // pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub fd_table: FdTable,
     pub cwd: Path,
 }
 
@@ -49,27 +51,27 @@ impl TaskControlBlockInner {
         self.task_status
     }
 
-    /// alloc lowest-numbered available fd greater than or equal to least_fd
-    pub fn alloc_fd(&mut self, least_fd: usize) -> usize {
-        if least_fd < self.fd_table.len() {
-            if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-                fd
-            } else {
-                self.fd_table.push(None);
-                self.fd_table.len() - 1
-            }
-        } else {
-            self.reserve_fd(least_fd);
-            self.fd_table[least_fd] = None;
-            least_fd
-        }
-    }
-    pub fn reserve_fd(&mut self, fd: usize) {
-        // len is at least (fd + 1)
-        if fd + 1 > self.fd_table.len() {
-            self.fd_table.resize(fd + 1, None);
-        }
-    }
+    // / alloc lowest-numbered available fd greater than or equal to least_fd
+    // pub fn alloc_fd(&mut self, least_fd: usize) -> usize {
+    //     if least_fd < self.fd_table.len() {
+    //         if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
+    //             fd
+    //         } else {
+    //             self.fd_table.push(None);
+    //             self.fd_table.len() - 1
+    //         }
+    //     } else {
+    //         self.reserve_fd(least_fd);
+    //         self.fd_table[least_fd] = None;
+    //         least_fd
+    //     }
+    // }
+    // pub fn reserve_fd(&mut self, fd: usize) {
+    //     // len is at least (fd + 1)
+    //     if fd + 1 > self.fd_table.len() {
+    //         self.fd_table.resize(fd + 1, None);
+    //     }
+    // }
 }
 
 impl TaskControlBlock {
@@ -89,7 +91,7 @@ impl TaskControlBlock {
                 parent: None,
                 children: Vec::new(),
                 exit_code: 0,
-                fd_table: Vec::new(),
+                fd_table: FdTable::new_bare(),
                 cwd: Path::new_absolute(),
             }),
         }
@@ -119,14 +121,17 @@ impl TaskControlBlock {
                 parent: None,
                 children: Vec::new(),
                 exit_code: 0,
-                fd_table: vec![
+                fd_table: FdTable::new(vec![
                     // 0 -> stdin
-                    Some(Arc::new(Stdin)),
+                    // Some(FdInfo{file: Arc::new(Stdin), flags: OpenFlags::empty()}),
+                    Some(FdInfo::without_flags(Arc::new(Stdin))),
                     // 1 -> stdout
-                    Some(Arc::new(Stdout)),
+                    // Some(FdInfo{file: Arc::new(Stdout), flags: OpenFlags::empty()}),
+                    Some(FdInfo::without_flags(Arc::new(Stdout))),
                     // 2 -> stderr
-                    Some(Arc::new(Stdout)),
-                ],
+                    // Some(FdInfo{file: Arc::new(Stdout), flags: OpenFlags::empty()}),
+                    Some(FdInfo::without_flags(Arc::new(Stdout))),
+                ]),
                 cwd: Path::new_absolute(),
             }),
         };
@@ -190,14 +195,17 @@ impl TaskControlBlock {
         // alloc a pid
         let pid_handle = pid_alloc();
         // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
-        for fd in parent_inner.fd_table.iter() {
-            if let Some(file) = fd {
-                new_fd_table.push(Some(file.clone()));
-            } else {
-                new_fd_table.push(None);
-            }
-        }
+        // let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
+        // let mut new_fd_table = FdTable::new_bare();
+        // // for fd in parent_inner.fd_table.iter() {
+        // for fd in parent_inner.fd_table.table.iter() {
+        //     if let Some(file) = fd {
+        //         new_fd_table.table.push(Some(file.clone()));
+        //     } else {
+        //         new_fd_table.table.push(None);
+        //     }
+        // }
+        let new_fd_table = parent_inner.fd_table.exec_clone();
         // inherit cwd
         let cwd = parent_inner.cwd.clone();
         let task_control_block = Arc::new(TaskControlBlock {

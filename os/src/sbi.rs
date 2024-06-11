@@ -24,7 +24,6 @@ const SBI_SHUTDOWN: (usize, usize) = (8, 0);
 /// general sbi call
 #[inline(always)]
 fn sbi_call(eid_fid: (usize, usize), arg0: usize, arg1: usize, arg2: usize) -> usize {
-    current_task()
     let mut ret;
     unsafe {
         asm!(

@@ -77,7 +77,7 @@ pub fn exit_current(exit_code: i32) {
     // deallocate user space
     inner.memory_set.recycle_data_pages();
     // **** release current PCB
-    inner.fd_table.clear();
+    inner.fd_table.table.clear();
 }
 
 #[cfg(feature = "submit")]

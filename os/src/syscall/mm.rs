@@ -62,8 +62,16 @@ pub async fn sys_mmap(
     warn!("[sys_mmap] not fully implemented");
 
     //处理参数
-    let prot = MMAPPROT::from_bits(prot as u32).unwrap();
-    let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
+    // let prot = MMAPPROT::from_bits(prot as u32);
+    let prot = match MMAPPROT::from_bits(prot as u32) {
+        Some(prot) => prot,
+        None => return Err(SyscallErr::EINVAL.into()),
+    };
+    // let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
+    let flags = match MMAPFLAGS::from_bits(flags as u32) {
+        Some(flags) => flags,
+        None => return Err(SyscallErr::EINVAL.into()),
+    };
     let task = current_task().unwrap();
     trace!(
         "[sys_mmap] start: {:x}, len: {:x}, fd: {}, offset: {:x}, flags: {:?}",
@@ -110,8 +118,9 @@ pub async fn sys_mmap(
         }
         // 读取文件
         let file = task
-            .inner_handler(|inner| inner.fd_table[fd as usize].clone())
-            .unwrap();
+            .inner_handler(|inner| inner.fd_table.get(fd as usize))
+            .unwrap()
+            .file;
         let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
         //task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         task.inner_lock()
