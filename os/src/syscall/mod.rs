@@ -10,6 +10,7 @@
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
 
+// rCore user space syscall interface
 // const SYSCALL_OPEN: usize = 56;
 // const SYSCALL_CLOSE: usize = 57;
 // const SYSCALL_READ: usize = 63;
@@ -25,8 +26,7 @@
 // const SYSCALL_MMAP: usize = 222;
 // const SYSCALL_WAITPID: usize = 260;
 
-// os-comp testsuits
-// #[allow(non_upper_case_globals)]
+// POSIX syscall interface
 const SYS_GETCWD: usize = 17;
 const SYS_PIPE2: usize = 59;
 const SYS_DUP: usize = 23;
@@ -67,6 +67,17 @@ const SYS_EXIT_GROUP: usize = 94;
 const SYS_SIGACTION: usize = 134;
 const SYS_SIGPROCMASK: usize = 135;
 const SYS_FCNTL: usize = 25;
+const SYS_WRITEV: usize = 66;
+const SYS_GETEUID: usize = 175;
+const SYS_PPOLL: usize = 73;
+const SYS_CLOCK_GETTIME: usize = 113;
+const SYS_SYSINFO: usize = 179;
+const SYS_SYSLOG: usize = 116;
+const SYS_FSTATAT: usize = 79;
+const SYS_FACCESSAT: usize = 48;
+const SYS_KILL: usize = 129;
+const SYS_MPROTECT: usize = 226;
+const SYS_UTIMENSAT: usize = 88;
 
 mod fs;
 mod mm;
@@ -74,11 +85,11 @@ mod process;
 mod util;
 
 use fs::*;
-// use log::error;
+use log::error;
 use mm::*;
 use process::*;
 pub use process::{WaitFuture, WaitOption};
-use util::{sys_times, sys_uname};
+use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
 use crate::config::SyscallRet;
 /// handle syscall exception with `syscall_id` and other arguments
@@ -108,8 +119,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
         SYS_CHDIR => sys_chdir(args[0] as *const u8),
         SYS_CLOSE => sys_close(args[0]),
-        SYS_FSTAT => sys_fstat(args[0], args[1] as *const u8),
-        SYS_GETDENTS64 => sys_getdents64(args[0], args[1] as *const u8, args[2]),
+        SYS_FSTAT => sys_fstat(args[0], args[1] as *mut _),
+        SYS_GETDENTS64 => sys_getdents64(args[0], args[1] as usize, args[2]),
         SYS_DUP => sys_dup(args[0]),
         SYS_DUP3 => sys_dup3(args[0], args[1]),
         SYS_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
@@ -129,13 +140,39 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_SIGACTION => sys_sigaction(),
         SYS_SIGPROCMASK => sys_sigprocmask(),
         SYS_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2]),
+        SYS_WRITEV => sys_writev(args[0], args[1], args[2] as i32).await,
+        SYS_GETEUID => sys_geteuid(),
+        SYS_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]),
+        SYS_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut _),
+        SYS_SYSINFO => sys_sysinfo(args[0] as *mut _),
+        SYS_SYSLOG => sys_syslog(),
+        SYS_FSTATAT => sys_fstatat(
+            args[0] as i32,
+            args[1] as *const u8,
+            args[2] as *mut _,
+            args[3] as i32,
+        ),
+        SYS_FACCESSAT => sys_faccessat(
+            args[0] as i32,
+            args[1] as *const _,
+            args[2] as u32,
+            args[3] as u32,
+        ),
+        SYS_KILL => sys_kill(args[0] as i32, args[1] as i32),
+        SYS_MPROTECT => sys_mprotect(args[0] as *const _, args[1], args[2] as i32),
+        SYS_UTIMENSAT => sys_utimensat(
+            args[0] as i32,
+            args[1] as *const _,
+            args[2] as *const _,
+            args[3] as i32,
+        ),
         _ => unsupported(syscall_id),
     }
 }
 
 fn unsupported(syscall_id: usize) -> SyscallRet {
-    panic!("Unsupported syscall_id: {}", syscall_id);
-    // error!("Unsupported syscall_id: {}", syscall_id);
-    // let _ = sys_exit(0);
-    // Ok(0)
+    // panic!("Unsupported syscall_id: {}", syscall_id);
+    error!("Unsupported syscall_id: {}", syscall_id);
+    let _ = sys_exit(0);
+    Ok(0)
 }

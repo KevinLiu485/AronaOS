@@ -11,10 +11,11 @@ pub struct FdInfo {
 }
 
 impl FdInfo {
-    pub fn without_flags(file: Arc<dyn File + Send + Sync>) -> Self {
+    pub fn default_flags(file: Arc<dyn File + Send + Sync>) -> Self {
         Self {
             file,
-            flags: OpenFlags::empty(),
+            // flags: OpenFlags::empty(),
+            flags: OpenFlags::RDWR,
         }
     }
 }
@@ -80,6 +81,15 @@ impl FdTable {
                     }
                 })
                 .collect(),
+        }
+    }
+
+    /// get mut fdinfo for modifying
+    pub fn get_mut(&mut self, fd: usize) -> Option<&mut FdInfo> {
+        if fd < self.table.len() {
+            self.table[fd].as_mut()
+        } else {
+            None
         }
     }
 

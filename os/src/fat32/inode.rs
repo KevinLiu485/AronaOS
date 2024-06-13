@@ -59,7 +59,7 @@ impl FAT32Inode {
             dentry.fstcluster as usize,
             match mode {
                 InodeMode::FileREG => Some(dentry.filesize as usize),
-                InodeMode::FileDIR => None,
+                _ => None,
             },
         );
         Self {
@@ -92,7 +92,7 @@ impl FAT32Inode {
             0,
             match mode {
                 InodeMode::FileREG => Some(0),
-                InodeMode::FileDIR => None,
+                _ => None,
             },
         );
         Self {
@@ -114,7 +114,12 @@ impl Inode for FAT32Inode {
     }
 
     fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AsyncResult<usize> {
-        Box::pin(async move { Ok(self.file.lock().write(_buf, _offset)) })
+        Box::pin(async move {
+            let ret = self.file.lock().write(_buf, _offset);
+            // update data_size
+            self.meta.inner.lock().data_size = self.file.lock().size.unwrap_or(0);
+            Ok(ret)
+        })
     }
 
     fn mknod(

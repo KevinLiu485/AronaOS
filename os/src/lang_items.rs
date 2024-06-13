@@ -8,7 +8,7 @@ fn panic(info: &PanicInfo) -> ! {
     let sepc = current_trap_cx().sepc;
     if let Some(location) = info.location() {
         error!(
-            "[kernel] Panicked at {}:{} {}, user sepc: {:x}",
+            "[kernel] Panicked at {}:{} {}, user sepc: {:#x}",
             location.file(),
             location.line(),
             info.message().unwrap(),
@@ -16,7 +16,7 @@ fn panic(info: &PanicInfo) -> ! {
         );
     } else {
         error!(
-            "[kernel] Panicked: {}, user sepc: {:x}",
+            "[kernel] Panicked: {}, user sepc: {:#x}",
             info.message().unwrap(),
             sepc
         );

@@ -1,19 +1,24 @@
 //! File and filesystem-related syscalls
 
-use core::ptr;
+use core::mem::size_of;
+use core::ptr::{self};
 
-use log::{trace, warn};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use log::{debug, info, trace, warn};
 
 use crate::config::SyscallRet;
 use crate::fs::fd_table::FdInfo;
-use crate::fs::inode::InodeMode;
+use crate::fs::inode::{Inode, InodeMode};
 use crate::fs::path::Path;
 use crate::fs::pipe::Pipe;
-use crate::fs::{create_dir, open_file, open_inode, Kstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
+use crate::fs::{
+    create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
+};
 use crate::task::current_task;
 
 use crate::timer::TimeSpec;
-use crate::utils::c_str_to_string;
+use crate::utils::{c_str_to_string, SyscallErr};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let task = current_task().unwrap();
@@ -90,23 +95,21 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
     trace!("[sys_openat] enter");
     let task = current_task().unwrap();
     let path = Path::from(c_str_to_string(pathname));
-    if let Ok(inode) = open_file(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
+    if let Ok(inode) = open_osinode(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
         // let mut inner = task.inner_lock();
         // let fd = inner.fd_table.allocate(0);
         // inner.fd_table.table[fd] = Some(FdInfo::without_flags(inode));
         let fd = task
             .inner_lock()
             .fd_table
-            .alloc_and_set(0, FdInfo::without_flags(inode));
-        trace!(
+            .alloc_and_set(0, FdInfo::default_flags(inode));
+        info!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
-            task.pid,
-            path,
-            fd
+            task.pid, path, fd
         );
         Ok(fd)
     } else {
-        trace!("[sys_openat] pid {} fail to open file: {}", task.pid, path);
+        info!("[sys_openat] pid {} fail to open file: {}", task.pid, path);
         Err(1)
     }
 }
@@ -119,7 +122,7 @@ pub fn sys_chdir(pathname: *const u8) -> SyscallRet {
         path
     );
     // simply examine validity of the path
-    match open_file(AT_FDCWD, &path, OpenFlags::empty()) {
+    match open_osinode(AT_FDCWD, &path, OpenFlags::empty()) {
         Ok(inode) => {
             current_task()
                 .unwrap()
@@ -137,42 +140,166 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     create_dir(dirfd, &path)
 }
 
-/// fake
-pub fn sys_fstat(_fd: usize, buf: *const u8) -> SyscallRet {
+pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
     trace!("[sys_fstat] enter");
-    warn!("[sys_fstat] not implemented");
-    let stat = Kstat {
-        st_dev: 0,
-        st_ino: 0,
-        st_mode: 0,
-        st_nlink: 1,
-        st_uid: 0,
-        st_gid: 0,
-        st_rdev: 0,
-        __pad1: 0,
-        st_size: 28,
-        st_blksize: 0,
-        __pad2: 0,
-        st_blocks: 0,
-        st_atim: TimeSpec::new(),
-        st_mtim: TimeSpec::new(),
-        st_ctim: TimeSpec::new(),
-    };
-    let kstat_ptr = buf as *mut Kstat;
+    let file = open_fd(fd)?;
+    let inode = file
+        .get_meta()
+        .inner
+        .lock()
+        .inode
+        .clone()
+        .ok_or(SyscallErr::EBADF as usize)?;
+    let fstat = Fstat::new(&inode);
     unsafe {
-        ptr::write(kstat_ptr, stat);
+        ptr::write(buf, fstat);
     }
     Ok(0)
 }
 
-/// fake
-pub fn sys_getdents64(_fd: usize, buf: *const u8, len: usize) -> SyscallRet {
-    trace!("[sys_getdents64] enter");
-    warn!("[sys_getdents64] not implemented");
-    let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
-    let dent = "12345678123456781211";
-    slice[..20].copy_from_slice(dent.as_bytes());
-    Ok(2)
+pub const MAX_NAME_LEN: usize = 256;
+pub const DIRENT_SIZE: usize = size_of::<Dirent>();
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Dirent {
+    /// 64-bit inode number
+    pub d_ino: usize,
+    /// 64-bit offset to next derent
+    pub d_off: usize,
+    /// Size of this dirent
+    pub d_reclen: u16,
+    /// File type
+    pub d_type: u8,
+    /// File name
+    pub d_name: [u8; MAX_NAME_LEN],
+}
+
+fn get_dirents(inode: Arc<dyn Inode>, start_index: usize, len: usize) -> Vec<Dirent> {
+    inode.get_meta().children_handler(inode, |children| {
+        children
+            .iter()
+            .skip(start_index)
+            .take(len)
+            .map(|(name, inode)| {
+                let mut d_name = name.clone().into_bytes();
+                d_name.resize(MAX_NAME_LEN, 0u8);
+                let d_type = inode.get_meta().mode as u8;
+                debug!("[sys_getdents64] d_name: {}", name);
+                Dirent {
+                    d_ino: inode.get_meta().ino,
+                    d_off: 0,
+                    d_reclen: DIRENT_SIZE as u16,
+                    d_type,
+                    d_name: d_name.try_into().unwrap(),
+                }
+            })
+            .collect()
+    })
+    // inode.get_meta().children_handler(inode, |children| {
+    //     children
+    //         .iter()
+    //         .skip(start_index)
+    //         .take(len)
+    //         .map(|(name, inode)| {
+    //             let mut d_name = name.clone().into_bytes();
+    //             d_name.resize(MAX_NAME_LEN, 0u8);
+    //             let d_type = inode.get_meta().mode as u8;
+    //             let d_reclen = (DIRENT_SIZE - MAX_NAME_LEN + name.len() + 1) as u16;
+    //             debug!("[sys_getdents64] d_reclen: {}, d_name: {}", d_reclen, name);
+    //             Dirent {
+    //                 d_ino: inode.get_meta().ino,
+    //                 d_off: 0,
+    //                 d_reclen,
+    //                 d_type,
+    //                 d_name: d_name.try_into().unwrap(),
+    //             }
+    //         })
+    //         .collect()
+    // })
+}
+
+// fn compact_dirents(dirents: Vec<Dirent>) -> Vec<u8> {
+//     let ret: Vec<u8> = Vec::new();
+//     dirents.iter().for_each(|dirent| {
+//         let mut buf = Vec::new();
+//         // buf.extend_from_slice(&dirent.d_ino.to_le_bytes());
+//         buf.extend_from_slice(&dirent.d_ino.to_ne_bytes());
+//         buf.extend_from_slice(&dirent.d_off.to_le_bytes());
+//         buf.extend_from_slice(&dirent.d_reclen.to_le_bytes());
+//         buf.push(dirent.d_type);
+//         buf.extend_from_slice(&dirent.d_name);
+//         ret.extend_from_slice(&buf);
+//     });
+// }
+
+pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
+    trace!(
+        "[sys_getdents64] enter. fd: {}, buf: {:#x}, len: {}",
+        fd,
+        dirp as usize,
+        size
+    );
+    let file = open_fd(fd)?;
+    let mut file_inner = file.get_meta().inner.lock();
+    let inode = file_inner.inode.clone().ok_or(SyscallErr::EBADF as usize)?;
+    if inode.get_meta().mode != InodeMode::FileDIR {
+        return Err(1);
+    }
+    let dirent_index = file_inner.dentry_index;
+    let dst_len = size / DIRENT_SIZE;
+    let dirents_dst = unsafe { core::slice::from_raw_parts_mut(dirp as *mut Dirent, dst_len) };
+    let dirents_src = get_dirents(inode, dirent_index, dst_len);
+    let src_len = dirents_src.len();
+    // let dirents: Vec<Dirent> = inode.get_meta().children_handler(inode, |children| {
+    //     children
+    //         .iter()
+    //         .skip(dirent_index)
+    //         .map(|(name, inode)| {
+    //             let mut d_name = name.clone().into_bytes();
+    //             d_name.resize(MAX_NAME_LEN, 0u8);
+    //             let d_type = inode.get_meta().mode as u8;
+    //             let d_reclen = (DIRENT_SIZE - MAX_NAME_LEN + name.len() + 1) as u16;
+    //             Dirent {
+    //                 d_ino: inode.get_meta().ino,
+    //                 d_off: 0,
+    //                 d_reclen,
+    //                 d_type,
+    //                 d_name: d_name.try_into().unwrap(),
+    //             }
+    //         })
+    //         .collect()
+    // });
+
+    // debug!("[sys_getdents64] dirents: {:?}", dirents);
+
+    // let mut num_bytes = 0;
+    // let mut dirp = dirp;
+    // let mut index: usize = 0;
+    // for (i, dirent) in dirents.iter().enumerate() {
+    //     let temp = num_bytes + dirent.d_reclen as usize;
+    //     if temp > size {
+    //         info!("[sys_getdents64] user buf size: {}, too small", size);
+    //         index = i;
+    //         break;
+    //     }
+    //     num_bytes = temp;
+    //     unsafe {
+    //         copy_nonoverlapping(&*dirent as *const Dirent, dirp as *mut Dirent, 1);
+    //         dirp += dirent.d_reclen as usize;
+    //     }
+    //     index = i + 1;
+    // }
+    dirents_dst[..src_len].copy_from_slice(&dirents_src);
+    file_inner.dentry_index += src_len;
+    info!(
+        "[sys_getdents64] dirent_index iters from {} to {}",
+        dirent_index,
+        dirent_index + src_len
+    );
+
+    Ok(src_len * DIRENT_SIZE)
+    // Ok(num_bytes)
 }
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
@@ -247,10 +374,10 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
         // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
         let fd1 = inner
             .fd_table
-            .alloc_and_set(0, FdInfo::without_flags(pipe_pair.0.clone()));
+            .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()));
         let fd2 = inner
             .fd_table
-            .alloc_and_set(0, FdInfo::without_flags(pipe_pair.1.clone()));
+            .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()));
         (fd1, fd2)
     });
     /* the FUCKING user fd is `i32` type! */
@@ -300,7 +427,7 @@ const F_SETFL: i32 = 4;
 
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     trace!("[sys_fcntl] enter. fd: {}, cmd: {}, arg: {}", fd, cmd, arg);
-    warn!("[sys_fcntl] not fully implemented");
+    // warn!("[sys_fcntl] not fully implemented");
     let task = current_task().unwrap();
     match cmd {
         F_DUPFD => {
@@ -310,35 +437,189 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
         F_DUPFD_CLOEXEC => {
             let least_fd = arg;
             task.inner_handler(|inner| {
-                inner.fd_table.alloc_and_dup(fd, least_fd).and_then(|fd| {
-                    inner.fd_table.table[fd]
-                        .as_mut()
-                        .unwrap()
-                        .flags
-                        .insert(OpenFlags::CLOEXEC);
-                    Ok(0)
-                })
+                let new_fd = inner.fd_table.alloc_and_dup(fd, least_fd)?;
+                let fdinfo = inner
+                    .fd_table
+                    .get_mut(new_fd)
+                    .ok_or(SyscallErr::EBADF as usize)?;
+                fdinfo.flags.insert(OpenFlags::CLOEXEC);
+                Ok(new_fd)
             })
         }
-        F_GETFD => task
-            .inner_lock()
-            .fd_table
-            .get(fd)
-            .map_or(Err(1), |fdinfo| Ok(fdinfo.flags.bits() as usize)),
-        F_SETFD => task.inner_handler(|inner| {
-            inner.fd_table.get(fd).map_or(Err(1), |_| {
-                OpenFlags::from_bits(arg as u32).map_or(Err(1), |new_flags| {
-                    inner.fd_table.table[fd].as_mut().unwrap().flags = new_flags;
-                    Ok(0)
-                })
+        F_GETFD => {
+            let fdinfo = task
+                .inner_lock()
+                .fd_table
+                .get(fd)
+                .ok_or(SyscallErr::EBADF as usize)?;
+            if fdinfo.flags.contains(OpenFlags::CLOEXEC) {
+                Ok(FcntlFlags::FD_CLOEXEC.bits() as usize)
+            } else {
+                Ok(0)
+            }
+        }
+        F_SETFD => {
+            let new_flags = FcntlFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL as usize)?;
+            task.inner_handler(|inner| {
+                let fdinfo = inner
+                    .fd_table
+                    .get_mut(fd)
+                    .ok_or(SyscallErr::EBADF as usize)?;
+                if new_flags.contains(FcntlFlags::FD_CLOEXEC) {
+                    fdinfo.flags.insert(OpenFlags::CLOEXEC);
+                }
+                Ok(0)
             })
-        }),
+        }
         F_GETFL => {
-            unimplemented!()
+            let fdinfo = task
+                .inner_lock()
+                .fd_table
+                .get(fd)
+                .ok_or(SyscallErr::EBADF as usize)?;
+            Ok(fdinfo.flags.bits() as usize)
         }
         F_SETFL => {
-            unimplemented!()
+            let new_flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL as usize)?;
+            task.inner_handler(|inner| {
+                let fdinfo = inner
+                    .fd_table
+                    .get_mut(fd)
+                    .ok_or(SyscallErr::EBADF as usize)?;
+                fdinfo.flags = new_flags;
+                Ok(0)
+            })
         }
         _ => Err(0),
     }
+}
+
+#[repr(C)]
+pub struct Iovec {
+    /// user space buf starting address
+    pub iov_base: usize,
+    /// number of bytes to transfer
+    pub iov_len: usize,
+}
+
+fn iovec_to_slice_vec<'a>(iov: *const Iovec, iovcnt: i32) -> Vec<&'a [u8]> {
+    let iovec = unsafe { core::slice::from_raw_parts(iov, iovcnt as usize) };
+    iovec
+        .iter()
+        .map(|iov| unsafe { core::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) })
+        .collect()
+}
+
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: i32) -> SyscallRet {
+    trace!(
+        "[writev] enter. fd: {}, iov: {:#x}, iovcnt: {}",
+        fd,
+        iov as usize,
+        iovcnt
+    );
+
+    let iovec = iovec_to_slice_vec(iov as *const Iovec, iovcnt);
+    let task = current_task().unwrap();
+    let fdinfo = task.inner_handler(|inner| inner.fd_table.get(fd));
+    if let Some(fdinfo) = fdinfo {
+        if !fdinfo.file.writable() {
+            return Err(1);
+        }
+        let mut ret: usize = 0;
+        for slice in iovec.iter() {
+            ret += fdinfo.file.write(slice).await?;
+        }
+        Ok(ret)
+    } else {
+        Err(1)
+    }
+}
+
+/// Poll Fd
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct PollFd {
+    /// Fd
+    pub fd: i32,
+    /// Requested events
+    pub events: i16,
+    /// Returned events
+    pub revents: i16,
+}
+
+pub fn sys_ppoll(
+    fds_ptr: usize,
+    nfds: usize,
+    timeout_ptr: usize,
+    sigmask_ptr: usize,
+) -> SyscallRet {
+    trace!(
+        "[sys_ppoll] enter. nfds: {}, timeout_ptr: {:#x}, sigmask_ptr: {:#x}",
+        nfds,
+        timeout_ptr,
+        sigmask_ptr
+    );
+    warn!("[sys_ppoll] not implemented");
+    let _fds = unsafe { core::slice::from_raw_parts(fds_ptr as *const PollFd, nfds) };
+    let _timeout = unsafe { &*(timeout_ptr as *const TimeSpec) };
+    let _sigmask = unsafe { &*(sigmask_ptr as *const usize) };
+    Ok(0)
+}
+
+pub fn sys_fstatat(dirfd: i32, pathname: *const u8, buf: *mut Fstat, flags: i32) -> SyscallRet {
+    let pathname = c_str_to_string(pathname);
+    trace!(
+        "[sys_fstatat] enter. dirfd: {}, pathname: {}, flags: {}",
+        dirfd,
+        pathname,
+        flags
+    );
+    let empty_path = pathname.is_empty();
+    let path = Path::from(pathname);
+    let inode = open_inode(dirfd as isize, &path, OpenFlags::empty())?;
+    let flags = FcntlFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
+
+    if flags.contains(FcntlFlags::AT_EMPTY_PATH) && empty_path {
+        unimplemented!()
+    } else {
+        let fstat = Fstat::new(&inode);
+        unsafe {
+            ptr::write(buf, fstat);
+        }
+    }
+    Ok(0)
+}
+
+bitflags! {
+    pub struct FaccessatFlags: u32 {
+        const F_OK = 0;
+        const R_OK = 1 << 2;
+        const W_OK = 1 << 1;
+        const X_OK = 1 << 0;
+    }
+}
+
+pub fn sys_faccessat(fd: i32, path: *const u8, amode: u32, flag: u32) -> SyscallRet {
+    trace!("[sys_faccessat] enter.");
+    warn!("[sys_faccessat] not fully implemented.");
+    let _amode = FaccessatFlags::from_bits(amode).ok_or(SyscallErr::EINVAL)?;
+    let _flag = FcntlFlags::from_bits(flag).ok_or(SyscallErr::EINVAL)?;
+    let path = Path::from(c_str_to_string(path));
+    let _inode = open_inode(fd as isize, &path, OpenFlags::empty())?;
+    Ok(0)
+}
+
+pub fn sys_utimensat(
+    dirfd: i32,
+    pathname: *const u8,
+    _times: *const TimeSpec,
+    _flags: i32,
+) -> SyscallRet {
+    let path = Path::from(c_str_to_string(pathname));
+    trace!("[sys_utimensat] enter. pathname: {}", path);
+    warn!("[sys_utimensat] not fully implemented");
+    let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
+        .map_err(|_| SyscallErr::ENOENT as usize)?;
+    debug!("[sys_utimensat] return Ok");
+    Ok(0)
 }

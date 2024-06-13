@@ -344,7 +344,7 @@ impl MemorySet {
                 // BUGGY: map_offset is not considered. Elf section is NOT aligned to PAGE_SIZE
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
                 debug!(
-                    "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:x}",
+                    "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:#x}",
                     {
                         let start_va: VirtAddr = map_area.vpn_range.get_start().into();
                         start_va
@@ -365,7 +365,7 @@ impl MemorySet {
 
         let ph_head_addr = header_va.unwrap() + elf.header.pt2.ph_offset() as usize;
         info!(
-            "[MemorySet::from_elf] AT_PHDR ph_head_addr is {:x} ",
+            "[MemorySet::from_elf] AT_PHDR ph_head_addr is {:#x} ",
             ph_head_addr
         );
         aux_vec.push(AuxHeader {
@@ -398,7 +398,7 @@ impl MemorySet {
         let heap_bottom = user_stack_top + PAGE_SIZE;
         let heap_top = heap_bottom;
         memory_set.brk = heap_top;
-        // info!("user space heap_top: {:x}", heap_top);
+        // info!("user space heap_top: {:#x}", heap_top);
         let mut heap_area = MapArea::new(
             heap_bottom.into(),
             heap_top.into(),

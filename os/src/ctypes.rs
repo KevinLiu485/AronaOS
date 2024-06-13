@@ -22,7 +22,7 @@ pub struct Utsname {
 impl Default for Utsname {
     fn default() -> Self {
         Self {
-            sysname: Self::from_str("Aronaos"),
+            sysname: Self::from_str("AronaOS"),
             nodename: Self::from_str("LAPTOP"),
             release: Self::from_str("5.15.146.1-standard"),
             version: Self::from_str("#1 SMP Thu Jan"),
@@ -73,19 +73,19 @@ pub struct TimeVal {
     pub usec: usize,
 }
 
-/// sys_nanosleep
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TimeSecs {
-    /// seconds
-    pub tv_sec: usize,
-    /// nanoseconds
-    pub tv_nsec: usize,
-}
+// / sys_nanosleep
+// #[repr(C)]
+// #[derive(Clone, Copy, Debug, Default)]
+// pub struct TimeSecs {
+//     /// seconds
+//     pub tv_sec: usize,
+//     /// nanoseconds
+//     pub tv_nsec: usize,
+// }
 
 bitflags! {
     /// MMAP memeory protection
-    pub struct MMAPPROT: u32 {
+    pub struct MmapProt: u32 {
         /// Readable
         const PROT_READ = 1 << 0;
         /// Writeable
@@ -95,16 +95,16 @@ bitflags! {
     }
 }
 
-impl From<MMAPPROT> for MapPermission {
-    fn from(prot: MMAPPROT) -> Self {
+impl From<MmapProt> for MapPermission {
+    fn from(prot: MmapProt) -> Self {
         let mut map_permission = MapPermission::from_bits(0).unwrap();
-        if prot.contains(MMAPPROT::PROT_READ) {
+        if prot.contains(MmapProt::PROT_READ) {
             map_permission |= MapPermission::R;
         }
-        if prot.contains(MMAPPROT::PROT_WRITE) {
+        if prot.contains(MmapProt::PROT_WRITE) {
             map_permission |= MapPermission::W;
         }
-        if prot.contains(MMAPPROT::PROT_EXEC) {
+        if prot.contains(MmapProt::PROT_EXEC) {
             map_permission |= MapPermission::X;
         }
         map_permission
@@ -114,7 +114,7 @@ impl From<MMAPPROT> for MapPermission {
 bitflags! {
     /// determines whether updates to the mapping are visible to other processes mapping the same region, and whether
     /// updates are carried through to the underlying file.
-    pub struct MMAPFLAGS: u32 {
+    pub struct MmapFlags: u32 {
         /// MAP_SHARED
         const MAP_SHARED = 1 << 0;
         /// MAP_PRIVATE

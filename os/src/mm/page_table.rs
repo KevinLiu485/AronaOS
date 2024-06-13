@@ -66,7 +66,7 @@ impl Debug for PageTableEntry {
         let ppn = self.bits >> 12;
         let flags = self.flags().readable_flags();
 
-        write!(f, "PTE {{ ppn: 0x{:X}, flags: {} }}", ppn, flags)
+        write!(f, "PTE {{ ppn: {:#x}, flags: {} }}", ppn, flags)
     }
 }
 
@@ -277,7 +277,7 @@ impl PageTable {
                         for (index, entry) in pagetable.iter().enumerate() {
                             if entry.is_valid() && entry.is_user() {
                                 va = va | index << 12;
-                                error!("--- va: {:x}: {:?}", va, entry);
+                                error!("--- va: {:#x}: {:?}", va, entry);
                                 va = va & !(index << 12);
                             }
                         }

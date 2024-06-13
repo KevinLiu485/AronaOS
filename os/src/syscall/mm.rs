@@ -2,7 +2,7 @@ use crate::mm::{MapPermission, VirtAddr};
 use crate::{config::SyscallRet, utils::SyscallErr};
 
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
-use crate::ctypes::{MMAPFLAGS, MMAPPROT};
+use crate::ctypes::{MmapFlags, MmapProt};
 use crate::task::current_task;
 use log::{debug, trace, warn};
 
@@ -10,7 +10,7 @@ use log::{debug, trace, warn};
 // brk可以不对齐
 pub fn sys_brk(brk: usize) -> SyscallRet {
     // static mut unaligned_brk: usize = 0;
-    trace!("[sys_brk] enter. brk: {:x}", brk);
+    trace!("[sys_brk] enter. brk: {:#x}", brk);
     let current_task = current_task().expect("fail to get current task in sys_brk");
     let current_memory_set = &mut current_task.inner_lock().memory_set;
     // sbrk(0)是获取当前program brk(堆顶)
@@ -25,7 +25,7 @@ pub fn sys_brk(brk: usize) -> SyscallRet {
     let start = heap_area.vpn_range.get_start();
     let end = heap_area.vpn_range.get_end();
     current_memory_set.brk = brk;
-    // debug!("brk: {:x}", brk);
+    // debug!("brk: {:#x}", brk);
     let new_end = VirtAddr::from(brk).ceil();
     // 页内偏移, 不用分配新页
     if new_end == end {
@@ -63,18 +63,20 @@ pub async fn sys_mmap(
 
     //处理参数
     // let prot = MMAPPROT::from_bits(prot as u32);
-    let prot = match MMAPPROT::from_bits(prot as u32) {
+    let prot = match MmapProt::from_bits(prot as u32) {
         Some(prot) => prot,
         None => return Err(SyscallErr::EINVAL.into()),
     };
+    // let prot = MmapProt::all();
+    // error!("[mmap] prot ignored!");
     // let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
-    let flags = match MMAPFLAGS::from_bits(flags as u32) {
+    let flags = match MmapFlags::from_bits(flags as u32) {
         Some(flags) => flags,
         None => return Err(SyscallErr::EINVAL.into()),
     };
     let task = current_task().unwrap();
     trace!(
-        "[sys_mmap] start: {:x}, len: {:x}, fd: {}, offset: {:x}, flags: {:?}",
+        "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}",
         start,
         len,
         fd,
@@ -84,7 +86,7 @@ pub async fn sys_mmap(
     if len == 0 {
         return Err(SyscallErr::EINVAL.into());
     }
-    if flags.contains(MMAPFLAGS::MAP_FIXED) {
+    if flags.contains(MmapFlags::MAP_FIXED) {
         unimplemented!("[sys_mmap] MAP_FIXED")
     }
     // mmap区域最低地址为MMAP_MIN_ADDR
@@ -94,7 +96,7 @@ pub async fn sys_mmap(
     // 注意加上U权限
     permission |= MapPermission::U;
     // 匿名映射
-    if flags.contains(MMAPFLAGS::MAP_ANONYMOUS) {
+    if flags.contains(MmapFlags::MAP_ANONYMOUS) {
         debug!("[sys_mmap] anonymous mmap");
         //需要fd为-1, offset为0
         if fd != -1 || offset != 0 {
@@ -130,7 +132,7 @@ pub async fn sys_mmap(
         start = VirtAddr::from(vpn_range.get_start()).into();
         // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
-        let origin_offset = file.get_meta().offset;
+        let origin_offset = file.get_meta().inner.lock().offset;
         file.seek(offset);
         if file.read(buf).await.is_err() {
             return Err(SyscallErr::EINVAL.into());
@@ -150,5 +152,16 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
     current_task()
         .unwrap()
         .inner_handler(|inner| inner.memory_set.do_unmap(start, len));
+    Ok(0)
+}
+
+pub fn sys_mprotect(addr: *const u8, len: usize, prot: i32) -> SyscallRet {
+    trace!(
+        "[sys_mprotect] enter. addr: {:?}, len: {:#x}, prot: {}",
+        addr,
+        len,
+        prot
+    );
+    warn!("[sys_mprotect] not implemented.");
     Ok(0)
 }

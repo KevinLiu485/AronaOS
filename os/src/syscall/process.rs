@@ -1,11 +1,10 @@
 use crate::config::SyscallRet;
-use crate::ctypes::TimeVal;
 use crate::fs::path::Path;
-use crate::fs::{open_file, OpenFlags, AT_FDCWD};
+use crate::fs::{open_osinode, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, exit_current, yield_task, INITPROC};
-use crate::timer::{get_time_ms, TimeSpec, TimeoutFuture};
+use crate::timer::{TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -23,22 +22,6 @@ pub fn sys_exit(exit_code: i32) -> SyscallRet {
 
 pub async fn sys_yield() -> SyscallRet {
     yield_task().await;
-    Ok(0)
-}
-
-/// Todo!: manage Sum register
-pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
-    trace!("[sys_get_time] enter");
-    let time_val_ptr = time_val_ptr as *mut TimeVal;
-    let current_time_ms = get_time_ms();
-    let time_val = TimeVal {
-        sec: current_time_ms / 1000,
-        usec: current_time_ms % 1000 * 1000,
-    };
-    // debug!("get time of day, time(ms): {}", current_time_ms);
-    unsafe {
-        time_val_ptr.write_volatile(time_val);
-    }
     Ok(0)
 }
 
@@ -132,7 +115,7 @@ pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
         }
     }
     // let path = translated_str(token, path as *const u8);
-    if let Ok(app_inode) = open_file(AT_FDCWD, &path, OpenFlags::RDONLY) {
+    if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs
         let all_data = app_inode.read_all().await;
         let task = current_task().unwrap();
@@ -223,7 +206,8 @@ impl Future for WaitFuture {
             let exit_status_ptr = self.exit_status_addr as *mut i32;
             if exit_status_ptr != core::ptr::null_mut() {
                 unsafe {
-                    exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
+                    // exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
+                    exit_status_ptr.write_volatile(exit_code); // not encoded
                 }
             }
             return Poll::Ready(Ok(found_pid));
@@ -285,20 +269,21 @@ pub fn sys_clone(
             }
         };
         sys_fork(stack)
-    } else if clone_flags.contains(CloneFlags::CLONE_VM) {
-        panic!("unimplemented CLONE_VM!")
+    // } else if clone_flags.contains(CloneFlags::CLONE_VM) {
+    //     panic!("unimplemented CLONE_VM!")
 
-        // clone [create a new thread]
-        // let new_pid = current_task.create_thread(
-        //     stack_ptr,
-        //     tls_ptr,
-        //     parent_tid_ptr,
-        //     chilren_tid_ptr,
-        //     clone_flags,
-        // );
-        // new_pid
+    // clone [create a new thread]
+    // let new_pid = current_task.create_thread(
+    //     stack_ptr,
+    //     tls_ptr,
+    //     parent_tid_ptr,
+    //     chilren_tid_ptr,
+    //     clone_flags,
+    // );
+    // new_pid
     } else {
-        panic!("unimplemented clone_flags!")
+        unimplemented!()
+        // panic!("unimplemented clone_flags!")
     }
 }
 
@@ -381,5 +366,17 @@ pub fn sys_sigaction() -> SyscallRet {
 pub fn sys_sigprocmask() -> SyscallRet {
     trace!("[sys_sigprocmask] enter");
     warn!("[sys_sigprocmask] not implemented");
+    Ok(0)
+}
+
+pub fn sys_geteuid() -> SyscallRet {
+    trace!("[sys_geteuid] enter");
+    warn!("[sys_getuid] not fully implemented");
+    Ok(0)
+}
+
+pub fn sys_kill(pid: i32, sig: i32) -> SyscallRet {
+    trace!("[sys_kill] enter kill pid: {}, sig: {}", pid, sig);
+    warn!("[sys_kill] not implemented");
     Ok(0)
 }

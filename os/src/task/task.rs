@@ -3,7 +3,7 @@ use super::aux::*;
 use super::{pid_alloc, PidHandle};
 use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
-use crate::fs::{Stdin, Stdout};
+use crate::fs::{FileMeta, Stdin, Stdout};
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::trap::TrapContext;
@@ -124,13 +124,19 @@ impl TaskControlBlock {
                 fd_table: FdTable::new(vec![
                     // 0 -> stdin
                     // Some(FdInfo{file: Arc::new(Stdin), flags: OpenFlags::empty()}),
-                    Some(FdInfo::without_flags(Arc::new(Stdin))),
+                    Some(FdInfo::default_flags(Arc::new(Stdin {
+                        meta: FileMeta::new_bare(),
+                    }))),
                     // 1 -> stdout
                     // Some(FdInfo{file: Arc::new(Stdout), flags: OpenFlags::empty()}),
-                    Some(FdInfo::without_flags(Arc::new(Stdout))),
+                    Some(FdInfo::default_flags(Arc::new(Stdout {
+                        meta: FileMeta::new_bare(),
+                    }))),
                     // 2 -> stderr
                     // Some(FdInfo{file: Arc::new(Stdout), flags: OpenFlags::empty()}),
-                    Some(FdInfo::without_flags(Arc::new(Stdout))),
+                    Some(FdInfo::default_flags(Arc::new(Stdout {
+                        meta: FileMeta::new_bare(),
+                    }))),
                 ]),
                 cwd: Path::new_absolute(),
             }),
@@ -151,7 +157,7 @@ impl TaskControlBlock {
         memory_set.activate();
 
         info!(
-            "[TCB::exec] entry_point: {:x}, user_sp: {:x}",
+            "[TCB::exec] entry_point: {:#x}, user_sp: {:#x}",
             entry_point, user_sp
         );
 

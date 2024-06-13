@@ -11,6 +11,7 @@ pub struct Pipe {
     buffer: Arc<SpinNoIrqLock<PipeRingBuffer>>,
     readable: bool,
     writeable: bool,
+    meta: FileMeta,
 }
 
 impl Pipe {
@@ -27,11 +28,13 @@ impl Pipe {
                 buffer: buffer.clone(),
                 readable: true,
                 writeable: false,
+                meta: FileMeta::new_bare(),
             }),
             Arc::new(Self {
                 buffer: buffer.clone(),
                 readable: false,
                 writeable: true,
+                meta: FileMeta::new_bare(),
             }),
         )
     }
@@ -99,8 +102,17 @@ impl File for Pipe {
         Box::pin(async move { Ok(self.write_inner(buf)) })
     }
 
-    fn get_meta(&self) -> FileMeta {
-        FileMeta::new(None, 0)
+    fn get_meta(&self) -> &FileMeta {
+        // FileMeta::new(None, 0)
+        // &FileMeta {
+        //     inner: SpinNoIrqLock::new(FileMetaInner {
+        //         inode: None,
+        //         offset: 0,
+        //         dentry_index: 0,
+        //     }),
+        // }
+        // &FileMeta::new(None, 0, 0)
+        &self.meta
     }
 
     fn seek(&self, _offset: usize) {

@@ -17,7 +17,7 @@ mod time;
 
 // pub type SpinNoIrqLock<T> = SpinNoIrqLock<T>;
 
-const BLOCK_SIZE: usize = 512;
+pub const BLOCK_SIZE: usize = 512;
 const SECTOR_SIZE: usize = 512;
 const BLOCK_CACHE_SIZE: usize = 16;
 const SNAME_LEN: usize = 11;
