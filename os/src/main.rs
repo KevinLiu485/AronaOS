@@ -32,6 +32,7 @@ mod config;
 pub mod ctypes;
 mod drivers;
 mod executor;
+mod signal;
 pub mod fat32;
 pub mod fs;
 pub mod lang_items;
