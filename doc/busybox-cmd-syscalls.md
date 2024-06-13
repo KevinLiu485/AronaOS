@@ -11,7 +11,7 @@ busybox testcode 实际调用的系统调用列表，少于busybox使用的系�
  <!-- - fcntl 25 -->
  <!-- - fstat 80 -->
 <!-- getcwd -->
- - getdents64 61
+ <!-- - getdents64 61 -->
 <!-- getpid -->
 <!-- getppid -->
  <!-- - getuid 174 -->

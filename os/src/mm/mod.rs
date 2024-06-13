@@ -6,17 +6,20 @@
 //!
 //! Every task or process has a memory_set to control its virtual memory.
 mod address;
+mod cow;
 mod frame_allocator;
 mod heap_allocator;
 mod memory_set;
 mod page_table;
+pub mod user_check;
 
 use address::VPNRange;
 pub use address::{KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+pub use cow::handle_recoverable_page_fault;
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::{dump_test, from_global_test, remap_test};
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-use page_table::PTEFlags;
+pub use page_table::PTEFlags;
 pub use page_table::{
     current_satp, /* translated_byte_buffer,  */ PageTable,
     PageTableEntry, /* UserBuffer, UserBufferIterator ,*/

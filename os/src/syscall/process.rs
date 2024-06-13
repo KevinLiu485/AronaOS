@@ -2,6 +2,7 @@ use crate::config::SyscallRet;
 use crate::fs::path::Path;
 use crate::fs::{open_osinode, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
+use crate::mm::user_check::UserCheck;
 use crate::task::schedule::spawn_thread;
 use crate::task::{current_task, exit_current, yield_task, INITPROC};
 use crate::timer::{TimeSpec, TimeoutFuture};
@@ -12,7 +13,7 @@ use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
 use core::time::Duration;
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
     trace!("[sys_exit] enter");
@@ -153,6 +154,14 @@ bitflags! {
 
 pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> SyscallRet {
     trace!("[sys_wait4] enter");
+    // 6.10 debug
+    debug!("[sys_wait4] parent pagetable");
+    current_task()
+        .unwrap()
+        .inner_lock()
+        .memory_set
+        .page_table
+        .dump_all();
     let options = WaitOption::from_bits(options).unwrap();
     WaitFuture::new(options, pid, exit_code_ptr).await
 }
@@ -182,6 +191,8 @@ impl Future for WaitFuture {
         let task = current_task().unwrap();
         // find a child process
         let mut inner = task.inner_lock();
+        let found_pid;
+        let exit_code;
 
         if !inner
             .children
@@ -200,25 +211,31 @@ impl Future for WaitFuture {
             // info!("{}", child.pid.0);
             let child = inner.children.remove(idx);
             // confirm that child will be deallocated after being removed from children list
-            let found_pid = child.getpid();
-            let exit_code = child.inner_lock().exit_code;
-
-            let exit_status_ptr = self.exit_status_addr as *mut i32;
-            if exit_status_ptr != core::ptr::null_mut() {
-                unsafe {
-                    // exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
-                    exit_status_ptr.write_volatile(exit_code); // not encoded
-                }
-            }
-            return Poll::Ready(Ok(found_pid));
+            found_pid = child.getpid();
+            exit_code = child.inner_lock().exit_code;
         } else {
             if self.options.contains(WaitOption::WNOHANG) {
-                Poll::Ready(Ok(0))
+                return Poll::Ready(Ok(0));
             } else {
                 cx.waker().wake_by_ref();
-                Poll::Pending
+                return Poll::Pending;
             }
         }
+        //
+        drop(inner);
+        if self.exit_status_addr != 0 {
+            UserCheck::new().check_writable_pages(
+                self.exit_status_addr as *mut u8,
+                core::mem::size_of::<i32>(),
+            )?
+        }
+        let exit_status_ptr = self.exit_status_addr as *mut i32;
+        if exit_status_ptr != core::ptr::null_mut() {
+            unsafe {
+                exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
+            }
+        }
+        return Poll::Ready(Ok(found_pid));
     }
 }
 

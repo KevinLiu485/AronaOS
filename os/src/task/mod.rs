@@ -17,7 +17,7 @@ use crate::sbi::shutdown;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use lazy_static::*;
-use log::info;
+use log::{debug, info};
 use task::{TaskControlBlock, TaskStatus};
 
 pub use pid::{pid_alloc, PidAllocator, PidHandle};

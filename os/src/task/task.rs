@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use log::info;
+use log::{debug, info};
 
 pub struct TaskControlBlock {
     // immutable
@@ -157,8 +157,10 @@ impl TaskControlBlock {
         memory_set.activate();
 
         info!(
-            "[TCB::exec] entry_point: {:#x}, user_sp: {:#x}",
-            entry_point, user_sp
+            "[TCB::exec] entry_point: {:x}, user_sp: {:x}, page_table: {:x}",
+            entry_point,
+            user_sp,
+            memory_set.token()
         );
 
         let (argv_base, envp_base, auxv_base, user_sp) =
@@ -193,7 +195,13 @@ impl TaskControlBlock {
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_lock();
         // copy user space(include trap context)
-        let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        //let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        let memory_set = MemorySet::from_existed_user_lazily(&parent_inner.memory_set);
+        info!(
+            "[TCB::fork] parent pagtbl: {:x}, child pagtbl: {:x}",
+            parent_inner.memory_set.token(),
+            memory_set.token()
+        );
 
         //still parent's user space, not child
         parent_inner.memory_set.activate();

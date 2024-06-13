@@ -63,17 +63,19 @@ pub async fn sys_mmap(
 
     //处理参数
     // let prot = MMAPPROT::from_bits(prot as u32);
-    let prot = match MmapProt::from_bits(prot as u32) {
-        Some(prot) => prot,
-        None => return Err(SyscallErr::EINVAL.into()),
-    };
+    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL as usize)?;
+    // let prot = match MmapProt::from_bits(prot as u32) {
+    //     Some(prot) => prot,
+    //     None => return Err(SyscallErr::EINVAL.into()),
+    // };
     // let prot = MmapProt::all();
     // error!("[mmap] prot ignored!");
     // let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
-    let flags = match MmapFlags::from_bits(flags as u32) {
-        Some(flags) => flags,
-        None => return Err(SyscallErr::EINVAL.into()),
-    };
+    let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL as usize)?;
+    // let flags = match MmapFlags::from_bits(flags as u32) {
+    //     Some(flags) => flags,
+    //     None => return Err(SyscallErr::EINVAL.into()),
+    // };
     let task = current_task().unwrap();
     trace!(
         "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}",

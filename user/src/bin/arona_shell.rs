@@ -51,7 +51,7 @@ fn inner_cmd(cmd: &mut Command) -> bool {
             true
         }
         "ls" => {
-            *cmd = Command::from("busybox ls");
+            *cmd = Command::from("/busybox ls");
             false   // continue to exec
         }
         _ => false,
