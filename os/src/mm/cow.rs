@@ -1,7 +1,6 @@
 use crate::mm::address::VirtPageNum;
 use crate::mm::frame_allocator::frame_alloc;
 use crate::mm::page_table::{PTEFlags, PageTable, PageTableEntry};
-use crate::syscall;
 use crate::task::current_task;
 use crate::utils::SyscallErr;
 use alloc::sync::Arc;

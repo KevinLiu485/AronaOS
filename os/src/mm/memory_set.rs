@@ -6,7 +6,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;
 use crate::task::aux::*;
-use crate::MMAP_MIN_ADDR;
+use crate::{MMAP_MIN_ADDR, USER_MAX_VA};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -122,8 +122,11 @@ impl MemorySet {
     }
     /// especially used for sys_mmap
     /// no conflict will happen, because mmap_start is monotonically increasing
-    pub fn get_unmapped_area(&self, start: usize, len: usize) -> VPNRange {
+    pub fn get_unmapped_area(&self, start: usize, len: usize) -> Option<VPNRange> {
         let end = start + len;
+        if end > USER_MAX_VA + 1 {
+            return None;
+        }
         let start_vpn = VirtAddr::from(start).floor();
         let end_vpn = VirtAddr::from(end).ceil();
         debug!(
@@ -137,7 +140,7 @@ impl MemorySet {
                 end_va
             }
         );
-        VPNRange::new(start_vpn, end_vpn)
+        Some(VPNRange::new(start_vpn, end_vpn))
         // if !self.check_vpn_range_conflict(range) {
         //     return range;
         // } else {
@@ -433,6 +436,7 @@ impl MemorySet {
             areas,
             heap,
             brk,
+            mmap_start: MMAP_MIN_ADDR,
         }
     }
     ///Clone a same `MemorySet`

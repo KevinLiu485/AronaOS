@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use log::{debug, info};
+use log::info;
 
 pub struct TaskControlBlock {
     // immutable

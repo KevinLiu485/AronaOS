@@ -22,8 +22,8 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-# FS_IMG_ROOT := $(FS_DIR)/root
-FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
+FS_IMG_ROOT := $(FS_DIR)/root
+# FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
 FS_IMG := $(FS_DIR)/fs.img
 # FS_IMG := ../sdcard.img
 
@@ -140,12 +140,12 @@ move-cargo:
 submit: move-cargo build move-bin
 
 run: env build 
-	@qemu-system-riscv64 $(QEMU_ARGS)
+	qemu-system-riscv64 $(QEMU_ARGS)
 
 last:
-	@qemu-system-riscv64 $(QEMU_ARGS)
+	qemu-system-riscv64 $(QEMU_ARGS)
 
 gdbserver: env build
-	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
+	qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 .PHONY: run last submit gdbserver clean

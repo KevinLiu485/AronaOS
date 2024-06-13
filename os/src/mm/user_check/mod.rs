@@ -1,5 +1,4 @@
-use super::{handle_recoverable_page_fault, page_table, PageTable, VirtAddr};
-use crate::task::current_task;
+use super::{handle_recoverable_page_fault, PageTable, VirtAddr};
 use crate::trap::set_kernel_trap_entry;
 use crate::utils::SyscallErr;
 use core::arch::global_asm;
@@ -20,6 +19,7 @@ struct TryOpRet {
 
 extern "C" {
     fn __try_access_user_error_trap();
+    #[allow(improper_ctypes)]
     fn __try_write_user_u8(user_addr: usize) -> TryOpRet;
 }
 

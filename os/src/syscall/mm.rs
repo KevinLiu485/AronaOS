@@ -104,7 +104,11 @@ pub async fn sys_mmap(
         if fd != -1 || offset != 0 {
             return Err(SyscallErr::EINVAL.into());
         }
-        let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
+        let vpn_range = task
+            .inner_lock()
+            .memory_set
+            .get_unmapped_area(start, len)
+            .ok_or(SyscallErr::ENOMEM)?;
         task.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
@@ -125,7 +129,11 @@ pub async fn sys_mmap(
             .inner_handler(|inner| inner.fd_table.get(fd as usize))
             .unwrap()
             .file;
-        let vpn_range = task.inner_lock().memory_set.get_unmapped_area(start, len);
+        let vpn_range = task
+            .inner_lock()
+            .memory_set
+            .get_unmapped_area(start, len)
+            .ok_or(SyscallErr::ENOMEM)?;
         //task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         task.inner_lock()
             .memory_set

@@ -10,14 +10,10 @@
 //! to [`syscall()`].
 mod context;
 
-use crate::mm::{
-    frame_alloc, handle_recoverable_page_fault, PTEFlags, PageTable, PageTableEntry, VirtAddr,
-};
+use crate::mm::{handle_recoverable_page_fault, PageTable, VirtAddr};
 use crate::syscall::syscall;
-use crate::task::{current_task, current_trap_cx, exit_current, yield_task};
+use crate::task::{current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
-use alloc::sync::Arc;
-use core::arch::asm;
 use core::arch::global_asm;
 use log::{debug, error};
 use riscv::register::satp;
