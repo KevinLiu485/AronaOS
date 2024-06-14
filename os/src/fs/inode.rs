@@ -28,8 +28,8 @@ pub enum InodeMode {
 }
 
 pub trait Inode: Send + Sync {
-    fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AsyncResult<usize>;
-    fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AsyncResult<usize>;
+    fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize>;
+    fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize>;
     fn mknod(&self, this: Arc<dyn Inode>, name: &str, mode: InodeMode)
         -> SysResult<Arc<dyn Inode>>;
     fn find(&self, this: Arc<dyn Inode>, name: &str) -> SysResult<Arc<dyn Inode>>;
@@ -78,36 +78,36 @@ impl dyn Inode {
         create_file: bool,
         create_dir: bool,
     ) -> SysResult<Arc<dyn Inode>> {
-        let mut current_dir = self.clone();
+        let mut current_node = self.clone();
         for (i, name) in path.get_inner().iter().enumerate() {
             if name == "." {
                 continue;
             } else if name == ".." {
-                if let Some(new_dir) = current_dir.get_meta().inner.lock().parent.clone() {
-                    current_dir = new_dir.upgrade().unwrap();
+                if let Some(new_dir) = current_node.get_meta().inner.lock().parent.clone() {
+                    current_node = new_dir.upgrade().unwrap();
                 } else {
                     return Err(1);
                 }
             } else {
                 // name is a String
-                if let Ok(new_dir) = current_dir.find(current_dir.clone(), name)
+                if let Ok(new_node) = current_node.find(current_node.clone(), name)
                 // .get_meta()
                 // .children_handler(current_dir.clone(), |children| children.get(name).clone())
                 {
-                    current_dir = new_dir.clone();
+                    current_node = new_node.clone();
                 } else if i == path.len() - 1 && create_file {
                     debug!("[open_path] file {} created", name);
-                    current_dir = current_dir.mknod_v(name, InodeMode::FileREG).unwrap();
+                    current_node = current_node.mknod_v(name, InodeMode::FileREG).unwrap();
                 } else if i == path.len() - 1 && create_dir {
                     debug!("[open_path] dir {} created", name);
-                    current_dir = current_dir.mkdir_v(name, InodeMode::FileDIR).unwrap();
+                    current_node = current_node.mkdir_v(name, InodeMode::FileDIR).unwrap();
                 } else {
                     debug!("[open_path] file {} not found", name);
                     return Err(1);
                 }
             }
         }
-        Ok(current_dir)
+        Ok(current_node)
     }
 
     pub fn delete(&self) {

@@ -498,64 +498,25 @@ pub fn nanosleep(req: &TimeSpec) -> SyscallResult<Option<TimeSpec>> {
     }
 }
 
-// pub fn 
-// pub fn open(path: &str, flags: OpenFlags) -> isize {
-//     sys_open(path, flags.bits)
-// }
-// pub fn close(fd: usize) -> isize {
-//     sys_close(fd)
-// }
-// pub fn read(fd: usize, buf: &mut [u8]) -> isize {
-//     sys_read(fd, buf)
-// }
-// pub fn write(fd: usize, buf: &[u8]) -> isize {
-//     sys_write(fd, buf)
-// }
-// pub fn exit(exit_code: i32) -> ! {
-//     sys_exit(exit_code);
-// }
-// pub fn yield_() -> isize {
-//     sys_yield()
-// }
-// pub fn get_time() -> isize {
-//     sys_get_time()
-// }
-// pub fn getpid() -> isize {
-//     sys_getpid()
-// }
-// pub fn fork() -> isize {
-//     sys_fork()
-// }
-// pub fn exec(path: &str) -> isize {
-//     sys_exec(path)
-// }
-// pub fn wait(exit_code: &mut i32) -> isize {
-//     loop {
-//         match sys_waitpid(-1, exit_code as *mut _) {
-//             -2 => {
-//                 yield_();
-//             }
-//             // -1 or a real pid
-//             exit_pid => return exit_pid,
-//         }
-//     }
-// }
-
-// pub fn waitpid(pid: usize, exit_code: &mut i32) -> isize {
-//     loop {
-//         match sys_waitpid(pid as isize, exit_code as *mut _) {
-//             -2 => {
-
-//                 yield_();
-//             }
-//             // -1 or a real pid
-//             exit_pid => return exit_pid,
-//         }
-//     }
-// }
-// pub fn sleep(period_ms: usize) {
-//     let start = sys_get_time();
-//     while sys_get_time() < start + period_ms as isize {
-//         sys_yield();
-//     }
-// }
+/// send data from one file to another
+/// 
+/// # Arguments
+/// 
+/// * `out_file` - The file to write to
+/// * `in_file` - The file to read from
+/// * `offset` - The offset of the file to read from
+/// * `count` - The number of bytes to send
+/// 
+/// # Returns
+/// 
+/// The number of bytes sent
+/// 
+/// # Errors
+/// 
+/// on error, return POSIX errno
+pub fn sendfile(out_file: &File, in_file: &File, offset: &mut usize, count: usize) -> SyscallResult<usize> {
+    match sys_sendfile(out_file.get_fd(), in_file.get_fd(), offset, count) {
+        ret if ret >= 0 => Ok(ret as usize),
+        ret => Err(ret.into()),
+    }
+}

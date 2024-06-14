@@ -4,7 +4,10 @@ use core::arch::asm;
 
 use alloc::vec::Vec;
 
-use crate::{CloneFlags, Dirent, Kstat, OpenFlags, TimeSpec, TimeVal, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
+use crate::{
+    CloneFlags, Dirent, Kstat, OpenFlags, TimeSpec, TimeVal, Tms, Utsname, WaitOption, MMAPFLAGS,
+    MMAPPROT,
+};
 
 // const SYSCALL_OPEN: usize = 56;
 // const SYSCALL_CLOSE: usize = 57;
@@ -50,6 +53,26 @@ const SYS_UNAME: usize = 160;
 const SYS_SCHED_YIELD: usize = 124;
 const SYS_GETTIMEOFDAY: usize = 169;
 const SYS_NANOSLEEP: usize = 101;
+
+const SYS_SET_TID_ADDRESS: usize = 96;
+const SYS_GETUID: usize = 174;
+const SYS_IOCTL: usize = 29;
+const SYS_EXIT_GROUP: usize = 94;
+const SYS_SIGACTION: usize = 134;
+const SYS_SIGPROCMASK: usize = 135;
+const SYS_FCNTL: usize = 25;
+const SYS_WRITEV: usize = 66;
+const SYS_GETEUID: usize = 175;
+const SYS_PPOLL: usize = 73;
+const SYS_CLOCK_GETTIME: usize = 113;
+const SYS_SYSINFO: usize = 179;
+const SYS_SYSLOG: usize = 116;
+const SYS_FSTATAT: usize = 79;
+const SYS_FACCESSAT: usize = 48;
+const SYS_KILL: usize = 129;
+const SYS_MPROTECT: usize = 226;
+const SYS_UTIMENSAT: usize = 88;
+const SYS_SENDFILE: usize = 71;
 
 fn syscall(id: usize, args: [usize; 6]) -> isize {
     let mut ret: isize;
@@ -190,7 +213,10 @@ pub fn sys_fstat(fd: usize, buf: &mut Kstat) -> isize {
 }
 
 pub fn sys_clone(flags: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
-    syscall(SYS_CLONE, [flags.bits() as usize, stack, ptid, tls, ctid, 0])
+    syscall(
+        SYS_CLONE,
+        [flags.bits() as usize, stack, ptid, tls, ctid, 0],
+    )
 }
 
 pub fn sys_execve(path: &str, argv: &[*const u8], envp: &[*const u8]) -> isize {
@@ -297,50 +323,16 @@ pub fn sys_nanosleep(req: &TimeSpec, rem: &mut TimeSpec) -> isize {
     )
 }
 
-// pub fn sys_open(path: &str, flags: u32) -> isize {
-//     syscall(SYS_OPENAT, [path.as_ptr() as usize, flags as usize, 0, 0, 0, 0])
-// }
-
-// pub fn sys_close(fd: usize) -> isize {
-//     syscall(SYSCALL_CLOSE, [fd, 0, 0, 0, 0, 0])
-// }
-
-// pub fn sys_read(fd: usize, buffer: &mut [u8]) -> isize {
-//     syscall(
-//         SYSCALL_READ,
-//         [fd, buffer.as_mut_ptr() as usize, buffer.len(), 0, 0, 0],
-//     )
-// }
-
-// pub fn sys_write(fd: usize, buffer: &[u8]) -> isize {
-//     syscall(SYSCALL_WRITE, [fd, buffer.as_ptr() as usize, buffer.len(), 0, 0, 0])
-// }
-
-// pub fn sys_exit(exit_code: i32) -> ! {
-//     syscall(SYSCALL_EXIT, [exit_code as usize, 0, 0, 0, 0, 0]);
-//     panic!("sys_exit never returns!");
-// }
-
-// pub fn sys_yield() -> isize {
-//     syscall(SYSCALL_YIELD, [0, 0, 0, 0, 0, 0])
-// }
-
-// pub fn sys_get_time() -> isize {
-//     syscall(SYSCALL_GET_TIME, [0, 0, 0, 0, 0, 0])
-// }
-
-// pub fn sys_getpid() -> isize {
-//     syscall(SYSCALL_GETPID, [0, 0, 0, 0, 0, 0])
-// }
-
-// pub fn sys_fork() -> isize {
-//     syscall(SYSCALL_FORK, [0, 0, 0, 0, 0, 0])
-// }
-
-// pub fn sys_exec(path: &str) -> isize {
-//     syscall(SYSCALL_EXEC, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
-// }
-
-// pub fn sys_waitpid(pid: isize, exit_code: *mut i32) -> isize {
-//     syscall(SYSCALL_WAITPID, [pid as usize, exit_code as usize, 0, 0, 0, 0])
-// }
+pub fn sys_sendfile(out_fd: i32, in_fd: i32, offset: &mut usize, count: usize) -> isize {
+    syscall(
+        SYS_SENDFILE,
+        [
+            out_fd as usize,
+            in_fd as usize,
+            offset as *mut usize as usize,
+            count,
+            0,
+            0,
+        ],
+    )
+}

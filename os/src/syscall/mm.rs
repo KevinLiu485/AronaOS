@@ -63,7 +63,7 @@ pub async fn sys_mmap(
 
     //处理参数
     // let prot = MMAPPROT::from_bits(prot as u32);
-    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL as usize)?;
+    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     // let prot = match MmapProt::from_bits(prot as u32) {
     //     Some(prot) => prot,
     //     None => return Err(SyscallErr::EINVAL.into()),
@@ -71,7 +71,7 @@ pub async fn sys_mmap(
     // let prot = MmapProt::all();
     // error!("[mmap] prot ignored!");
     // let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
-    let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL as usize)?;
+    let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
     // let flags = match MmapFlags::from_bits(flags as u32) {
     //     Some(flags) => flags,
     //     None => return Err(SyscallErr::EINVAL.into()),
@@ -142,12 +142,15 @@ pub async fn sys_mmap(
         start = VirtAddr::from(vpn_range.get_start()).into();
         // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
-        let origin_offset = file.get_meta().inner.lock().offset;
-        file.seek(offset);
+        // let origin_offset = file.get_meta().inner.lock().offset;
+        let origin_offset = file.seek(offset);
         if file.read(buf).await.is_err() {
             return Err(SyscallErr::EINVAL.into());
         }
-        file.seek(origin_offset);
+        if let Some(origin_offset) = origin_offset {
+            // file is seekable, then seek back
+            file.seek(origin_offset);
+        }
         return Ok(start);
     }
     // todo!()

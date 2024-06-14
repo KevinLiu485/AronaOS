@@ -41,18 +41,20 @@ impl FileMeta {
 
 /// File trait
 pub trait File: Send + Sync {
-    /// If readable
-    fn readable(&self) -> bool;
-    /// If writable
-    fn writable(&self) -> bool;
-    /// Read file to `UserBuffer`
+    // /// If readable
+    // fn readable(&self) -> bool;
+    // /// If writable
+    // fn writable(&self) -> bool;
+    /// Read file to `UserBuffer`, return `Err(EBADF)` if not readable
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize>;
-    /// Write `UserBuffer` to file
+    /// Write `UserBuffer` to file, return `Err(EBADF)` if not writable
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize>;
 
     fn get_meta(&self) -> &FileMeta;
 
-    fn seek(&self, offset: usize);
+    /// set offset to `offset`, return the offset **BEFORE SEEK**, which differs from `linux lseek`.
+    /// return `None` if the file is not seekable
+    fn seek(&self, offset: usize) -> Option<usize>;
 }
 
 #[derive(Debug)]

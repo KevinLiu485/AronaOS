@@ -78,6 +78,9 @@ const SYS_FACCESSAT: usize = 48;
 const SYS_KILL: usize = 129;
 const SYS_MPROTECT: usize = 226;
 const SYS_UTIMENSAT: usize = 88;
+const SYS_SENDFILE: usize = 71;
+const SYS_LSEEK: usize = 62;
+
 
 mod fs;
 mod mm;
@@ -166,6 +169,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as *const _,
             args[3] as i32,
         ),
+        SYS_SENDFILE => {
+            sys_sendfile(
+                args[0] as i32,
+                args[1] as i32,
+                args[2] as usize,
+                args[3] as usize,
+            )
+            .await
+        }
         _ => unsupported(syscall_id),
     }
 }

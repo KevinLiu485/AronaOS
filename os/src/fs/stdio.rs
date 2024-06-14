@@ -6,6 +6,7 @@ use crate::config::AsyncResult;
 // use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
 use crate::task::yield_task;
+use crate::utils::SyscallErr;
 ///Standard input
 pub struct Stdin {
     pub meta: FileMeta,
@@ -16,12 +17,12 @@ pub struct Stdout {
 }
 
 impl File for Stdin {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        false
-    }
+    // fn readable(&self) -> bool {
+    //     true
+    // }
+    // fn writable(&self) -> bool {
+    //     false
+    // }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
             // assert_eq!(buf.len(), 1);
@@ -46,7 +47,8 @@ impl File for Stdin {
         })
     }
     fn write(&self, _buf: &[u8]) -> AsyncResult<usize> {
-        panic!("Cannot write to stdin!");
+        // panic!("Cannot write to stdin!");
+        Box::pin(async move { Err(SyscallErr::EBADF.into()) })
     }
     fn get_meta(&self) -> &FileMeta {
         // FileMeta::new(None, 0)
@@ -58,20 +60,21 @@ impl File for Stdin {
         // &FileMeta::new(None, 0, 0)
         &self.meta
     }
-    fn seek(&self, _offset: usize) {
-        panic!("Cannot seek stdin!");
+    fn seek(&self, _offset: usize) -> Option<usize> {
+        None
     }
 }
 
 impl File for Stdout {
-    fn readable(&self) -> bool {
-        false
-    }
-    fn writable(&self) -> bool {
-        true
-    }
+    // fn readable(&self) -> bool {
+    //     false
+    // }
+    // fn writable(&self) -> bool {
+    //     true
+    // }
     fn read(&self, _buf: &mut [u8]) -> AsyncResult<usize> {
-        panic!("Cannot read from stdout!");
+        Box::pin(async move { Err(SyscallErr::EBADF.into()) })
+        // panic!("Cannot read from stdout!");
     }
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
@@ -92,7 +95,7 @@ impl File for Stdout {
         // &FileMeta::new(None, 0, 0)
         &self.meta
     }
-    fn seek(&self, _offset: usize) {
-        panic!("Cannot seek stdout!");
+    fn seek(&self, _offset: usize) -> Option<usize> {
+        None
     }
 }

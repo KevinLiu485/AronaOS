@@ -19,6 +19,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
+use log::debug;
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
 pub struct OSInode {
@@ -40,11 +41,11 @@ impl OSInode {
         self.meta.inner.lock().offset
     }
 
-    pub fn set_offset(&self, offset: usize) {
+    fn set_offset(&self, offset: usize) {
         self.meta.inner.lock().offset = offset;
     }
 
-    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
+    fn inner_handler<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
         f(&mut self.meta.inner.lock())
     }
 
@@ -92,6 +93,53 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+}
+
+impl File for OSInode {
+    // fn readable(&self) -> bool {
+    //     self.readable
+    // }
+    // fn writable(&self) -> bool {
+    //     self.writable
+    // }
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
+        Box::pin(async move {
+            if !self.readable {
+                return Err(SyscallErr::EBADF.into());
+            }
+            let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
+            let offset = self.get_offset();
+            let read_size = inode.read(offset, buf).await?;
+            self.set_offset(offset + read_size);
+            Ok(read_size)
+        })
+    }
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
+        Box::pin(async move {
+            debug!("[OSInode::write] buf: {:?}", buf);
+            if !self.writable {
+                return Err(SyscallErr::EBADF.into());
+            }
+            let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
+            let offset = self.get_offset();
+            let write_size = inode.write(offset, buf).await?;
+            self.set_offset(offset + write_size);
+            Ok(write_size)
+        })
+    }
+
+    fn get_meta(&self) -> &FileMeta {
+        &self.meta
+    }
+
+    fn seek(&self, offset: usize) -> Option<usize> {
+        self.inner_handler(|inner| {
+            let ret = inner.offset;
+            inner.offset = offset;
+            Some(ret)
+        })
+        // self.set_offset(offset);
     }
 }
 
@@ -197,6 +245,7 @@ fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
     }
 }
 
+/// Open a inode by `dirfd` and `path`
 pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<dyn Inode>> {
     // match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
     //     Ok(inode) => {
@@ -218,6 +267,7 @@ pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<
     })
 }
 
+/// Open a OSInode by `dirfd` and `path`
 pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     match open_inode(dirfd, path, flags) {
@@ -226,81 +276,26 @@ pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Ar
     }
 }
 
-pub fn open_fd(fd: usize) -> SysResult<Arc<dyn File>> {
+/// open a `dyn File` by `fd`
+/// as `Err` differs from different syscalls(e.g. `read` and `sendfile`), only return `Option` rather than `Result`.
+pub fn open_fd(fd: usize) -> Option<Arc<dyn File>> {
     let fdinfo = current_task()
         .unwrap()
-        .inner_handler(|inner| inner.fd_table.get(fd).ok_or(SyscallErr::EBADF as usize))?;
-    let osinode = fdinfo.file;
+        .inner_handler(|inner| inner.fd_table.get(fd))?;
+    let file = fdinfo.file;
     // .get_meta()
     // .inode
     // .ok_or(SyscallErr::EBADF as usize)?;
-    Ok(osinode)
+    Some(file)
 }
 
+/// Create a directory by `dirfd` and `path`
 pub fn create_dir(dirfd: isize, path: &Path) -> SyscallRet {
     // match open_cwd(dirfd, path).open_path(path, false, true) {
     //     Ok(_) => Ok(0),
     //     Err(e) => Err(e),
     // }
-    open_cwd(dirfd, path).and_then(|cwd| cwd.open_path(path, false, true).and_then(|_| Ok(0)))
-}
-
-impl File for OSInode {
-    fn readable(&self) -> bool {
-        self.readable
-    }
-    fn writable(&self) -> bool {
-        self.writable
-    }
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
-        Box::pin(async move {
-            let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
-            // let inode = self.inode.clone();
-            let offset = self.get_offset();
-            let read_size = inode.read(offset, buf).await;
-            self.set_offset(offset + read_size.unwrap());
-            Ok(read_size.unwrap())
-        })
-    }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
-        Box::pin(async move {
-            // let mut total_write_size = 0;
-            let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
-            // let inode = self.inode.clone();
-            // for slices in buf.buffers.iter() {
-            // let mut inner = self.inner.lock();
-            let offset = self.get_offset();
-            let write_size = inode.write(offset, buf).await;
-            // inner.offset += write_size.unwrap();
-            self.set_offset(offset + write_size.unwrap());
-            // total_write_size += write_size.unwrap();
-            // inner droped here
-            // }
-            Ok(write_size.unwrap())
-        })
-    }
-
-    // fn meta_handler<T>(&self, f: impl FnOnce(&FileMeta) -> T) -> T {
-    //     f(&self.inner.lock())
-    // }
-
-    fn get_meta(&self) -> &FileMeta {
-        // let inode = self.inner.lock().inode.clone();
-        // let inode = self.inode.clone();
-        // let (offset, dentry_index) = self.inner_handler(|inner| (inner.offset, inner.dentry_index));
-        // FileMeta::new(Some(inode), offset)
-        // FileMeta {
-        //     inode: Some(inode),
-        //     offset,
-        //     dentry_index,
-        // }
-        // FileMeta {
-        //     osinode: Some(self.clone()),
-        // }
-        &self.meta
-    }
-
-    fn seek(&self, offset: usize) {
-        self.inner_handler(|inner| inner.offset = offset);
-    }
+    // open_cwd(dirfd, path).and_then(|cwd| cwd.open_path(path, false, true).and_then(|_| Ok(0)))
+    let cwd_inode = open_cwd(dirfd, path)?;
+    cwd_inode.open_path(path, false, true).map(|_| 0)
 }

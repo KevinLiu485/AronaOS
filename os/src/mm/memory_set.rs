@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::fmt::Debug;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{debug, info, warn};
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -125,6 +125,7 @@ impl MemorySet {
     pub fn get_unmapped_area(&self, start: usize, len: usize) -> Option<VPNRange> {
         let end = start + len;
         if end > USER_MAX_VA + 1 {
+            warn!("[sys_mmap] out of mmap virtual memory space");
             return None;
         }
         let start_vpn = VirtAddr::from(start).floor();

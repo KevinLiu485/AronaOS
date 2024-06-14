@@ -16,7 +16,7 @@ busybox testcode 实际调用的系统调用列表，少于busybox使用的系�
 <!-- getppid -->
  <!-- - getuid 174 -->
  <!-- - ioctl 29 -->
- - kill 129
+ <!-- - kill 129 -->
  - lseek 62
 <!-- mkdirat -->
 <!-- mmap -->

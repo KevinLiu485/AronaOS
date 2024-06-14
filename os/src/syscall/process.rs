@@ -156,12 +156,12 @@ pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> Syscal
     trace!("[sys_wait4] enter");
     // 6.10 debug
     debug!("[sys_wait4] parent pagetable");
-    current_task()
-        .unwrap()
-        .inner_lock()
-        .memory_set
-        .page_table
-        .dump_all();
+    // current_task()
+    //     .unwrap()
+    //     .inner_lock()
+    //     .memory_set
+    //     .page_table
+    //     .dump_all();
     let options = WaitOption::from_bits(options).unwrap();
     WaitFuture::new(options, pid, exit_code_ptr).await
 }

@@ -1,7 +1,6 @@
 use alloc::{boxed::Box, sync::Arc};
-use log::debug;
 
-use crate::{mutex::SpinNoIrqLock, task::yield_task, AsyncResult};
+use crate::{mutex::SpinNoIrqLock, task::yield_task, utils::SyscallErr, AsyncResult};
 
 use super::{File, FileMeta};
 
@@ -67,18 +66,21 @@ impl Pipe {
 }
 
 impl File for Pipe {
-    fn readable(&self) -> bool {
-        self.readable
-    }
+    // fn readable(&self) -> bool {
+    //     self.readable
+    // }
 
-    fn writable(&self) -> bool {
-        self.writeable
-    }
+    // fn writable(&self) -> bool {
+    //     self.writeable
+    // }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
             // if self.buffer.lock().eof() {
             //     return Ok(0);
             // }
+            if !self.readable {
+                return Err(SyscallErr::EBADF.into());
+            }
             loop {
                 let ret = self.read_inner(buf);
                 if ret != 0 {
@@ -91,32 +93,26 @@ impl File for Pipe {
                     yield_task().await;
                     continue;
                 }
-                // yield_task().await;
-                // continue;
             }
         })
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
-        debug!("[Pipe::write] entered");
-        Box::pin(async move { Ok(self.write_inner(buf)) })
+        // debug!("[Pipe::write] entered");
+        Box::pin(async move {
+            if !self.writeable {
+                return Err(SyscallErr::EBADF.into());
+            }
+            Ok(self.write_inner(buf))
+        })
     }
 
     fn get_meta(&self) -> &FileMeta {
-        // FileMeta::new(None, 0)
-        // &FileMeta {
-        //     inner: SpinNoIrqLock::new(FileMetaInner {
-        //         inode: None,
-        //         offset: 0,
-        //         dentry_index: 0,
-        //     }),
-        // }
-        // &FileMeta::new(None, 0, 0)
         &self.meta
     }
 
-    fn seek(&self, _offset: usize) {
-        panic!("Pipe does not support seek")
+    fn seek(&self, _offset: usize) -> Option<usize> {
+        None
     }
 }
 

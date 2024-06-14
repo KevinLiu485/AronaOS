@@ -1,4 +1,5 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use log::debug;
 
 use crate::{
     config::{AsyncResult, SysResult},
@@ -109,13 +110,14 @@ impl FAT32Inode {
 }
 
 impl Inode for FAT32Inode {
-    fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AsyncResult<usize> {
-        Box::pin(async move { Ok(self.file.lock().read(_buf, _offset)) })
+    fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize> {
+        Box::pin(async move { Ok(self.file.lock().read(buf, offset)) })
     }
 
-    fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AsyncResult<usize> {
+    fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            let ret = self.file.lock().write(_buf, _offset);
+            debug!("[FAT32Inode::write] buf: {:?}, offset: {}", buf, offset);
+            let ret = self.file.lock().write(buf, offset);
             // update data_size
             self.meta.inner.lock().data_size = self.file.lock().size.unwrap_or(0);
             Ok(ret)
