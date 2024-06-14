@@ -65,6 +65,10 @@ const SYS_GETUID: usize = 174;
 const SYS_IOCTL: usize = 29;
 const SYS_EXIT_GROUP: usize = 94;
 
+const SYS_RT_SIGACTION: usize = 134;
+const SYS_RT_SIGPROCMASK: usize = 135;
+const SYS_RT_SIGRETURN: usize = 139;
+
 mod fs;
 mod mm;
 mod process;
@@ -77,7 +81,10 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_times, sys_uname};
 
-use crate::config::SyscallRet;
+use crate::{
+    config::SyscallRet,
+    signal::{sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
+};
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
@@ -123,6 +130,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_GETUID => sys_getuid(),
         SYS_IOCTL => sys_ioctl(),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
+
+        SYS_RT_SIGACTION => sys_rt_sigaction(args[0], args[1], args[2]),
+        SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1], args[2]),
+        SYS_RT_SIGRETURN => sys_rt_sigerturn(),
+
         _ => unsupported(syscall_id),
     }
 }

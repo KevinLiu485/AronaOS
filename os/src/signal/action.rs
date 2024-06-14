@@ -1,21 +1,19 @@
-use crate::SIG_NUM;
 use super::SigBitmap;
+use crate::SIG_NUM;
 
 #[derive(Clone)]
 pub struct SigHandlers {
     /// handlers[i] is the handler of signal i (index start from 1)
-    pub sig_handlers: [Option<SigAction>; SIG_NUM + 1],
+    pub sig_handlers: [SigAction; SIG_NUM + 1],
 }
 
 impl SigHandlers {
     pub fn new() -> Self {
         Self {
-            sig_handlers: [None; SIG_NUM + 1],
+            sig_handlers: [SigAction::new(); SIG_NUM + 1],
         }
     }
 }
-
-
 
 /// User defined
 #[derive(Clone, Copy)]
@@ -32,5 +30,12 @@ pub struct SigAction {
 }
 
 impl SigAction {
-
+    /// empty SigAction
+    fn new() -> Self {
+        Self {
+            sa_handler: 0,
+            sa_restorer: 0,
+            sa_mask: SigBitmap::empty(),
+        }
+    }
 }

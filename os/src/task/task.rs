@@ -5,20 +5,22 @@ use crate::fs::path::Path;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
+use crate::signal::{SigHandlers, SigSet};
 use crate::trap::TrapContext;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::DerefMut;
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 use log::{debug, info};
 
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
     pub is_zombie: AtomicBool,
+    /// whether the task is handling a signal
     // mutable
     inner: SpinNoIrqLock<TaskControlBlockInner>,
 }
@@ -33,6 +35,11 @@ pub struct TaskControlBlockInner {
     pub exit_code: i32,
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
     pub cwd: Path,
+    /// signal module
+    pub sig_set: SigSet,
+    pub sig_handlers: SigHandlers,
+    pub signal_context: Option<TrapContext>,
+    pub handling_signo: usize,
 }
 
 impl TaskControlBlockInner {
@@ -82,6 +89,10 @@ impl TaskControlBlock {
                 exit_code: 0,
                 fd_table: Vec::new(),
                 cwd: Path::new_absolute(),
+                sig_set: SigSet::new(),
+                sig_handlers: SigHandlers::new(),
+                signal_context: None,
+                handling_signo: 0,
             }),
         }
     }
@@ -119,6 +130,10 @@ impl TaskControlBlock {
                     Some(Arc::new(Stdout)),
                 ],
                 cwd: Path::new_absolute(),
+                sig_set: SigSet::new(),
+                sig_handlers: SigHandlers::new(),
+                signal_context: None,
+                handling_signo: 0,
             }),
         };
         // prepare TrapContext in user space
@@ -212,6 +227,10 @@ impl TaskControlBlock {
                 exit_code: 0,
                 fd_table: new_fd_table,
                 cwd,
+                sig_set: SigSet::from_existed_user(&parent_inner.sig_set),
+                sig_handlers: parent_inner.sig_handlers.clone(),
+                signal_context: None,
+                handling_signo: 0,
             }),
         });
         // add child

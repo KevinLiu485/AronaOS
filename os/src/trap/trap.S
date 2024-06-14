@@ -14,8 +14,8 @@
 # user -> kernel
 __trap_from_user:
     csrrw sp, sscratch, sp
-    # now sp->*TrapContext in kernel space, sscratch->user stack
-    # save other general purpose registers
+    # now sp->*TrapContext, sscratch->user stack
+    # save user general purpose registers
     sd x1, 1*8(sp)
     # skip sp(x2), we will save it later
     # save x3~x31 (x4 is tp)
@@ -52,6 +52,7 @@ __trap_from_user:
     ld fp, 48*8(sp)
     ld tp, 49*8(sp)
     ld sp, 34*8(sp)
+    # caller-savedd regs are restored by the caller
     # return to kernel ra
     ret
 
@@ -59,11 +60,10 @@ __trap_from_user:
 
 # kernel -> user
 __return_to_user:
-    # a0: *TrapContext in user space(Constant);
-    # ssratch: *TrapContext in user address space 
+    # a0: *TrapContext;
+    # ssratch: *TrapContext
     csrw sscratch, a0
-    # now sp: *TrapContext
-     # save kernel callee-saved regs
+    # save kernel callee-saved regs
     sd sp, 34*8(a0)
     sd ra, 35*8(a0)
     sd s0, 36*8(a0)

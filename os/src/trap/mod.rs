@@ -1,24 +1,29 @@
 //! Trap 处理函数
-//! 对于这个系统, 我们仅拥有一个trap 的进入点（entry point）, 就是 `__alltraps`.
-//! 在 [`init()`]的初始化中, 我们把 stvec 的 CSR指向它
+//! 对于这个系统, 用户态的trap 的进入点（entry point）, 就是 `__trap_from_user`.
+//! 在`trap_return`时, 我们把 stvec 的 CSR指向它
 //!
-//! 所有的trap都需要经过 `__alltraps`, 他的定义在 `trap.S`中. 仅仅是做保存上下文的任务
+//! 所有的用户态trap都需要经过 `__trap_from_user`, 他的定义在 `trap.S`中. 仅仅是做保存上下文的任务,
+//! 然后通过ret把控制权交给`trap_handler()`, ra是在 [`thread_loop()`]中设置
 //! 来确保Rust code 能够安全的运行 并且把控制权移交给 [`trap_handler()`].
 //!
 //! It then calls different functionality based on what exactly the exception
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
 mod context;
+mod irq;
 
 use crate::mm::{
     frame_alloc, handle_recoverable_page_fault, PTEFlags, PageTable, PageTableEntry, VirtAddr,
 };
+use crate::signal::handle_signals;
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
 use alloc::sync::Arc;
 use core::arch::asm;
 use core::arch::global_asm;
+use core::sync::atomic::Ordering;
+use irq::{close_interrupt, open_interrupt};
 use log::{debug, error};
 use riscv::register::satp;
 use riscv::register::{
@@ -63,6 +68,7 @@ pub async fn trap_handler() {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
+    //open_interrupt();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -144,7 +150,14 @@ pub async fn trap_handler() {
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return() {
     // debug!("trap_return(): enter");
+    // 关闭中断
+    //close_interrupt();
     set_user_trap_entry();
+    // todo: 信号嵌套
+    // 现在不支持信号嵌套
+    if current_task().unwrap().inner_lock().handling_signo == 0 {
+        handle_signals();
+    }
     let cx = current_trap_cx();
     //let user_satp = current_user_token();
     extern "C" {
