@@ -40,6 +40,7 @@ pub mod logging;
 pub mod mm;
 pub mod mutex;
 pub mod sbi;
+mod signal;
 pub mod sync;
 pub mod syscall;
 pub mod task;

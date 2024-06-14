@@ -53,7 +53,7 @@ pub struct MemorySet {
     /// page table
     pub page_table: PageTable,
     /// Todo!: 使用树来管理MapArea
-    areas: Vec<MapArea>,
+    pub areas: Vec<MapArea>,
     /// 不放在areas是因为heap在运行时可能通过syscall改变
     /// kernel不含有heap, 当from_elf和from_exist_user时分配
     /// Option是因为Kernel没有, from_global是不分配heap
@@ -423,6 +423,18 @@ impl MemorySet {
             aux_vec,
         )
     }
+    pub fn from_existed_user_lazily(user_space: &MemorySet) -> MemorySet {
+        let page_table = PageTable::from_existed_user(&user_space.page_table);
+        let areas = user_space.areas.clone();
+        let heap = user_space.heap.clone();
+        let brk = user_space.brk;
+        MemorySet {
+            page_table,
+            areas,
+            heap,
+            brk,
+        }
+    }
     ///Clone a same `MemorySet`
     pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
         let mut memory_set = Self::new_from_global();
@@ -501,10 +513,13 @@ impl MemorySet {
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
+#[derive(Clone)]
 pub struct MapArea {
     pub vpn_range: VPNRange,
-    data_frames: BTreeMap<VirtPageNum, FrameTracker>,
+    // 数据页, 要共享
+    pub data_frames: BTreeMap<VirtPageNum, Arc<FrameTracker>>,
     map_type: MapType,
+    // 在map_one时使用, 在COW时不修改
     map_perm: MapPermission,
 }
 
@@ -584,7 +599,7 @@ impl MapArea {
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
                 ppn = frame.ppn;
-                self.data_frames.insert(vpn, frame);
+                self.data_frames.insert(vpn, Arc::new(frame));
             }
         }
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
@@ -655,7 +670,7 @@ pub enum MapType {
 
 bitflags! {
     /// map permission corresponding to that in pte: `R W X U`
-    pub struct MapPermission: u8 {
+    pub struct MapPermission: u16 {
         ///Readable
         const R = 1 << 1;
         ///Writable

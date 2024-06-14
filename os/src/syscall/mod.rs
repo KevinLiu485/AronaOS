@@ -64,8 +64,8 @@ const SYS_SET_TID_ADDRESS: usize = 96;
 const SYS_GETUID: usize = 174;
 const SYS_IOCTL: usize = 29;
 const SYS_EXIT_GROUP: usize = 94;
-const SYS_SIGACTION: usize = 134;
-const SYS_SIGPROCMASK: usize = 135;
+const SYS_RT_SIGACTION: usize = 134;
+const SYS_RT_SIGPROCMASK: usize = 135;
 const SYS_FCNTL: usize = 25;
 const SYS_WRITEV: usize = 66;
 const SYS_GETEUID: usize = 175;
@@ -78,6 +78,7 @@ const SYS_FACCESSAT: usize = 48;
 const SYS_KILL: usize = 129;
 const SYS_MPROTECT: usize = 226;
 const SYS_UTIMENSAT: usize = 88;
+const SYS_RT_SIGRETURN: usize = 139;
 
 mod fs;
 mod mm;
@@ -91,7 +92,10 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
-use crate::config::SyscallRet;
+use crate::{
+    config::SyscallRet,
+    signal::{sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
+};
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
@@ -137,8 +141,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_GETUID => sys_getuid(),
         SYS_IOCTL => sys_ioctl(),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
-        SYS_SIGACTION => sys_sigaction(),
-        SYS_SIGPROCMASK => sys_sigprocmask(),
+        SYS_RT_SIGACTION => sys_rt_sigaction(args[0], args[1], args[2]),
+        SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1], args[2]),
+        SYS_RT_SIGRETURN => sys_rt_sigerturn(),
         SYS_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2]),
         SYS_WRITEV => sys_writev(args[0], args[1], args[2] as i32).await,
         SYS_GETEUID => sys_geteuid(),

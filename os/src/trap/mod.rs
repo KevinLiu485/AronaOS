@@ -1,21 +1,30 @@
 //! Trap 处理函数
-//! 对于这个系统, 我们仅拥有一个trap 的进入点（entry point）, 就是 `__alltraps`.
-//! 在 [`init()`]的初始化中, 我们把 stvec 的 CSR指向它
+//! 对于这个系统, 用户态的trap 的进入点（entry point）, 就是 `__trap_from_user`.
+//! 在`trap_return`时, 我们把 stvec 的 CSR指向它
 //!
-//! 所有的trap都需要经过 `__alltraps`, 他的定义在 `trap.S`中. 仅仅是做保存上下文的任务
+//! 所有的用户态trap都需要经过 `__trap_from_user`, 他的定义在 `trap.S`中. 仅仅是做保存上下文的任务,
+//! 然后通过ret把控制权交给`trap_handler()`, ra是在 [`thread_loop()`]中设置
 //! 来确保Rust code 能够安全的运行 并且把控制权移交给 [`trap_handler()`].
 //!
 //! It then calls different functionality based on what exactly the exception
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
 mod context;
+mod irq;
 
-use crate::mm::PageTable;
+use crate::mm::{
+    frame_alloc, handle_recoverable_page_fault, PTEFlags, PageTable, PageTableEntry, VirtAddr,
+};
+use crate::signal::handle_signals;
 use crate::syscall::syscall;
-use crate::task::{current_trap_cx, exit_current, yield_task};
+use crate::task::{current_task, current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
+use alloc::sync::Arc;
+use core::arch::asm;
 use core::arch::global_asm;
-use log::error;
+use core::sync::atomic::Ordering;
+use irq::{close_interrupt, open_interrupt};
+use log::{debug, error};
 use riscv::register::satp;
 use riscv::register::{
     mtvec::TrapMode,
@@ -34,7 +43,7 @@ pub fn init() {
     set_kernel_trap_entry();
 }
 
-fn set_kernel_trap_entry() {
+pub fn set_kernel_trap_entry() {
     unsafe {
         stvec::write(trap_from_kernel as usize, TrapMode::Direct);
     }
@@ -59,6 +68,7 @@ pub async fn trap_handler() {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
+    //open_interrupt();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -75,11 +85,9 @@ pub async fn trap_handler() {
             cx.x[10] = result.unwrap_or_else(|err_code| (-(err_code as isize)) as usize);
         }
         Trap::Exception(Exception::StoreFault)
-        | Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::InstructionFault)
         | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadFault)
-        | Trap::Exception(Exception::LoadPageFault) => {
+        | Trap::Exception(Exception::LoadFault) => {
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
             page_table.dump_all();
@@ -91,6 +99,31 @@ pub async fn trap_handler() {
             );
             // page fault exit code
             exit_current(-2);
+        }
+        Trap::Exception(Exception::LoadPageFault) | Trap::Exception(Exception::StorePageFault) => {
+            // recoverable page fault:
+            // 1. fork COW area
+            // 2. lazy allocation
+            debug!(
+                "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
+                stval,
+                current_trap_cx().sepc,
+                scause.cause()
+            );
+            // stval is the faulting virtual address, current_trap_cx().sepc is the faulting instruction
+            let vpn = VirtAddr::from(stval).floor();
+            let satp = satp::read().bits();
+            let page_table = PageTable::from_token(satp);
+            if handle_recoverable_page_fault(&page_table, vpn).is_err() {
+                error!(
+                    "[kernel] unrecoverable page fault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    stval,
+                    current_trap_cx().sepc,
+                );
+                // page fault exit code
+                exit_current(-2);
+            }
+            // we should jump back to the faulting instruction after handling the page fault
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             error!("[kernel] IllegalInstruction in application, kernel killed it.");
@@ -117,7 +150,14 @@ pub async fn trap_handler() {
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return() {
     // debug!("trap_return(): enter");
+    // 关闭中断
+    //close_interrupt();
     set_user_trap_entry();
+    // todo: 信号嵌套
+    // 现在不支持信号嵌套
+    if current_task().unwrap().inner_lock().handling_signo == 0 {
+        handle_signals();
+    }
     let cx = current_trap_cx();
     //let user_satp = current_user_token();
     extern "C" {
