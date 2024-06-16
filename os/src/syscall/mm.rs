@@ -133,3 +133,25 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
         .inner_handler(|inner| inner.memory_set.do_unmap(start, len));
     Ok(0)
 }
+
+pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
+    let prot = MMAPPROT::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
+    let perm: MapPermission = prot.into();
+    trace!(
+        "[sys_mprotect] addr: {:x}, len: {:x}, prot: {:?}",
+        addr,
+        len,
+        prot
+    );
+    if addr % PAGE_SIZE != 0 || len == 0 {
+        return Err(SyscallErr::EINVAL.into());
+    }
+    // 先要检查是否有权限
+    // 1. 检查是否有对应的MapArea
+    // 2. 检查是否有对应的权限, 不能增加权限
+
+    // 不修改MapArea的权限，只修改页表中的权限
+    current_task()
+        .unwrap()
+        .inner_handler(|inner| inner.memory_set.do_mprotect(addr, len, perm))
+}

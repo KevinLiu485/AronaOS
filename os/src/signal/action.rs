@@ -1,5 +1,7 @@
+use super::signo::*;
 use super::SigBitmap;
-use crate::SIG_NUM;
+use crate::{task::exit_current, SIG_NUM};
+use log::debug;
 
 #[derive(Clone)]
 pub struct SigHandlers {
@@ -38,4 +40,64 @@ impl SigAction {
             sa_mask: SigBitmap::empty(),
         }
     }
+}
+
+/// 没有显式指定处理函数时的默认行为
+pub enum SignalDefault {
+    /// 终止进程
+    Terminate,
+    /// 忽略信号
+    Ignore,
+    /// 终止进程并转储核心，即程序当时的内存状态记录下来，保存在一个文件中，但当前未实现保存，直接退出进程
+    Core,
+    /// 暂停进程执行
+    Stop,
+    /// 恢复进程执行
+    Cont,
+}
+
+impl SignalDefault {
+    /// Get the default action of a signal
+    pub fn get_action(signo: usize) -> Self {
+        match signo {
+            SIGABRT => Self::Core,
+            SIGALRM => Self::Terminate,
+            SIGBUS => Self::Core,
+            SIGCHLD => Self::Ignore,
+            SIGCONT => Self::Cont,
+            SIGFPE => Self::Core,
+            SIGHUP => Self::Terminate,
+            SIGILL => Self::Core,
+            SIGINT => Self::Terminate,
+            SIGKILL => Self::Terminate,
+            SIGPIPE => Self::Terminate,
+            SIGQUIT => Self::Core,
+            SIGSEGV => Self::Core,
+            SIGSTOP => Self::Stop,
+            SIGTERM => Self::Terminate,
+            SIGTSTP => Self::Stop,
+            SIGTTIN => Self::Stop,
+            SIGTTOU => Self::Stop,
+            SIGUSR1 => Self::Terminate,
+            SIGUSR2 => Self::Terminate,
+            SIGXCPU => Self::Core,
+            SIGXFSZ => Self::Core,
+            SIGVTALRM => Self::Terminate,
+            SIGPROF => Self::Terminate,
+            SIGWINCH => Self::Ignore,
+            SIGIO => Self::Terminate,
+            SIGPWR => Self::Terminate,
+            SIGSYS => Self::Core,
+            _ => Self::Terminate,
+        }
+    }
+}
+
+pub fn ign_sig_handler() {
+    debug!("ignore this sig");
+}
+
+pub fn term_sig_handler() {
+    debug!("term sig handler");
+    exit_current(-1);
 }

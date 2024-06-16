@@ -37,6 +37,7 @@ const SYS_CLOSE: usize = 57;
 const SYS_GETDENTS64: usize = 61;
 const SYS_READ: usize = 63;
 const SYS_WRITE: usize = 64;
+const SYS_WRITEV: usize = 66;
 const SYS_LINKAT: usize = 37;
 const SYS_UNLINKAT: usize = 35;
 const SYS_MKDIRAT: usize = 34;
@@ -68,6 +69,9 @@ const SYS_EXIT_GROUP: usize = 94;
 const SYS_RT_SIGACTION: usize = 134;
 const SYS_RT_SIGPROCMASK: usize = 135;
 const SYS_RT_SIGRETURN: usize = 139;
+const SYS_KILL: usize = 129;
+
+const SYS_MPROTECT: usize = 226;
 
 mod fs;
 mod mm;
@@ -83,7 +87,7 @@ use util::{sys_times, sys_uname};
 
 use crate::{
     config::SyscallRet,
-    signal::{sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
+    signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
 };
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
@@ -109,6 +113,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYS_READ => sys_read(args[0], args[1], args[2]).await,
         SYS_WRITE => sys_write(args[0], args[1], args[2]).await,
+        SYS_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYS_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
         SYS_CHDIR => sys_chdir(args[0] as *const u8),
         SYS_CLOSE => sys_close(args[0]),
@@ -134,6 +139,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_RT_SIGACTION => sys_rt_sigaction(args[0], args[1], args[2]),
         SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1], args[2]),
         SYS_RT_SIGRETURN => sys_rt_sigerturn(),
+
+        SYS_MPROTECT => sys_mprotect(args[0], args[1], args[2]),
+        SYS_KILL => sys_kill(args[0] as isize, args[1]),
 
         _ => unsupported(syscall_id),
     }

@@ -8,7 +8,9 @@ use crate::config::SyscallRet;
 use crate::fs::inode::InodeMode;
 use crate::fs::path::Path;
 use crate::fs::pipe::Pipe;
-use crate::fs::{create_dir, open_file, open_inode, Kstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR};
+use crate::fs::{
+    create_dir, open_file, open_inode, Iovec, Kstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
+};
 use crate::task::current_task;
 
 use crate::timer::TimeSpec;
@@ -34,6 +36,37 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
         Err(1)
     }
 }
+
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
+    trace!("writev: fd: {}, iov: {:#x}, iovcnt: {}", fd, iov, iovcnt);
+    let task = current_task().unwrap();
+    let fd_table_len = task.inner_handler(|inner| inner.fd_table.len());
+    if fd >= fd_table_len {
+        return Err(1);
+    }
+    let file = task.inner_handler(|inner| inner.fd_table[fd].clone());
+    let iovec_size = core::mem::size_of::<Iovec>();
+    if let Some(file) = file {
+        if !file.writable() {
+            return Err(1);
+        }
+        let file = file.clone();
+        let mut total_len = 0;
+        for i in 0..iovcnt {
+            let iov_ptr = iov + i * iovec_size;
+            let iov = unsafe { &*(iov_ptr as *const Iovec) };
+            let iov_base = iov.iov_base;
+            let iov_len = iov.iov_len;
+            total_len += file
+                .write(unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) })
+                .await?;
+        }
+        Ok(total_len)
+    } else {
+        Err(1)
+    }
+}
+
 pub async fn sys_read(
     fd: usize,
     buf: usize, /* cannot use `*const u8` here as it does not satisfy `Send` trait */

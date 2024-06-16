@@ -86,6 +86,8 @@ pub struct TimeSecs {
 bitflags! {
     /// MMAP memeory protection
     pub struct MMAPPROT: u32 {
+        /// cannot be accessed at all
+        const PROT_NONE = 0;
         /// Readable
         const PROT_READ = 1 << 0;
         /// Writeable

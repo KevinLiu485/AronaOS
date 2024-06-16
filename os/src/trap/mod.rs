@@ -12,18 +12,12 @@
 mod context;
 mod irq;
 
-use crate::mm::{
-    frame_alloc, handle_recoverable_page_fault, PTEFlags, PageTable, PageTableEntry, VirtAddr,
-};
+use crate::mm::{handle_recoverable_page_fault, PageTable, VirtAddr};
 use crate::signal::handle_signals;
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
-use alloc::sync::Arc;
-use core::arch::asm;
 use core::arch::global_asm;
-use core::sync::atomic::Ordering;
-use irq::{close_interrupt, open_interrupt};
 use log::{debug, error};
 use riscv::register::satp;
 use riscv::register::{
@@ -97,6 +91,8 @@ pub async fn trap_handler() {
                 stval,
                 current_trap_cx().sepc,
             );
+            let pte = page_table.find_pte(VirtAddr::from(stval).floor()).unwrap();
+            error!("pte: {:?}", pte);
             // page fault exit code
             exit_current(-2);
         }

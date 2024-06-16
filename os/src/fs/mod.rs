@@ -1,9 +1,12 @@
 //! File system in os
+pub mod ctypes;
 pub mod inode;
 mod os_inode;
 pub mod path;
 pub mod pipe;
 mod stdio;
+
+pub use ctypes::*;
 
 use crate::{
     config::AsyncResult,

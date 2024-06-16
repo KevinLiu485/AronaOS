@@ -1,55 +1,16 @@
 mod action;
+mod signo;
 
-use alloc::task;
-use core::{
-    error,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
-};
-use log::{debug, trace, warn, error};
+use action::{ign_sig_handler, term_sig_handler, SignalDefault};
+use core::arch::global_asm;
+use log::{debug, error, trace, warn};
 
 pub use action::SigHandlers;
+pub use signo::*;
 
 use crate::{
-    mm::user_check::UserCheck,
-    task::{current_task, current_trap_cx},
-    trap,
-    utils::SyscallErr,
-    SyscallRet, SIG_NUM,
+    mm::user_check::UserCheck, task::current_task, utils::SyscallErr, SyscallRet, SIG_NUM,
 };
-
-pub const SIGHUP: usize = 1;
-pub const SIGINT: usize = 2;
-pub const SIGQUIT: usize = 3;
-pub const SIGILL: usize = 4;
-pub const SIGTRAP: usize = 5;
-pub const SIGABRT: usize = 6;
-pub const SIGBUS: usize = 7;
-pub const SIGFPE: usize = 8;
-pub const SIGKILL: usize = 9;
-pub const SIGUSR1: usize = 10;
-pub const SIGSEGV: usize = 11;
-pub const SIGUSR2: usize = 12;
-pub const SIGPIPE: usize = 13;
-pub const SIGALRM: usize = 14;
-pub const SIGTERM: usize = 15;
-pub const SIGSTKFLT: usize = 16;
-pub const SIGCHLD: usize = 17;
-pub const SIGCONT: usize = 18;
-pub const SIGSTOP: usize = 19;
-pub const SIGTSTP: usize = 20;
-pub const SIGTTIN: usize = 21;
-pub const SIGTTOU: usize = 22;
-pub const SIGURG: usize = 23;
-pub const SIGXCPU: usize = 24;
-pub const SIGXFSZ: usize = 25;
-pub const SIGVTALRM: usize = 26;
-pub const SIGPROF: usize = 27;
-pub const SIGWINCH: usize = 28;
-pub const SIGIO: usize = 29;
-pub const SIGPWR: usize = 30;
-pub const SIGSYS: usize = 31;
-pub const SIGRTMIN: usize = 32;
-pub const SIGRT_1: usize = SIGRTMIN + 1;
 
 bitflags! {
     pub struct SigBitmap: usize {
@@ -121,6 +82,10 @@ impl SigSet {
     }
 }
 
+extern "C" {
+    pub fn sigreturn_trampoline();
+}
+
 pub fn handle_signals() {
     let task = current_task().unwrap();
     let mut inner = task.inner_lock();
@@ -131,10 +96,6 @@ pub fn handle_signals() {
     // 遍历所有信号
     // 编号小的信号优先处理
     for signo in 1..SIG_NUM + 1 {
-        if inner.sig_handlers.sig_handlers[signo].sa_handler == 0 {
-            // 未注册 ,由内核处理
-            todo!();
-        }
         if inner
             .sig_set
             .pending_sigs
@@ -144,7 +105,30 @@ pub fn handle_signals() {
                 .thread_mask
                 .contains(SigBitmap::from_bits(1 << (signo - 1)).unwrap()))
         {
-            // handle the signal
+            if inner.sig_handlers.sig_handlers[signo].sa_handler == 0 {
+                // 未注册 ,由内核处理
+                match SignalDefault::get_action(signo) {
+                    SignalDefault::Terminate => {
+                        // 目前会发生死锁, 应该不是在term_sig_handler中调用exit_current
+                        todo!();
+                        term_sig_handler();
+                    }
+                    SignalDefault::Ignore => {
+                        ign_sig_handler();
+                    }
+                    SignalDefault::Stop => {
+                        todo!();
+                    }
+                    SignalDefault::Cont => {
+                        todo!();
+                    }
+                    SignalDefault::Core => {
+                        term_sig_handler();
+                    }
+                }
+                return;
+            }
+            // user defined handler
             assert!(
                 signo != SIGKILL && signo != SIGSTOP,
                 "SIGKILL and SIGSTOP cannot be caught or ignored"
@@ -164,29 +148,33 @@ pub fn handle_signals() {
                     .remove(SigBitmap::from_bits(1 << (signo - 1)).unwrap());
 
                 // backup the context
-                let mut trap_ctx = current_trap_cx();
+                let trap_ctx = inner.get_trap_cx();
                 inner.signal_context = Some(*trap_ctx);
 
                 // modify trapframe
                 trap_ctx.sepc = handler.sa_handler;
-
                 // a0
                 trap_ctx.x[10] = signo;
-                // ra, todo6.14
-                // trap_ctx.x[1] = sys_sigerturn as usize;
+                // ra
+                // 6.15debug
+                debug!(
+                    "sigreturn_trampoline addr: {:#x}",
+                    sigreturn_trampoline as usize
+                );
+                trap_ctx.x[1] = sigreturn_trampoline as usize;
             }
         }
     }
 }
 
-#[no_mangle]
 pub fn sys_rt_sigerturn() -> SyscallRet {
+    debug!("[sys_rt_sigerturn]");
     if let Some(task) = current_task() {
-        // todo: 优化这里拿了两次锁(如果编译器不优化)
-        task.inner_lock().handling_signo = 0;
+        let mut inner = task.inner_lock();
+        inner.handling_signo = 0;
         // restore the trap context
-        let trap_ctx = current_trap_cx();
-        *trap_ctx = task.inner_lock().signal_context.unwrap();
+        let trap_ctx = inner.get_trap_cx();
+        *trap_ctx = inner.signal_context.unwrap();
         Ok(trap_ctx.x[10])
     } else {
         Err(SyscallErr::EUNDEF.into())
@@ -197,30 +185,29 @@ const SIGBLOCK: i32 = 0;
 const SIGUNBLOCK: i32 = 1;
 const SIGSETMASK: i32 = 2;
 
-pub fn sys_rt_sigaction(sig: usize, act: usize, old_act: usize) -> SyscallRet {
+pub fn sys_rt_sigaction(signo: usize, act: usize, old_act: usize) -> SyscallRet {
     trace!(
-        "[sys_rt_sigaction]: sig {}, new act ptr {:#x}, old act ptr {:#x}",
-        sig,
+        "[sys_rt_sigaction]: signo {}, new act ptr {:#x}, old act ptr {:#x}",
+        signo,
         act,
         old_act,
     );
-    if sig == 0 || sig >= SIG_NUM {
+    if signo == 0 || signo >= SIG_NUM {
         return Err(SyscallErr::EINVAL.into());
     }
-    if sig == SIGKILL || sig == SIGSTOP {
+    if signo == SIGKILL || signo == SIGSTOP {
         return Err(SyscallErr::EPERM.into());
     }
     let task = current_task().unwrap();
     let mut inner = task.inner_lock();
-    let sig = sig as usize;
     if act != 0 {
         let act = unsafe { &*(act as *const action::SigAction) };
-        inner.sig_handlers.sig_handlers[sig] = *act;
+        inner.sig_handlers.sig_handlers[signo] = *act;
     }
     if old_act != 0 {
         // old_act非零说明要求写入旧的信号处理函数到这个地址
         let old_act = unsafe { &mut *(old_act as *mut action::SigAction) };
-        *old_act = inner.sig_handlers.sig_handlers[sig];
+        *old_act = inner.sig_handlers.sig_handlers[signo];
     }
     Ok(0)
 }
@@ -271,9 +258,14 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
     trace!("sys_kill: pid {}, signo {}", pid, signo);
     warn!("[sys_kill] not fully implemented");
     if pid > 0 {
-        todo!();
-    }
-    else {
+        // fake, send to current process for test
+        let task = current_task().unwrap();
+        task.inner_lock()
+            .sig_set
+            .pending_sigs
+            .insert(SigBitmap::from_bits(1 << (signo - 1)).unwrap());
+        Ok(0)
+    } else {
         error!("only support pid > 0 without thread");
         todo!();
     }

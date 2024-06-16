@@ -5,14 +5,19 @@ use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;
+use crate::signal::sigreturn_trampoline;
 use crate::task::aux::*;
+use crate::utils::SyscallErr;
+use crate::{SyscallRet, KERNEL_DIRECT_OFFSET};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
+use core::error;
 use core::fmt::Debug;
+use core::iter::Map;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{debug, error, info, warn};
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -26,7 +31,6 @@ extern "C" {
     fn sbss_with_stack();
     fn ebss();
     fn ekernel();
-    fn strampoline();
 }
 
 lazy_static! {
@@ -105,7 +109,7 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
-    /// Remove MapAreas在页表中的映射和释放对应的物理页帧
+    /// Remove MapAreas在页表中的映射和释放对应数据页的物理页帧
     /// **调用remove_areas后一定要刷新TLB**
     /// especially used for sys_munmap
     pub fn remove_areas(&mut self, areas: Vec<MapArea>) {
@@ -141,6 +145,84 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
+    /// filter out the area that is overlapped with [start, start + len)
+    /// not remove the overlap areas from Memoryset
+    pub fn filter_overlap(&self, start: usize, len: usize) -> Vec<&MapArea> {
+        let end = start + len;
+        let rm_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(end).ceil());
+        let mut overlap_areas = Vec::new();
+        self.areas.iter().for_each(|area| {
+            if area.vpn_range.is_overlap(rm_range) {
+                overlap_areas.push(area);
+            }
+        });
+        overlap_areas
+    }
+    /// wipe out the area that is overlapped with [start, start + len)
+    /// remove the overlap areas from Memoryset, **页表映射的清除由调用者负责**
+    /// especially used for do_unmap
+    pub fn wipe_overlap(&mut self, start: usize, len: usize) -> Vec<MapArea> {
+        let end = start + len;
+        let rm_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(end).ceil());
+        let mut overlap_areas = Vec::new();
+        let mut prev_areas = Vec::new();
+        self.areas.drain(..).for_each(|area| {
+            if area.vpn_range.is_overlap(rm_range) {
+                overlap_areas.push(area);
+            } else {
+                prev_areas.push(area);
+            }
+        });
+        // 更新memory_set.areas
+        self.areas = prev_areas;
+        overlap_areas
+    }
+    /// especially used for sys_munmap and sys_mmap
+    /// 参数合法性由调用者保证
+    pub fn do_unmap(&mut self, start: usize, len: usize) {
+        warn!("[MemroySet::do_unmap] not fully implemented!");
+        let overlap_areas = self.wipe_overlap(start, len);
+        // 删除overlap_areas在页表中的映射和释放对应的物理页帧
+        // Todo: 未检查用户是否有权限删除
+        self.remove_areas(overlap_areas);
+        // 一定要刷表
+        self.activate();
+    }
+    /// especially used for sys_mprotect
+    /// change the protection on **pages**, 不修改`MapArea.map_perm`的权限
+    /// `MapArea.map_perm`应该是用户对于这个区域的最大权限
+    pub fn do_mprotect(&mut self, addr: usize, len: usize, perm: MapPermission) -> SyscallRet {
+        warn!("[MemorySet::do_mprotect] not fully implemented!");
+        let end = addr + len;
+        let vpn_range = VPNRange::new(VirtAddr::from(addr).floor(), VirtAddr::from(end).ceil());
+        let mut found;
+        for vpn in vpn_range {
+            // 找到对应的MapArea
+            // todo: 优化, **slow**, 对于vpn_range应该在同一个或相邻的`MapArea`
+            found = false;
+            for area in self.areas.iter().rev() {
+                if area.vpn_range.contains(vpn) {
+                    // check permission, perm can only be a **subset** of area.map_perm
+                    if !area.map_perm.contains(perm) {
+                        return Err(SyscallErr::EACCES.into());
+                    }
+                    // remap
+                    let pte_flags = PTEFlags::from_bits(perm.bits).unwrap();
+                    self.page_table.update_flags(vpn, pte_flags);
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Err(SyscallErr::EFAULT.into());
+            }
+        }
+        Ok(0)
+    }
+    /// map sigreturn trampoline
+    pub fn map_trampoline() {
+        // let sigretrun_trampoline: [u8; 8] =
+    }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
@@ -162,6 +244,11 @@ impl MemorySet {
             ),
             None,
             0,
+        );
+        // add U flag for sigreturn trampoline
+        memory_set.page_table.update_flags(
+            VirtAddr::from(sigreturn_trampoline as usize).floor(),
+            PTEFlags::R | PTEFlags::X | PTEFlags::U,
         );
         info!("mapping .rodata section");
         memory_set.push(
@@ -469,28 +556,6 @@ impl MemorySet {
         //*self = Self::new_bare();
         self.areas.clear();
         self.heap = None;
-    }
-    /// especially used for sys_munmap and sys_mmap
-    /// 参数合法性由调用者保证
-    /// Todo: 未检查用户是否有权限删除
-    pub fn do_unmap(&mut self, start: usize, len: usize) {
-        let end = start + len;
-        let rm_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(end).ceil());
-        let mut overlap_areas = Vec::new();
-        let mut prev_area = Vec::new();
-        self.areas.drain(..).for_each(|area| {
-            if area.vpn_range.is_overlap(rm_range) {
-                overlap_areas.push(area);
-            } else {
-                prev_area.push(area);
-            }
-        });
-        // 删除overlap_areas在页表中的映射和释放对应的物理页帧
-        self.remove_areas(overlap_areas);
-        // 一定要刷表
-        self.activate();
-        // 更新memory_set.areas
-        self.areas = prev_area;
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory

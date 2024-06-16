@@ -12,9 +12,9 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::DerefMut;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use core::sync::atomic::{AtomicBool, AtomicUsize};
-use log::{debug, info};
+use log::info;
 
 pub struct TaskControlBlock {
     // immutable
@@ -106,6 +106,7 @@ impl TaskControlBlock {
         // *trap_cx = TrapContext::app_init_context(entry_point, user_sp, unsafe {
         //     KERNEL_SPACE.as_ref().unwrap().token()
         // });
+        info!("entry_point: {:x}, user_sp: {:x}", entry_point, user_sp);
 
         let kernel_satp = KERNEL_SPACE.lock().token();
 

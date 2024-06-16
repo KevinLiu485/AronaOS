@@ -23,7 +23,8 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 # Filesystem image
 FS_DIR := ../fs-img-src
 # FS_IMG_ROOT := $(FS_DIR)/root
-FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
+# FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
+FS_IMG_ROOT := $(FS_DIR)/OScomp-testsuits
 FS_IMG := $(FS_DIR)/fs.img
 # FS_IMG := ../sdcard.img
 

@@ -1,3 +1,4 @@
+#![allow(unused)]
 pub fn close_interrupt() {
     unsafe { riscv::register::sstatus::clear_sie() }
 }

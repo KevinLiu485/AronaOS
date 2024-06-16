@@ -1,8 +1,6 @@
-use super::{handle_recoverable_page_fault, page_table, PageTable, VirtAddr};
-use crate::task::current_task;
+use super::{handle_recoverable_page_fault, PageTable, VirtAddr};
 use crate::trap::set_kernel_trap_entry;
-use crate::utils::SyscallErr;
-use crate::{SysResult, SyscallRet};
+use crate::SysResult;
 use core::arch::global_asm;
 use log::trace;
 use riscv::register::satp;
