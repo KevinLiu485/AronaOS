@@ -9,7 +9,7 @@ use super::{
 pub struct FAT32File {
     pub fat: Arc<FAT32FileAllocTable>,
     clusters: Vec<usize>,
-    size: Option<usize>,
+    pub size: Option<usize>,
 }
 
 impl FAT32File {

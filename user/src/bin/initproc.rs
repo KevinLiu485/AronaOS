@@ -10,7 +10,8 @@ extern crate user_lib;
 // const SHELL: &str = "busybox_Titanix\0";
 // const SHELL: &str = "busybox\0";
 // const SHELL: &str = "busybox_rebuild\0";
-const SHELL: &str = "arona_shell\0";
+// const SHELL: &str = "arona_shell\0";
+const SHELL: &str = "arona_shell";
 
 #[no_mangle]
 fn main() -> i32 {
@@ -34,6 +35,10 @@ fn main() -> i32 {
                         "[initproc] Released a zombie process, pid={}, exit_code={}",
                         pid, exit_code
                     );
+                    if pid == 1 {
+                        println!("[initproc] Shell exited, shutting down...");
+                        return 0;
+                    }
                 }
             }
             // if pid == -1 {

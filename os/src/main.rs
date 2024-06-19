@@ -140,6 +140,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         // info!("cpu: {} start!", hart_id);
     }
 
+    // executor::run_forever();
     if hart_id == 0 {
         executor::run_forever();
     } else {

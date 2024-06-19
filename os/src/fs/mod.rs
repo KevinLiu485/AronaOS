@@ -1,4 +1,5 @@
 //! File system in os
+pub mod fd_table;
 pub mod ctypes;
 pub mod inode;
 mod os_inode;
@@ -10,18 +11,34 @@ pub use ctypes::*;
 
 use crate::{
     config::AsyncResult,
-    timer::TimeSpec,
-    // mm::UserBuffer,
+    fat32::BLOCK_SIZE,
+    mutex::SpinNoIrqLock,
+    timer::TimeSpec, // mm::UserBuffer,
 };
 
-pub struct FileMeta {
+pub struct FileMetaInner {
     pub inode: Option<Arc<dyn Inode>>,
     pub offset: usize,
+    pub dentry_index: usize,
+}
+
+pub struct FileMeta {
+    pub inner: SpinNoIrqLock<FileMetaInner>,
 }
 
 impl FileMeta {
-    pub fn new(inode: Option<Arc<dyn Inode>>, offset: usize) -> Self {
-        Self { inode, offset }
+    pub fn new(inode: Option<Arc<dyn Inode>>, offset: usize, dentry_index: usize) -> Self {
+        Self {
+            inner: SpinNoIrqLock::new(FileMetaInner {
+                inode,
+                offset,
+                dentry_index,
+            }),
+        }
+    }
+
+    pub fn new_bare() -> Self {
+        FileMeta::new(None, 0, 0)
     }
 }
 
@@ -36,14 +53,14 @@ pub trait File: Send + Sync {
     /// Write `UserBuffer` to file
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize>;
 
-    fn get_meta(&self) -> FileMeta;
+    fn get_meta(&self) -> &FileMeta;
 
     fn seek(&self, offset: usize);
 }
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct Kstat {
+pub struct Fstat {
     pub st_dev: u64,
     pub st_ino: u64,
     pub st_mode: u32,
@@ -61,11 +78,56 @@ pub struct Kstat {
     pub st_ctim: TimeSpec,
 }
 
+impl Fstat {
+    // pub fn new_bare() -> Self {
+    //     Self {
+    //         st_dev: 0,
+    //         st_ino: 0,
+    //         st_mode: 0,
+    //         st_nlink: 1,
+    //         st_uid: 0,
+    //         st_gid: 0,
+    //         st_rdev: 0,
+    //         __pad1: 0,
+    //         st_size: 28,
+    //         st_blksize: 0,
+    //         __pad2: 0,
+    //         st_blocks: 0,
+    //         st_atim: TimeSpec::new(),
+    //         st_mtim: TimeSpec::new(),
+    //         st_ctim: TimeSpec::new(),
+    //     }
+    // }
+
+    pub fn new(inode: &Arc<dyn Inode>) -> Self {
+        let metadata = inode.get_meta();
+        // only for FileREG and FileLNK
+        let data_size = metadata.inner.lock().data_size;
+        Self {
+            st_dev: 0,
+            st_ino: metadata.ino as u64,
+            st_mode: metadata.mode as u32,
+            st_nlink: 1,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            __pad1: 0,
+            st_size: data_size as u64,
+            st_blksize: BLOCK_SIZE as u32,
+            __pad2: 0,
+            st_blocks: (data_size / BLOCK_SIZE) as u64,
+            st_atim: TimeSpec::new(),
+            st_mtim: TimeSpec::new(),
+            st_ctim: TimeSpec::new(),
+        }
+    }
+}
+
 pub const AT_FDCWD: isize = -100;
 pub const AT_REMOVEDIR: u32 = 0x200;
 
 use alloc::sync::Arc;
 use inode::Inode;
 // use alloc::sync::Arc;
-pub use os_inode::{create_dir, list_apps, open_file, open_inode, OSInode, OpenFlags};
+pub use os_inode::{create_dir, list_apps, open_fd, open_inode, open_osinode, OSInode, OpenFlags};
 pub use stdio::{Stdin, Stdout};

@@ -12,7 +12,7 @@ use crate::{
     trap::{trap_handler, trap_return},
 };
 
-use super::{processor::switch_task, task::TaskControlBlock};
+use super::{processor::switch_task, task::Thread};
 
 /// A future that yields the current thread when firstly polled
 pub struct YieldFuture(pub bool);
@@ -34,13 +34,13 @@ impl Future for YieldFuture {
 
 /// A future that runs a user task
 pub struct UserTaskFuture<F: Future + Send + 'static> {
-    task_ctx: Option<Arc<TaskControlBlock>>,
+    task_ctx: Option<Arc<Thread>>,
     task_future: F,
 }
 
 impl<F: Future + Send + 'static> UserTaskFuture<F> {
     /// Create a new `UserTaskFuture`
-    pub fn new(task_control_block: Arc<TaskControlBlock>, task_future: F) -> Self {
+    pub fn new(task_control_block: Arc<Thread>, task_future: F) -> Self {
         Self {
             task_ctx: Some(task_control_block.clone()),
             task_future,
@@ -54,30 +54,10 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
 
-        // switch status
-        // let task = current_task().unwrap();
-        // let mut inner = task.inner_exclusive_access();
-        // assert!(
-        //     inner.get_status() == TaskStatus::Ready,
-        //     "UserTaskFuture::poll(): Wrong status, expected Ready"
-        // );
-        // inner.task_status = TaskStatus::Running;
-        // drop(inner);
-        // drop(task);
-
         switch_task(&mut this.task_ctx.clone());
         // run `threadloop`
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
         switch_task(&mut this.task_ctx.clone());
-
-        // switch status
-        // let task = current_task().unwrap();
-        // let mut inner = task.inner_exclusive_access();
-        // assert!(
-        //     inner.get_status() == TaskStatus::Running,
-        //     "UserTaskFuture::poll(): Wrong status, expected Running"
-        // );
-        // inner.task_status = TaskStatus::Ready;
 
         ret
     }
@@ -89,13 +69,7 @@ pub async fn yield_task() {
 }
 
 /// Spawn a new user thread
-pub fn spawn_thread(task_control_block: Arc<TaskControlBlock>) {
-    // println!(
-    //     "[task:{}] before spawn thread count number:{}",
-    //     task_control_block.pid.0,
-    //     Arc::strong_count(&task_control_block)
-    // );
-
+pub fn spawn_thread(task_control_block: Arc<Thread>) {
     let future = UserTaskFuture::new(task_control_block.clone(), thread_loop(task_control_block));
     let (runnable, task) = executor::spawn(future);
     runnable.schedule();
@@ -113,7 +87,7 @@ where
 }
 
 /// The main loop of a user thread
-pub async fn thread_loop(task: Arc<TaskControlBlock>) {
+pub async fn thread_loop(task: Arc<Thread>) {
     loop {
         trap_return();
 

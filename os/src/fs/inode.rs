@@ -18,8 +18,13 @@ use super::path::Path;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum InodeMode {
-    FileDIR,
-    FileREG,
+    FileSOCK = 0xC000, /* socket */
+    FileLNK = 0xA000,  /* symbolic link */
+    FileREG = 0x8000,  /* regular file */
+    FileBLK = 0x6000,  /* block device */
+    FileDIR = 0x4000,  /* directory */
+    FileCHR = 0x2000,  /* character device */
+    FileFIFO = 0x1000, /* FIFO */
 }
 
 pub trait Inode: Send + Sync {
@@ -136,7 +141,7 @@ impl InodeMeta {
         parent: Option<Arc<dyn Inode>>,
         path: Path,
         mode: InodeMode,
-        data_len: usize,
+        data_size: usize,
     ) -> Self {
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),
@@ -154,7 +159,7 @@ impl InodeMeta {
                 st_ctim: TimeSpec::new(),
                 parent,
                 children: BTreeMap::new(),
-                data_len,
+                data_size,
                 state: InodeState::Init,
             }),
         }
@@ -202,7 +207,7 @@ pub struct InodeMetaInner {
     /// USE INODEMETA::GET_CHILDREN() TO ENSURE CHILDREN ARE LOADED FROM DISK BEFORE USE
     pub children: BTreeMap<String, Arc<dyn Inode>>,
     /// file content len
-    pub data_len: usize,
+    pub data_size: usize,
     // inode state, mainly for Dir inode
     pub state: InodeState,
 }

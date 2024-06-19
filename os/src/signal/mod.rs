@@ -87,7 +87,7 @@ extern "C" {
 
 pub fn handle_signals() {
     let task = current_task().unwrap();
-    let mut inner = task.inner_lock();
+    let mut inner = task.get_inner_mut();
     if inner.sig_set.pending_sigs.is_empty() {
         // no pending signals now
         return;
@@ -221,7 +221,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: usize, old_set: usize) -> SyscallRet {
         old_set,
     );
     let task = current_task().unwrap();
-    let mut sig_set = task.inner_lock().sig_set;
+    let mut sig_set = task.get_inner_mut().sig_set;
     if old_set != 0 {
         UserCheck::new()
             .check_writable_pages(old_set as *mut u8, core::mem::size_of::<SigBitmap>())
@@ -269,3 +269,4 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
         todo!();
     }
 }
+

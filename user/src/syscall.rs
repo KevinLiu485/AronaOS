@@ -2,7 +2,9 @@
 
 use core::arch::asm;
 
-use crate::{CloneFlags, Dirent, Kstat, OpenFlags, TimeSpec, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
+use alloc::vec::Vec;
+
+use crate::{CloneFlags, Dirent, Kstat, OpenFlags, TimeSpec, TimeVal, Tms, Utsname, WaitOption, MMAPFLAGS, MMAPPROT};
 
 // const SYSCALL_OPEN: usize = 56;
 // const SYSCALL_CLOSE: usize = 57;
@@ -88,6 +90,9 @@ pub fn sys_dup3(oldfd: i32, newfd: i32) -> isize {
 pub fn sys_chdir(path: &str) -> isize {
     syscall(SYS_CHDIR, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
 }
+// pub fn sys_chdir(path: &Vec<u8>) -> isize {
+//     syscall(SYS_CHDIR, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
+// }
 
 pub fn sys_openat(fd: i32, filename: &str, flags: OpenFlags, mode: i32) -> isize {
     syscall(
@@ -271,10 +276,10 @@ pub fn sys_sched_yield() -> isize {
     syscall(SYS_SCHED_YIELD, [0, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_gettimeofday(ts: &mut TimeSpec) -> isize {
+pub fn sys_gettimeofday(ts: &mut TimeVal) -> isize {
     syscall(
         SYS_GETTIMEOFDAY,
-        [ts as *const TimeSpec as usize, 0, 0, 0, 0, 0],
+        [ts as *const TimeVal as usize, 0, 0, 0, 0, 0],
     )
 }
 

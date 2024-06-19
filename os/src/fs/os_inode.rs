@@ -6,47 +6,53 @@
 //! need to wrap `OSInodeInner` into `UPSafeCell`
 use super::inode::Inode;
 use super::path::Path;
-use super::{File, FileMeta};
+use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
 use crate::drivers::BLOCK_DEVICE;
 use crate::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
-use crate::mutex::SpinNoIrqLock;
 use crate::task::current_task;
+use crate::task::processor::current_process;
+use crate::utils::SyscallErr;
 use crate::SyscallRet;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
+
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
 pub struct OSInode {
     readable: bool,
     writable: bool,
-    inner: SpinNoIrqLock<OSInodeInner>,
+    // meta: SpinNoIrqLock<FileMeta>,
+    meta: FileMeta,
 }
 /// The OS inode inner in 'UPSafeCell'
-pub struct OSInodeInner {
-    offset: usize,
-    inode: Arc<dyn Inode>,
-}
+// pub struct OSInodeInner {
+//     inode: Arc<dyn Inode>,
+//     offset: usize,
+//     dentry_index: usize,
+// }
 
 impl OSInode {
     fn get_offset(&self) -> usize {
-        self.inner.lock().offset
+        // self.meta.lock().offset
+        self.meta.inner.lock().offset
     }
 
     pub fn set_offset(&self, offset: usize) {
-        self.inner.lock().offset = offset;
+        self.meta.inner.lock().offset = offset;
     }
 
-    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut OSInodeInner) -> T) -> T {
-        f(&mut self.inner.lock())
+    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
+        f(&mut self.meta.inner.lock())
     }
 
     pub fn get_path(&self) -> Path {
-        self.inner_handler(|inner| inner.inode.get_meta().path.clone())
+        self.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().path.clone())
+        // self.inode.get_meta().path.clone()
     }
 }
 
@@ -56,12 +62,25 @@ impl OSInode {
         Self {
             readable,
             writable,
-            inner: SpinNoIrqLock::new(OSInodeInner { offset: 0, inode }),
+            // meta: SpinNoIrqLock::new(FileMeta {
+            //     inode: Some(inode),
+            //     offset: 0,
+            //     dentry_index: 0,
+            // }),
+            // meta: FileMeta {
+            //     inner: SpinNoIrqLock::new(FileMetaInner {
+            //         inode: Some(inode),
+            //         offset: 0,
+            //         dentry_index: 0,
+            //     }),
+            // },
+            meta: FileMeta::new(Some(inode), 0, 0),
         }
     }
     /// Read all data inside a inode into vector
     pub async fn read_all(&self) -> Vec<u8> {
-        let inode = self.inner_handler(|inner| inner.inode.clone());
+        let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
+        // let inode = self.inode.clone();
         let mut buffer = [0u8; 512];
         let mut v: Vec<u8> = Vec::new();
         loop {
@@ -143,41 +162,65 @@ impl OpenFlags {
     }
 }
 
-fn open_cwd(dirfd: isize, path: &Path) -> Arc<dyn Inode> {
+fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
     if !path.is_relative() {
         // absolute path
-        ROOT_INODE.clone()
+        Ok(ROOT_INODE.clone())
     } else if dirfd == AT_FDCWD {
         // relative to cwd
-        let task = current_task().unwrap();
-        let cwd = &task.inner_lock().cwd;
-        ROOT_INODE.open_path(cwd, false, false).unwrap()
+        let process = current_process();
+        let cwd = &process.inner_lock().cwd;
+        ROOT_INODE.open_path(cwd, false, false)
     } else {
         // relative to dirfd
-        let task = current_task().unwrap();
-        let ret = task.inner_lock().fd_table[dirfd as usize]
-            .clone()
-            .unwrap()
-            .get_meta()
-            .inode
-            .unwrap();
+        let task = current_process();
+        // let ret = task.inner_lock().fd_table[dirfd as usize]
+        //     .clone()
+        //     .unwrap()
+        //     .get_meta()
+        //     .inode
+        //     .unwrap();
+        // ret
+        let ret = task
+            .inner_lock()
+            .fd_table
+            .get(dirfd as usize)
+            .map_or(Err(1), |fdinfo| {
+                fdinfo
+                    .file
+                    .get_meta()
+                    .inner
+                    .lock()
+                    .inode
+                    .clone()
+                    .map_or(Err(1), |inode| Ok(inode))
+            });
         ret
     }
 }
 
 pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<dyn Inode>> {
-    match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
-        Ok(inode) => {
-            if flags.contains(OpenFlags::TRUNC) {
-                inode.clear();
-            }
-            Ok(inode)
-        }
-        Err(e) => Err(e),
-    }
+    // match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
+    //     Ok(inode) => {
+    //         if flags.contains(OpenFlags::TRUNC) {
+    //             inode.clear();
+    //         }
+    //         Ok(inode)
+    //     }
+    //     Err(e) => Err(e),
+    // }
+    open_cwd(dirfd, path).and_then(|cwd| {
+        cwd.open_path(path, flags.contains(OpenFlags::CREATE), false)
+            .and_then(|inode| {
+                if flags.contains(OpenFlags::TRUNC) {
+                    inode.clear();
+                }
+                Ok(inode)
+            })
+    })
 }
 
-pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
+pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     match open_inode(dirfd, path, flags) {
         Ok(inode) => Ok(Arc::new(OSInode::new(readable, writable, inode))),
@@ -185,11 +228,22 @@ pub fn open_file(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<O
     }
 }
 
+pub fn open_fd(fd: usize) -> SysResult<Arc<dyn File>> {
+    let fdinfo = current_process()
+        .inner_handler(|inner| inner.fd_table.get(fd).ok_or(SyscallErr::EBADF as usize))?;
+    let osinode = fdinfo.file;
+    // .get_meta()
+    // .inode
+    // .ok_or(SyscallErr::EBADF as usize)?;
+    Ok(osinode)
+}
+
 pub fn create_dir(dirfd: isize, path: &Path) -> SyscallRet {
-    match open_cwd(dirfd, path).open_path(path, false, true) {
-        Ok(_) => Ok(0),
-        Err(e) => Err(e),
-    }
+    // match open_cwd(dirfd, path).open_path(path, false, true) {
+    //     Ok(_) => Ok(0),
+    //     Err(e) => Err(e),
+    // }
+    open_cwd(dirfd, path).and_then(|cwd| cwd.open_path(path, false, true).and_then(|_| Ok(0)))
 }
 
 impl File for OSInode {
@@ -201,7 +255,8 @@ impl File for OSInode {
     }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            let inode = self.inner_handler(|inner| inner.inode.clone());
+            let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
+            // let inode = self.inode.clone();
             let offset = self.get_offset();
             let read_size = inode.read(offset, buf).await;
             self.set_offset(offset + read_size.unwrap());
@@ -211,7 +266,8 @@ impl File for OSInode {
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
             // let mut total_write_size = 0;
-            let inode = self.inner_handler(|inner| inner.inode.clone());
+            let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
+            // let inode = self.inode.clone();
             // for slices in buf.buffers.iter() {
             // let mut inner = self.inner.lock();
             let offset = self.get_offset();
@@ -225,10 +281,24 @@ impl File for OSInode {
         })
     }
 
-    fn get_meta(&self) -> FileMeta {
-        let inode = self.inner.lock().inode.clone();
-        let offset = self.inner_handler(|inner| inner.offset);
-        FileMeta::new(Some(inode), offset)
+    // fn meta_handler<T>(&self, f: impl FnOnce(&FileMeta) -> T) -> T {
+    //     f(&self.inner.lock())
+    // }
+
+    fn get_meta(&self) -> &FileMeta {
+        // let inode = self.inner.lock().inode.clone();
+        // let inode = self.inode.clone();
+        // let (offset, dentry_index) = self.inner_handler(|inner| (inner.offset, inner.dentry_index));
+        // FileMeta::new(Some(inode), offset)
+        // FileMeta {
+        //     inode: Some(inode),
+        //     offset,
+        //     dentry_index,
+        // }
+        // FileMeta {
+        //     osinode: Some(self.clone()),
+        // }
+        &self.meta
     }
 
     fn seek(&self, offset: usize) {

@@ -143,10 +143,10 @@ submit: move-cargo build move-bin
 run: env build 
 	@qemu-system-riscv64 $(QEMU_ARGS)
 
-run-only:
+last:
 	@qemu-system-riscv64 $(QEMU_ARGS)
 
 gdbserver: env build
 	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
-.PHONY: run run-only submit gdbserver clean
+.PHONY: run last submit gdbserver clean

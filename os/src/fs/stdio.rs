@@ -7,9 +7,13 @@ use crate::config::AsyncResult;
 use crate::sbi::console_getchar;
 use crate::task::yield_task;
 ///Standard input
-pub struct Stdin;
+pub struct Stdin {
+    pub meta: FileMeta,
+}
 ///Standard output
-pub struct Stdout;
+pub struct Stdout {
+    pub meta: FileMeta,
+}
 
 impl File for Stdin {
     fn readable(&self) -> bool {
@@ -20,7 +24,7 @@ impl File for Stdin {
     }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            assert_eq!(buf.len(), 1);
+            // assert_eq!(buf.len(), 1);
             // busy loop
             let mut c: usize;
             loop {
@@ -44,8 +48,15 @@ impl File for Stdin {
     fn write(&self, _buf: &[u8]) -> AsyncResult<usize> {
         panic!("Cannot write to stdin!");
     }
-    fn get_meta(&self) -> FileMeta {
-        FileMeta::new(None, 0)
+    fn get_meta(&self) -> &FileMeta {
+        // FileMeta::new(None, 0)
+        // &FileMeta {
+        //     inode: None,
+        //     offset: 0,
+        //     dentry_index: 0,
+        // }
+        // &FileMeta::new(None, 0, 0)
+        &self.meta
     }
     fn seek(&self, _offset: usize) {
         panic!("Cannot seek stdin!");
@@ -71,8 +82,15 @@ impl File for Stdout {
             Ok(buf.len())
         })
     }
-    fn get_meta(&self) -> FileMeta {
-        FileMeta::new(None, 0)
+    fn get_meta(&self) -> &FileMeta {
+        // FileMeta::new(None, 0)
+        // &FileMeta {
+        //     inode: None,
+        //     offset: 0,
+        //     dentry_index: 0,
+        // }
+        // &FileMeta::new(None, 0, 0)
+        &self.meta
     }
     fn seek(&self, _offset: usize) {
         panic!("Cannot seek stdout!");

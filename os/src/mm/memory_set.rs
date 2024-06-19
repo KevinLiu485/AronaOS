@@ -7,6 +7,7 @@ use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;
 use crate::signal::sigreturn_trampoline;
 use crate::task::aux::*;
+use crate::MMAP_MIN_ADDR;
 use crate::utils::SyscallErr;
 use crate::SyscallRet;
 use alloc::collections::BTreeMap;
@@ -60,6 +61,10 @@ pub struct MemorySet {
     /// Option是因为Kernel没有, from_global是不分配heap
     pub heap: Option<MapArea>,
     pub brk: usize,
+    /// we take a simple but powerful strategy to manage mmap
+    /// mmap starts from [`MMAP_MIN_ADDR`], only increases, never decreases
+    /// in this way, no memory waste, no conflict, only [`MMAPFLAGS::MAP_FIXED`] cannot be supported
+    pub mmap_start: usize,
 }
 
 impl MemorySet {
@@ -70,6 +75,7 @@ impl MemorySet {
             areas: Vec::new(),
             heap: None,
             brk: 0,
+            mmap_start: MMAP_MIN_ADDR,
         }
     }
     /// Create a user `MemorySet` that owns the global kernel mapping
@@ -81,6 +87,7 @@ impl MemorySet {
             heap: None,
             // user的brk在from_elf和from_existed_user中设置
             brk: 0,
+            mmap_start: MMAP_MIN_ADDR,
         }
     }
     ///Get pagetable `root_ppn`
@@ -107,6 +114,8 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+
+    /// Remove MapAreas在页表中的映射和释放对应的物理页帧
     /// Remove MapAreas在页表中的映射和释放对应数据页的物理页帧
     /// **调用remove_areas后一定要刷新TLB**
     /// especially used for sys_munmap
@@ -116,25 +125,37 @@ impl MemorySet {
         }
     }
     /// especially used for sys_mmap
+    /// no conflict will happen, because mmap_start is monotonically increasing
     pub fn get_unmapped_area(&self, start: usize, len: usize) -> VPNRange {
-        // fisrt, use start as a hint
         let end = start + len;
         let start_vpn = VirtAddr::from(start).floor();
         let end_vpn = VirtAddr::from(end).ceil();
-        let range = VPNRange::new(start_vpn, end_vpn);
-        if !self.check_vpn_range_conflict(range) {
-            return range;
-        } else {
-            // second, find a gap between prev_area and cur_area that is large enough
-            panic!("unimplemented!")
-        }
+        debug!(
+            "[MemorySet::get_unmapped_area] mapping [{:?}, {:?})",
+            {
+                let start_va: VirtAddr = start_vpn.into();
+                start_va
+            },
+            {
+                let end_va: VirtAddr = end_vpn.into();
+                end_va
+            }
+        );
+        VPNRange::new(start_vpn, end_vpn)
+        // if !self.check_vpn_range_conflict(range) {
+        //     return range;
+        // } else {
+        //     info!("[MemorySet::get_unmapped_area] conflict with existed areas, another area is chosen.");
+
+        //     panic!("[MemorySet::get_unmapped_area] unimplemented!")
+        // }
     }
     /// especially used for sys_mmap, pretty **slow**
-    fn check_vpn_range_conflict(&self, range: VPNRange) -> bool {
-        self.areas
-            .iter()
-            .any(|area| area.vpn_range.is_overlap(range))
-    }
+    // fn check_vpn_range_conflict(&self, range: VPNRange) -> bool {
+    //     self.areas
+    //         .iter()
+    //         .any(|area| area.vpn_range.is_overlap(range))
+    // }
     /// map_offset says data's offset in the first page
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>, map_offset: usize) {
         map_area.map(&mut self.page_table);
@@ -410,7 +431,7 @@ impl MemorySet {
                 // BUGGY: map_offset is not considered. Elf section is NOT aligned to PAGE_SIZE
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
                 debug!(
-                    "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:x}",
+                    "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:#x}",
                     {
                         let start_va: VirtAddr = map_area.vpn_range.get_start().into();
                         start_va
@@ -431,7 +452,7 @@ impl MemorySet {
 
         let ph_head_addr = header_va.unwrap() + elf.header.pt2.ph_offset() as usize;
         info!(
-            "[MemorySet::from_elf] AT_PHDR ph_head_addr is {:x} ",
+            "[MemorySet::from_elf] AT_PHDR ph_head_addr is {:#x} ",
             ph_head_addr
         );
         aux_vec.push(AuxHeader {
@@ -464,7 +485,7 @@ impl MemorySet {
         let heap_bottom = user_stack_top + PAGE_SIZE;
         let heap_top = heap_bottom;
         memory_set.brk = heap_top;
-        // info!("user space heap_top: {:x}", heap_top);
+        // info!("user space heap_top: {:#x}", heap_top);
         let mut heap_area = MapArea::new(
             heap_bottom.into(),
             heap_top.into(),
@@ -483,7 +504,6 @@ impl MemorySet {
 
         (
             memory_set,
-            // user_stack_top - 32,
             user_stack_top,
             elf.header.pt2.entry_point() as usize,
             aux_vec,
@@ -499,6 +519,7 @@ impl MemorySet {
             areas,
             heap,
             brk,
+            mmap_start: 0,
         }
     }
     ///Clone a same `MemorySet`

@@ -95,6 +95,15 @@ pub struct TimeSpec {
     pub nsec: usize,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct TimeVal {
+    /// seconds
+    pub sec: usize,
+    /// microseconds
+    pub usec: usize,
+}
+
 bitflags! {
     /// determines whether updates to the mapping are visible to other processes mapping the same region, and whether
     /// updates are carried through to the underlying file.
