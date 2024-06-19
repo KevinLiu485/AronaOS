@@ -2,7 +2,7 @@ use crate::mm::{MapPermission, VirtAddr};
 use crate::{config::SyscallRet, utils::SyscallErr};
 
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
-use crate::ctypes::{MmapFlags, MmapProt};
+use crate::ctypes::{MmapFlags, MMAPPROT};
 use crate::task::current_task;
 use crate::task::processor::current_process;
 use log::{debug, trace, warn};
@@ -64,7 +64,7 @@ pub async fn sys_mmap(
 
     //处理参数
     // let prot = MMAPPROT::from_bits(prot as u32);
-    let prot = match MmapProt::from_bits(prot as u32) {
+    let prot = match MMAPPROT::from_bits(prot as u32) {
         Some(prot) => prot,
         None => return Err(SyscallErr::EINVAL.into()),
     };
@@ -154,17 +154,6 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_mprotect(addr: *const u8, len: usize, prot: i32) -> SyscallRet {
-    trace!(
-        "[sys_mprotect] enter. addr: {:?}, len: {:#x}, prot: {}",
-        addr,
-        len,
-        prot
-    );
-    warn!("[sys_mprotect] not implemented.");
-    Ok(0)
-}
-
 pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
     let prot = MMAPPROT::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let perm: MapPermission = prot.into();
@@ -182,7 +171,5 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
     // 2. 检查是否有对应的权限, 不能增加权限
 
     // 不修改MapArea的权限，只修改页表中的权限
-    current_task()
-        .unwrap()
-        .inner_handler(|inner| inner.memory_set.do_mprotect(addr, len, perm))
+    current_process().inner_handler(|inner| inner.memory_set.do_mprotect(addr, len, perm))
 }

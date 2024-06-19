@@ -13,8 +13,9 @@ use crate::fs::inode::{Inode, InodeMode};
 use crate::fs::path::Path;
 use crate::fs::pipe::Pipe;
 use crate::fs::{
-    create_dir, open_file, open_inode, Iovec, Kstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
+    create_dir, open_fd, open_inode, open_osinode, Fstat, Iovec, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
 };
+use crate::syscall::process;
 use crate::task::current_task;
 use crate::task::processor::current_process;
 
@@ -45,47 +46,23 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     trace!("writev: fd: {}, iov: {:#x}, iovcnt: {}", fd, iov, iovcnt);
-    let task = current_task().unwrap();
-    let fd_table_len = task.inner_handler(|inner| inner.fd_table.len());
+    let process = current_process();
+    let fd_table_len = process.inner_handler(|inner| inner.fd_table.table.len());
     if fd >= fd_table_len {
         return Err(1);
     }
-    let file = task.inner_handler(|inner| inner.fd_table[fd].clone());
-    if let Some(file) = file {
-        if !file.writable() {
-            return Err(1);
-        }
-        let file = file.clone();
-        let ret = file
-            .write(unsafe { core::slice::from_raw_parts(buf as *const u8, len) })
-            .await?;
-        Ok(ret)
-    } else {
-        Err(1)
-    }
-}
-
-pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
-    trace!("writev: fd: {}, iov: {:#x}, iovcnt: {}", fd, iov, iovcnt);
-    let task = current_task().unwrap();
-    let fd_table_len = task.inner_handler(|inner| inner.fd_table.len());
-    if fd >= fd_table_len {
-        return Err(1);
-    }
-    let file = task.inner_handler(|inner| inner.fd_table[fd].clone());
+    let fdinfo = process.inner_handler(|inner| inner.fd_table.table[fd].clone());
     let iovec_size = core::mem::size_of::<Iovec>();
-    if let Some(file) = file {
-        if !file.writable() {
-            return Err(1);
-        }
-        let file = file.clone();
+    if let Some(fdinfo) = fdinfo {
+        let fdinfo = fdinfo.clone();
         let mut total_len = 0;
         for i in 0..iovcnt {
             let iov_ptr = iov + i * iovec_size;
             let iov = unsafe { &*(iov_ptr as *const Iovec) };
             let iov_base = iov.iov_base;
             let iov_len = iov.iov_len;
-            total_len += file
+            total_len += fdinfo
+                .file
                 .write(unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) })
                 .await?;
         }
@@ -547,47 +524,6 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
             })
         }
         _ => Err(0),
-    }
-}
-
-#[repr(C)]
-pub struct Iovec {
-    /// user space buf starting address
-    pub iov_base: usize,
-    /// number of bytes to transfer
-    pub iov_len: usize,
-}
-
-fn iovec_to_slice_vec<'a>(iov: *const Iovec, iovcnt: i32) -> Vec<&'a [u8]> {
-    let iovec = unsafe { core::slice::from_raw_parts(iov, iovcnt as usize) };
-    iovec
-        .iter()
-        .map(|iov| unsafe { core::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) })
-        .collect()
-}
-
-pub async fn sys_writev(fd: usize, iov: usize, iovcnt: i32) -> SyscallRet {
-    trace!(
-        "[writev] enter. fd: {}, iov: {:#x}, iovcnt: {}",
-        fd,
-        iov as usize,
-        iovcnt
-    );
-
-    let iovec = iovec_to_slice_vec(iov as *const Iovec, iovcnt);
-    let current_process = current_process();
-    let fdinfo = current_process.inner_handler(|inner| inner.fd_table.get(fd));
-    if let Some(fdinfo) = fdinfo {
-        if !fdinfo.file.writable() {
-            return Err(1);
-        }
-        let mut ret: usize = 0;
-        for slice in iovec.iter() {
-            ret += fdinfo.file.write(slice).await?;
-        }
-        Ok(ret)
-    } else {
-        Err(1)
     }
 }
 

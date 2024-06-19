@@ -147,7 +147,7 @@ pub fn handle_signals() {
                     .remove(SigBitmap::from_bits(1 << (signo - 1)).unwrap());
 
                 // backup the context
-                let trap_ctx = inner.get_trap_cx();
+                let trap_ctx = inner.get_trap_context();
                 inner.signal_context = Some(*trap_ctx);
 
                 // modify trapframe
@@ -169,10 +169,10 @@ pub fn handle_signals() {
 pub fn sys_rt_sigerturn() -> SyscallRet {
     debug!("[sys_rt_sigerturn]");
     if let Some(task) = current_task() {
-        let mut inner = task.inner_lock();
+        let mut inner = task.get_inner_mut();
         inner.handling_signo = 0;
         // restore the trap context
-        let trap_ctx = inner.get_trap_cx();
+        let trap_ctx = inner.get_trap_context();
         *trap_ctx = inner.signal_context.unwrap();
         Ok(trap_ctx.x[10])
     } else {
@@ -198,7 +198,7 @@ pub fn sys_rt_sigaction(signo: usize, act: usize, old_act: usize) -> SyscallRet 
         return Err(SyscallErr::EPERM.into());
     }
     let task = current_task().unwrap();
-    let mut inner = task.inner_lock();
+    let mut inner = task.get_inner_mut();
     if act != 0 {
         let act = unsafe { &*(act as *const action::SigAction) };
         inner.sig_handlers.sig_handlers[signo] = *act;
@@ -259,7 +259,7 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
     if pid > 0 {
         // fake, send to current process for test
         let task = current_task().unwrap();
-        task.inner_lock()
+        task.get_inner_mut()
             .sig_set
             .pending_sigs
             .insert(SigBitmap::from_bits(1 << (signo - 1)).unwrap());
@@ -269,4 +269,3 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
         todo!();
     }
 }
-

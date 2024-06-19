@@ -37,7 +37,6 @@ const SYS_CLOSE: usize = 57;
 const SYS_GETDENTS64: usize = 61;
 const SYS_READ: usize = 63;
 const SYS_WRITE: usize = 64;
-const SYS_WRITEV: usize = 66;
 const SYS_LINKAT: usize = 37;
 const SYS_UNLINKAT: usize = 35;
 const SYS_MKDIRAT: usize = 34;
@@ -76,8 +75,6 @@ const SYS_SYSINFO: usize = 179;
 const SYS_SYSLOG: usize = 116;
 const SYS_FSTATAT: usize = 79;
 const SYS_FACCESSAT: usize = 48;
-const SYS_KILL: usize = 129;
-const SYS_MPROTECT: usize = 226;
 const SYS_UTIMENSAT: usize = 88;
 const SYS_RT_SIGRETURN: usize = 139;
 const SYS_KILL: usize = 129;
@@ -96,7 +93,6 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
-use crate::signal::sys_kill;
 use crate::{
     config::SyscallRet,
     signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
@@ -126,7 +122,6 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYS_READ => sys_read(args[0], args[1], args[2]).await,
         SYS_WRITE => sys_write(args[0], args[1], args[2]).await,
-        SYS_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYS_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
         SYS_CHDIR => sys_chdir(args[0] as *const u8),
         SYS_CLOSE => sys_close(args[0]),
@@ -152,7 +147,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1], args[2]),
         SYS_RT_SIGRETURN => sys_rt_sigerturn(),
         SYS_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2]),
-        SYS_WRITEV => sys_writev(args[0], args[1], args[2] as i32).await,
+        SYS_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYS_GETEUID => sys_geteuid(),
         SYS_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]),
         SYS_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut _),
@@ -170,8 +165,6 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as u32,
             args[3] as u32,
         ),
-        SYS_KILL => sys_kill(args[0] as isize, args[1]),
-        SYS_MPROTECT => sys_mprotect(args[0] as *const _, args[1], args[2] as i32),
         SYS_UTIMENSAT => sys_utimensat(
             args[0] as i32,
             args[1] as *const _,
@@ -179,8 +172,6 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3] as i32,
         ),
 
-        SYS_MPROTECT => sys_mprotect(args[0], args[1], args[2]),
-        SYS_KILL => sys_kill(args[0] as isize, args[1]),
         SYS_MPROTECT => sys_mprotect(args[0], args[1], args[2]),
         SYS_KILL => sys_kill(args[0] as isize, args[1]),
         _ => unsupported(syscall_id),

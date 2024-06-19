@@ -19,7 +19,6 @@ use alloc::vec::Vec;
 use async_task::Task;
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use lazy_static::lazy_static;
