@@ -8,6 +8,7 @@ use crate::fs::{FileMeta, Stdin, Stdout};
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::signal::{SigHandlers, SigSet};
+use crate::syscall::process::CloneFlags;
 use crate::task::schedule::spawn_thread;
 use crate::trap::TrapContext;
 use alloc::collections::BTreeMap;
@@ -21,7 +22,7 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::Ordering::Relaxed;
 use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{debug, info, trace};
 
 lazy_static! {
     /// 包括PROCESS，以及thread的
@@ -32,8 +33,8 @@ lazy_static! {
 /// ['Process'] 负责管理进程资源的单位，有着自己的Thread都共享的资源，本身并不参与调度
 /// 记录了主线程，以保持以前现有进程的一致性
 pub struct Process {
-    pub(crate) pid: Arc<PidHandle>, // 自己的main thread的pid也是这个 id（加arc的原因）
-    pub is_zombie: AtomicBool,      // 这个放到inner外面主要是为了防止死锁
+    pub pid: Arc<PidHandle>,   // 自己的main thread的pid也是这个 id（加arc的原因）
+    pub is_zombie: AtomicBool, // 这个放到inner外面主要是为了防止死锁
     pub inner: SpinNoIrqLock<ProcessInner>,
 }
 
@@ -55,7 +56,7 @@ impl Process {
     pub fn inner_handler<T>(&self, f: impl FnOnce(&mut ProcessInner) -> T) -> T {
         f(&mut self.inner.lock())
     }
-    pub fn inner_lock(&self) -> impl DerefMut + Deref<Target = ProcessInner> + '_ {
+    pub fn inner_lock(&self) -> impl DerefMut<Target = ProcessInner> + '_ {
         self.inner.lock()
     }
     pub fn is_zombie(&self) -> bool {
@@ -192,84 +193,64 @@ impl Process {
         child
     }
 
-    // pub fn create_thread(
-    //     self: &Arc<Self>,
-    //     stack: Option<usize>,
-    //     tls_ptr: usize,
-    //     parent_tid_ptr: usize,
-    //     child_tid_ptr: usize,
-    //     flags: CloneFlags,
-    // ) -> SyscallRet {
-    //     let mut parent_inner = self.get_inner();
-    //
-    //     let stack = stack.unwrap_or(0);
-    //     let entry_point = unsafe { *(stack as *const usize) };
-    //     let arg = unsafe {
-    //         let arg_addr = stack + core::mem::size_of::<usize>();
-    //         *(arg_addr as *const usize)
-    //     };
-    //
-    //     // let mut trap_context = TrapContext::app_init_context(entry_point, stack);
-    //     let mut trap_context = *current_trap_cx();
-    //
-    //     if stack != 0 {
-    //         trap_context.set_sp(stack);
-    //     }
-    //     trap_context.set_entry_point(entry_point);
-    //     trap_context.set_sp(stack);
-    //     trap_context.set_return_value(arg);
-    //
-    //     // Thread local storage
-    //     trap_context.set_thread_pointer(tls_ptr);
-    //     // Global pointer
-    //     trap_context.set_global_pointer(current_trap_cx().get_global_pointer());
-    //
-    //     let new_fd_table = parent_inner.fd_table.exec_clone();
-    //     let new_thread = Arc::new(Thread {
-    //         pid: pid_alloc(),
-    //         process: Arc::new(Process {}),
-    //         is_terminated: Default::default(),
-    //         inner: SpinNoIrqLock::new(ThreadInner {
-    //             trap_context: trap_context,
-    //             ustack_top: parent_inner.ustack_top,
-    //             // task_status: TaskStatus::Ready,
-    //             tid_addr: TidAddress::new(),
-    //             memory_set: parent_inner.memory_set.clone(),
-    //             parent: Some(Arc::downgrade(self)),
-    //             children: Vec::new(),
-    //             exit_code: 0,
-    //             fd_table: new_fd_table,
-    //             cwd,
-    //             sig_set: SigSet::from_existed_user(&parent_inner.sig_set),
-    //             sig_handlers: parent_inner.sig_handlers.clone(),
-    //             signal_context: None,
-    //             handling_signo: 0,
-    //         }),
-    //     });
-    //
-    //     // attach the new thread to process
-    //     parent_inner.children.push(new_thread.clone());
-    //
-    //     let tid = new_thread.getpid();
-    //     let new_thread_inner = new_thread.get_inner();
-    //
-    //     if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
-    //         new_thread.get_inner().tid_addr.clear_tid_address = Some(child_tid_ptr);
-    //     }
-    //     if flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
-    //         unsafe {
-    //             *(child_tid_ptr as *mut usize) = tid;
-    //         }
-    //     }
-    //     if flags.contains(CloneFlags::CLONE_PARENT_SETTID) {
-    //         unsafe {
-    //             *(parent_tid_ptr as *mut usize) = tid;
-    //         }
-    //     }
-    //
-    //     spawn_thread(new_thread);
-    //     Ok(tid)
-    // }
+    pub fn clone_thread(
+        self: &Arc<Self>,
+        stack: Option<usize>,
+        tls_ptr: usize,
+        parent_tid_ptr: usize,
+        child_tid_ptr: usize,
+        flags: CloneFlags,
+    ) -> SyscallRet {
+        let stack = stack.expect("clone stack should not be 0");
+        let entry_point = unsafe { *(stack as *const usize) };
+        let arg = unsafe {
+            let arg_addr = stack + core::mem::size_of::<usize>();
+            *(arg_addr as *const usize)
+        };
+        // 设置新的trap context
+        let mut trap_context = *current_trap_cx();
+        // 设置 spec
+        trap_context.set_entry_point(entry_point);
+        trap_context.set_return_value(arg);
+        // 设置 stack pointer
+        trap_context.set_sp(stack);
+        // 设置 线程本地变量的指向指针
+        trap_context.set_thread_pointer(tls_ptr);
+        // 设置 全局指针
+        trap_context.set_global_pointer(current_trap_cx().get_global_pointer()); // Global pointer
+
+        // 新建一个线程
+        let pid = Arc::new(pid_alloc());
+        let new_thread = Arc::new(Thread::new(
+            self.clone(),
+            current_task(),
+            trap_context,
+            stack,
+            pid.clone(),
+        ));
+
+        // attach the new thread to process
+        let mut parent_inner = self.inner_lock();
+        parent_inner
+            .threads
+            .insert(pid.0, Arc::downgrade(&new_thread));
+
+        if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
+            new_thread.get_inner_mut().tid_addr.clear_tid_address = Some(child_tid_ptr);
+        }
+        if flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
+            unsafe {
+                *(child_tid_ptr as *mut usize) = pid.0;
+            }
+        }
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) {
+            unsafe {
+                *(parent_tid_ptr as *mut usize) = pid.0;
+            }
+        }
+        spawn_thread(new_thread);
+        Ok(pid.0)
+    }
 }
 
 pub fn new_initproc(elf_data: &[u8]) -> Arc<Thread> {
@@ -396,11 +377,25 @@ impl Thread {
 
     pub fn new(
         process: Arc<Process>,
-        _main_thread: Option<&Arc<Thread>>,
+        main_thread: Option<Arc<Thread>>,
         trap_context: TrapContext,
         ustack_top: usize,
         tid: Arc<PidHandle>,
     ) -> Self {
+        // todo: main thread 这里有一个信号的操作
+        let sig_set;
+        let sig_handlers;
+        match main_thread {
+            Some(main_thread) => {
+                sig_set = SigSet::from_existed_user(&main_thread.get_inner_mut().sig_set);
+                sig_handlers = main_thread.get_inner_mut().sig_handlers.clone();
+            }
+            None => {
+                sig_set = SigSet::new();
+                sig_handlers = SigHandlers::new();
+            }
+        };
+
         let thread = Self {
             pid: tid.clone(),
             is_terminated: Default::default(),
@@ -410,8 +405,8 @@ impl Thread {
                 trap_context,
                 ustack_top,
                 tid_addr: TidAddress::new(),
-                sig_set: SigSet::new(),
-                sig_handlers: SigHandlers::new(),
+                sig_set,
+                sig_handlers,
                 signal_context: None,
                 handling_signo: 0,
             }),

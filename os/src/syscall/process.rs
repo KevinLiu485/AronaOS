@@ -285,15 +285,14 @@ pub fn sys_clone(
         sys_fork(stack)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone [create a new thread]
-        unimplemented!();
-        // let new_pid = current_task().unwrap().create_thread(
-        //     stack,
-        //     tls_ptr,
-        //     parent_tid_ptr,
-        //     chilren_tid_ptr,
-        //     clone_flags,
-        // );
-        // new_pid
+        let new_pid = current_process().clone_thread(
+            stack,
+            tls_ptr,
+            parent_tid_ptr,
+            chilren_tid_ptr,
+            clone_flags,
+        );
+        new_pid
     } else {
         unimplemented!()
         // panic!("unimplemented clone_flags!")

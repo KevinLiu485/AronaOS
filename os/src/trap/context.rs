@@ -23,13 +23,15 @@ pub struct TrapContext {
     pub kernel_satp: usize, // 49
 }
 
-// x0 zero Constant 0
-// x1 ra Return Address
-// x2 sp Stack Pointer
-// x3 gp Global Pointer
-// x4 tp Thread Pointer
-// x10 a0 and x11 a1 Function Arguments or Return Values
-
+/// x1 ra Return Address
+/// x2 sp Stack Pointer
+/// x3 gp Global Pointer: RISC-V 使用 x3 寄存器存储全局指针。在 RISC-V 中，全局指针是一个特殊的指针，
+/// 指向全局变量和静态数据区（static data region）的起始地址。全局变量是在程序启动时就已经被分配好的变量，它们通常存储在静态数据区中，
+/// 其内存地址在编译时就已经确定。全局指针 gp 通常指向静态数据区的起始地址，用于访问和管理全局变量。
+/// x4 tp Thread Pointer
+/// RISC-V 使用 x4 寄存器存储线程指针（thread pointer），指向 Thread local storage。
+/// 在多线程应用程序中，每个线程可能有自己的私有变量集，称为线程特定变量。这组变量将由寄存器 x4 (tp)指向，故 **每个线程** 在其x4寄存器中都有一个不同的值。
+/// x10 a0 and x11 a1 Function Arguments or Return Values
 impl TrapContext {
     ///set stack pointer to x_2 reg (sp)
     pub fn set_sp(&mut self, sp: usize) {

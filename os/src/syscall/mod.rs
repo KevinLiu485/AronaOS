@@ -82,7 +82,7 @@ const SYS_RT_SIGRETURN: usize = 139;
 
 mod fs;
 mod mm;
-mod process;
+pub(crate) mod process;
 mod util;
 
 use fs::*;
