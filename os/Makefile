@@ -76,7 +76,7 @@ $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 # Pack FS_IMG_ROOT into FAT32 fs.img
-fs-img: 
+fs-img: build-muslc
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
@@ -94,6 +94,12 @@ ifeq ($(SUBMIT), true)
 else 
 	@cd ../user && make build
 endif
+
+build-muslc:
+	@cd ../muslc && make build
+	@rm -rf $(FS_IMG_ROOT)/muslc
+	@mkdir -p $(FS_IMG_ROOT)/muslc
+	@cp -r ../muslc/bin/* $(FS_IMG_ROOT)/muslc
 
 kernel: build-user
 	@echo Platform: $(BOARD)
@@ -144,6 +150,9 @@ run: env build
 
 last:
 	qemu-system-riscv64 $(QEMU_ARGS)
+
+trace: 
+	$(MAKE) run LOG=TRACE
 
 gdbserver: env build
 	qemu-system-riscv64 $(QEMU_ARGS) -s -S

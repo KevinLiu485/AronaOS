@@ -17,7 +17,7 @@ busybox testcode 实际调用的系统调用列表，少于busybox使用的系�
  <!-- - getuid 174 -->
  <!-- - ioctl 29 -->
  <!-- - kill 129 -->
- - lseek 62
+ <!-- - lseek 62 -->
 <!-- mkdirat -->
 <!-- mmap -->
  - mprotect 226
@@ -31,7 +31,7 @@ busybox testcode 实际调用的系统调用列表，少于busybox使用的系�
  - rt_sig
  - action 134
  - rt_sigprocmask 135
- - sendfile 71
+ <!-- - sendfile 71 -->
  - set_tid_address 96
  - statfs 43
  <!-- - sysinfo 179
@@ -43,3 +43,7 @@ busybox testcode 实际调用的系统调用列表，少于busybox使用的系�
  <!-- - writev 66 -->
  <!-- - geteuid 175 -->
  - ppoll 73
+
+ - [ ] sys_ppoll
+ - [ ] sys_ioctl
+ - [ ] sys_sigaction

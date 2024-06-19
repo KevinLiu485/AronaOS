@@ -8,11 +8,8 @@
 
 os/src/link_app.S
 os/src/linker.ld
-user/build
-user/target/*
 
-fs-img-src/fs.img
-fs-img-src/sdcard-pre.img
+fs-img-src/**/*.img
 tmp
 utils
 

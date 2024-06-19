@@ -73,6 +73,7 @@ const SYS_KILL: usize = 129;
 const SYS_MPROTECT: usize = 226;
 const SYS_UTIMENSAT: usize = 88;
 const SYS_SENDFILE: usize = 71;
+const SYS_LSEEK: usize = 62;
 
 fn syscall(id: usize, args: [usize; 6]) -> isize {
     let mut ret: isize;
@@ -334,5 +335,12 @@ pub fn sys_sendfile(out_fd: i32, in_fd: i32, offset: &mut usize, count: usize) -
             0,
             0,
         ],
+    )
+}
+
+pub fn sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
+    syscall(
+        SYS_LSEEK,
+        [fd as usize, offset as usize, whence as usize, 0, 0, 0],
     )
 }

@@ -81,7 +81,6 @@ const SYS_UTIMENSAT: usize = 88;
 const SYS_SENDFILE: usize = 71;
 const SYS_LSEEK: usize = 62;
 
-
 mod fs;
 mod mm;
 mod process;
@@ -138,7 +137,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
 
         SYS_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *const usize),
         SYS_GETUID => sys_getuid(),
-        SYS_IOCTL => sys_ioctl(),
+        SYS_IOCTL => sys_ioctl(args[0] as i32, args[1], args[2] as *const _),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SYS_SIGACTION => sys_sigaction(),
         SYS_SIGPROCMASK => sys_sigprocmask(),
@@ -178,6 +177,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+        SYS_LSEEK => sys_lseek(args[0] as i32, args[1] as isize, args[2] as i32),
         _ => unsupported(syscall_id),
     }
 }

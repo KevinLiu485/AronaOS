@@ -1,4 +1,6 @@
 //! File system in os
+mod ext4;
+mod fat32;
 pub mod fd_table;
 pub mod inode;
 mod os_inode;
@@ -8,7 +10,6 @@ mod stdio;
 
 use crate::{
     config::AsyncResult,
-    fat32::BLOCK_SIZE,
     mutex::SpinNoIrqLock,
     timer::TimeSpec, // mm::UserBuffer,
 };
@@ -126,6 +127,7 @@ pub const AT_FDCWD: isize = -100;
 pub const AT_REMOVEDIR: u32 = 0x200;
 
 use alloc::sync::Arc;
+use fat32::BLOCK_SIZE;
 use inode::Inode;
 // use alloc::sync::Arc;
 pub use os_inode::{create_dir, list_apps, open_fd, open_inode, open_osinode, OSInode, OpenFlags};

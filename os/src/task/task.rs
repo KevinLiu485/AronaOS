@@ -354,7 +354,7 @@ fn pass_init_vec(
 
     // stack_trace!();
     // Construct auxv
-    info!("[pass_init_vec] auxv len {}", auxs_vec.len());
+    // info!("[pass_init_vec] auxv len {}", auxs_vec.len());
     let len = auxs_vec.len() * core::mem::size_of::<AuxHeader>();
     user_sp -= len;
     // UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;

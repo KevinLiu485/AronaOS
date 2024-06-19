@@ -25,16 +25,8 @@ use crate::utils::{c_str_to_string, SyscallErr};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let task = current_task().unwrap();
-    // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
-    // if fd >= fd_table_len {
-    //     return Err(1);
-    // }
     let fdinfo = task.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
-        // if !fdinfo.file.writable() {
-        //     return Err(1);
-        // }
-        // let fdinfo = fdinfo.clone();
         let ret = fdinfo
             .file
             .write(unsafe { core::slice::from_raw_parts(buf as *const u8, len) })
@@ -68,37 +60,24 @@ pub fn sys_close(fd: usize) -> SyscallRet {
     trace!("[sys_close] enter. pid: {}, fd: {}", task.getpid(), fd);
     let ret = task.inner_lock().fd_table.close(fd);
     ret
-    // let mut inner = task.inner_lock();
-    // if fd >= inner.fd_table.table.len() {
-    //     return Err(1);
-    // }
-    // if inner.fd_table.table[fd].is_none() {
-    //     return Err(1);
-    // }
-    // if let Some(fdinfo) = inner.fd_table.get(fd) {
-    //     fdinfo
-    //     Ok(0)
-    // } else {
-    //     Err(1)
-    // }
-    // inner.fd_table.table[fd].take();
-    // Ok(0)
 }
 
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -> SyscallRet {
     trace!("[sys_openat] enter.");
     let task = current_task().unwrap();
     let path = Path::from(c_str_to_string(pathname));
+    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     debug!(
         "[sys_openat] dirfd: {}, pathname: {}, flags: {:?}",
-        dirfd,
-        path,
-        OpenFlags::from_bits(flags).unwrap()
+        dirfd, path, flags,
     );
-    if let Ok(inode) = open_osinode(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
-        // let mut inner = task.inner_lock();
-        // let fd = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd] = Some(FdInfo::without_flags(inode));
+    if let Ok(inode) = open_osinode(dirfd, &path, flags) {
+        let mode = inode.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().mode);
+        if mode == InodeMode::FileDIR
+            && (flags.contains(OpenFlags::WRONLY) || flags.contains(OpenFlags::RDWR))
+        {
+            return Err(SyscallErr::EISDIR as usize);
+        }
         let fd = task
             .inner_lock()
             .fd_table
@@ -227,7 +206,6 @@ pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
     );
 
     Ok(src_len * DIRENT_SIZE)
-    // Ok(num_bytes)
 }
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
@@ -267,10 +245,6 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     let task = current_task().unwrap();
     let pipe_pair = Pipe::new_pair();
     let fdret = task.inner_handler(|inner| {
-        // let fd1 = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
-        // let fd2 = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
         let fd1 = inner
             .fd_table
             .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()));
@@ -300,9 +274,11 @@ pub fn sys_umount2() -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_ioctl() -> SyscallRet {
-    trace!("[sys_ioctl] enter");
-    warn!("[sys_ioctl] not implemented");
+pub fn sys_ioctl(fd: i32, request: usize, argp: *const u8) -> SyscallRet {
+    trace!("[sys_ioctl] enter. fd: {}, request: {}", fd, request);
+    warn!("[sys_ioctl] not fully implemented");
+
+    let file = open_fd(fd as usize).ok_or(SyscallErr::EBADF as usize)?;
     Ok(0)
 }
 
@@ -326,7 +302,6 @@ const F_SETFL: i32 = 4;
 
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     trace!("[sys_fcntl] enter. fd: {}, cmd: {}, arg: {}", fd, cmd, arg);
-    // warn!("[sys_fcntl] not fully implemented");
     let task = current_task().unwrap();
     match cmd {
         F_DUPFD => {
@@ -421,9 +396,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: i32) -> SyscallRet {
     let task = current_task().unwrap();
     let fdinfo = task.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
-        // if !fdinfo.file.writable() {
-        //     return Err(1);
-        // }
         let mut ret: usize = 0;
         for slice in iovec.iter() {
             ret += fdinfo.file.write(slice).await?;
@@ -545,7 +517,7 @@ pub async fn sys_sendfile(out_fd: i32, in_fd: i32, offset: usize, count: usize) 
     } else {
         // use and update user-given offset
         let offset = unsafe { &mut *offset };
-        if *offset < 0  {
+        if *offset < 0 {
             // negative offset is invalid
             return Err(SyscallErr::EINVAL as usize);
         }
@@ -559,30 +531,64 @@ pub async fn sys_sendfile(out_fd: i32, in_fd: i32, offset: usize, count: usize) 
     }
 }
 
-const SEEK_SET: i32 = 0;	/* Seek from beginning of file.  */
-const SEEK_CUR: i32 = 1;	/* Seek from current position.  */
-const SEEK_END: i32 = 2;	/* Seek from end of file.  */
-const SEEK_DATA: i32 = 3;	/* Seek to next data.  */
-const SEEK_HOLE: i32 = 4;	/* Seek to next hole.  */
+const SEEK_SET: i32 = 0; /* Seek from beginning of file.  */
+const SEEK_CUR: i32 = 1; /* Seek from current position.  */
+const SEEK_END: i32 = 2; /* Seek from end of file.  */
+const SEEK_DATA: i32 = 3; /* Seek to next data.  */
+const SEEK_HOLE: i32 = 4; /* Seek to next hole.  */
 
-// pub fn sys_lseek(fd: i32, offset: isize, whence: i32) -> SyscallRet {
-//     let file = open_fd(fd as usize).ok_or(SyscallErr::EBADF)?;
-//     match whence {
-//         SEEK_SET => {
-//             if offset < 0 {
-//                 return Err(SyscallErr::EINVAL as usize);
-//             }
-//             file.seek(offset as usize).ok_or(SyscallErr::ESPIPE as usize)?;
-//             Ok(offset as usize)
-//         }
-//         SEEK_CUR => {
-//             let origin_offset = file.get_meta().inner.lock().offset;
-            
-//             // todo!()
-//         }
-//         SEEK_END => {}
-//         SEEK_DATA => {}
-//         SEEK_HOLE => {}
-//         _ => Err(SyscallErr::EINVAL as usize),
-//     }
-// }
+pub fn sys_lseek(fd: i32, offset: isize, whence: i32) -> SyscallRet {
+    trace!(
+        "[sys_lseek] enter. fd: {}, offset: {}, whence: {}",
+        fd,
+        offset,
+        whence
+    );
+    warn!("[sys_lseek] not fully implemented.");
+    let file = open_fd(fd as usize).ok_or(SyscallErr::EBADF)?;
+    match whence {
+        SEEK_SET => {
+            if offset < 0 {
+                return Err(SyscallErr::EINVAL as usize);
+            }
+            file.seek(offset as usize)
+                .ok_or(SyscallErr::ESPIPE as usize)?;
+            Ok(offset as usize)
+        }
+        SEEK_CUR => {
+            let origin_offset = file.get_meta().inner.lock().offset;
+            // offset may be negative
+            let final_offset = origin_offset as isize + offset;
+            if final_offset < 0 {
+                return Err(SyscallErr::EINVAL as usize);
+            }
+            let final_offset = final_offset as usize;
+            file.seek(final_offset).ok_or(SyscallErr::ESPIPE as usize)?;
+            Ok(final_offset)
+        }
+        SEEK_END => {
+            let inode = file
+                .get_meta()
+                .inner
+                .lock()
+                .inode
+                .clone()
+                .ok_or(SyscallErr::ESPIPE as usize)?;
+            let data_size = inode.get_meta().inner.lock().data_size;
+            let final_offset = data_size as isize + offset;
+            if final_offset < 0 {
+                return Err(SyscallErr::EINVAL as usize);
+            }
+            let final_offset = final_offset as usize;
+            file.seek(final_offset).ok_or(SyscallErr::ESPIPE as usize)?;
+            Ok(final_offset)
+        }
+        SEEK_DATA => {
+            unimplemented!()
+        }
+        SEEK_HOLE => {
+            unimplemented!()
+        }
+        _ => Err(SyscallErr::EINVAL as usize),
+    }
+}

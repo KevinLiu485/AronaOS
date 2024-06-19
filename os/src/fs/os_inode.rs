@@ -9,7 +9,7 @@ use super::path::Path;
 use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
 use crate::drivers::BLOCK_DEVICE;
-use crate::fat32::fs::FAT32FileSystem;
+use crate::fs::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
 use crate::task::current_task;
 use crate::utils::SyscallErr;
@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
 use log::debug;
+
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
 pub struct OSInode {
@@ -45,7 +46,7 @@ impl OSInode {
         self.meta.inner.lock().offset = offset;
     }
 
-    fn inner_handler<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
+    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
         f(&mut self.meta.inner.lock())
     }
 
@@ -123,6 +124,7 @@ impl File for OSInode {
             }
             let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
             let offset = self.get_offset();
+            // let file_size = self.meta.inner.lock().inode.unwrap().get_meta().inner.lock().data_size;
             let write_size = inode.write(offset, buf).await?;
             self.set_offset(offset + write_size);
             Ok(write_size)
@@ -154,7 +156,7 @@ lazy_static! {
 pub fn list_apps() {
     // println!("/**** ROOT APPS ****");
     println!("[kernel] ROOT FILES >>>");
-    for app in ROOT_INODE.list(ROOT_INODE.clone()).unwrap() {
+    for app in ROOT_INODE.list().unwrap() {
         print!("{} \t", app.get_name());
     }
     println!("");

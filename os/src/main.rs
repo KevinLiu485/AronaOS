@@ -32,7 +32,7 @@ mod config;
 pub mod ctypes;
 mod drivers;
 mod executor;
-pub mod fat32;
+// pub mod fat32;
 pub mod fs;
 pub mod lang_items;
 pub mod loader;

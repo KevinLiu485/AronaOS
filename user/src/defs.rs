@@ -212,6 +212,13 @@ bitflags! {
 }
 
 
+pub const SEEK_SET: i32 = 0; /* Seek from beginning of file.  */
+pub const SEEK_CUR: i32 = 1; /* Seek from current position.  */
+pub const SEEK_END: i32 = 2; /* Seek from end of file.  */
+pub const SEEK_DATA: i32 = 3; /* Seek to next data.  */
+pub const SEEK_HOLE: i32 = 4; /* Seek to next hole.  */
+
+
 pub const NSEC_PER_SEC: usize = 10_0000_0000;
 
 pub type SyscallResult<T> = Result<T, SyscallErr>;
