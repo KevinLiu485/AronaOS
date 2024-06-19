@@ -8,16 +8,14 @@ use crate::mutex::SpinNoIrqLock;
 use crate::signal::sigreturn_trampoline;
 use crate::task::aux::*;
 use crate::utils::SyscallErr;
-use crate::{SyscallRet, KERNEL_DIRECT_OFFSET};
+use crate::SyscallRet;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::error;
 use core::fmt::Debug;
-use core::iter::Map;
 use lazy_static::lazy_static;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use riscv::register::satp;
 
 #[allow(unused)]

@@ -2,7 +2,6 @@ mod action;
 mod signo;
 
 use action::{ign_sig_handler, term_sig_handler, SignalDefault};
-use core::arch::global_asm;
 use log::{debug, error, trace, warn};
 
 pub use action::SigHandlers;
@@ -111,7 +110,7 @@ pub fn handle_signals() {
                     SignalDefault::Terminate => {
                         // 目前会发生死锁, 应该不是在term_sig_handler中调用exit_current
                         todo!();
-                        term_sig_handler();
+                        //term_sig_handler();
                     }
                     SignalDefault::Ignore => {
                         ign_sig_handler();
