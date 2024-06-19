@@ -73,7 +73,7 @@ pub async fn trap_handler() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
-            cx.sepc += 4;
+            cx.set_entry_point(cx.sepc + 4);
             // get system call return value
             let result = syscall(
                 cx.x[17],
@@ -155,7 +155,7 @@ pub fn trap_return() {
     set_user_trap_entry();
     // todo: 信号嵌套
     // 现在不支持信号嵌套
-    if current_task().unwrap().inner_lock().handling_signo == 0 {
+    if current_task().unwrap().get_inner_mut().handling_signo == 0 {
         handle_signals();
     }
     let cx = current_trap_cx();

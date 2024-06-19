@@ -16,6 +16,7 @@ use crate::fs::{
     create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
 };
 use crate::task::current_task;
+use crate::task::processor::current_process;
 
 use crate::timer::TimeSpec;
 use crate::utils::{c_str_to_string, SyscallErr};
@@ -26,7 +27,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     // if fd >= fd_table_len {
     //     return Err(1);
     // }
-    let fdinfo = task.inner_handler(|inner| inner.fd_table.get(fd));
+    let fdinfo = task.process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         if !fdinfo.file.writable() {
             return Err(1);
@@ -46,14 +47,14 @@ pub async fn sys_read(
     buf: usize, /* cannot use `*const u8` here as it does not satisfy `Send` trait */
     len: usize,
 ) -> SyscallRet {
-    let task = current_task().unwrap();
+    let current_process = current_process();
     /* cannot use `inner` as MutexGuard will cross `await` that way */
     // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
     // if fd >= fd_table_len {
     //     return Err(1);
     // }
     // let fdinfo = task.inner_handler(|inner| inner.fd_table.table[fd].clone());
-    let fdinfo = task.inner_handler(|inner| inner.fd_table.get(fd));
+    let fdinfo = current_process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         // let fdinfo = fdinfo.clone();
         if !fdinfo.file.readable() {
@@ -70,9 +71,9 @@ pub async fn sys_read(
 }
 
 pub fn sys_close(fd: usize) -> SyscallRet {
-    let task = current_task().unwrap();
-    trace!("[sys_close] enter. pid: {}, fd: {}", task.getpid(), fd);
-    let ret = task.inner_lock().fd_table.close(fd);
+    let process = current_process();
+    trace!("[sys_close] enter. pid: {}, fd: {}", process.getpid(), fd);
+    let ret = process.inner_lock().fd_table.close(fd);
     ret
     // let mut inner = task.inner_lock();
     // if fd >= inner.fd_table.table.len() {
@@ -93,23 +94,26 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -> SyscallRet {
     trace!("[sys_openat] enter");
-    let task = current_task().unwrap();
+    let current_process = current_process();
     let path = Path::from(c_str_to_string(pathname));
     if let Ok(inode) = open_osinode(dirfd, &path, OpenFlags::from_bits(flags).unwrap()) {
         // let mut inner = task.inner_lock();
         // let fd = inner.fd_table.allocate(0);
         // inner.fd_table.table[fd] = Some(FdInfo::without_flags(inode));
-        let fd = task
+        let fd = current_process
             .inner_lock()
             .fd_table
             .alloc_and_set(0, FdInfo::default_flags(inode));
         info!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
-            task.pid, path, fd
+            current_process.pid, path, fd
         );
         Ok(fd)
     } else {
-        info!("[sys_openat] pid {} fail to open file: {}", task.pid, path);
+        info!(
+            "[sys_openat] pid {} fail to open file: {}",
+            current_process.pid, path
+        );
         Err(1)
     }
 }
@@ -124,9 +128,7 @@ pub fn sys_chdir(pathname: *const u8) -> SyscallRet {
     // simply examine validity of the path
     match open_osinode(AT_FDCWD, &path, OpenFlags::empty()) {
         Ok(inode) => {
-            current_task()
-                .unwrap()
-                .inner_handler(|inner| inner.cwd = inode.get_path());
+            current_process().inner_handler(|inner| inner.cwd = inode.get_path());
             Ok(0)
         }
         Err(_) => Err(1),
@@ -304,7 +306,8 @@ pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
     trace!("[sys_dup] enter");
-    let task = current_task().unwrap();
+    let task = current_process();
+
     let ret = task.inner_lock().fd_table.alloc_and_dup(fd, 0);
     ret
     // task.inner_handler(|inner| {
@@ -325,7 +328,7 @@ pub fn sys_dup(fd: usize) -> SyscallRet {
 
 pub fn sys_dup3(oldfd: usize, newfd: usize) -> SyscallRet {
     trace!("[sys_dup3] enter");
-    let task = current_task().unwrap();
+    let task = current_process();
     let ret = task.inner_lock().fd_table.dup_to(oldfd, newfd);
     ret
     // task.inner_handler(|inner| {
@@ -365,9 +368,9 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet
 
 pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     trace!("[sys_pipe2] enter");
-    let task = current_task().unwrap();
+    let process = current_process();
     let pipe_pair = Pipe::new_pair();
-    let fdret = task.inner_handler(|inner| {
+    let fdret = process.inner_handler(|inner| {
         // let fd1 = inner.fd_table.allocate(0);
         // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
         // let fd2 = inner.fd_table.allocate(0);
@@ -428,15 +431,15 @@ const F_SETFL: i32 = 4;
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     trace!("[sys_fcntl] enter. fd: {}, cmd: {}, arg: {}", fd, cmd, arg);
     // warn!("[sys_fcntl] not fully implemented");
-    let task = current_task().unwrap();
+    let process = current_process();
     match cmd {
         F_DUPFD => {
             let least_fd = arg;
-            task.inner_lock().fd_table.alloc_and_dup(fd, least_fd)
+            process.inner_lock().fd_table.alloc_and_dup(fd, least_fd)
         }
         F_DUPFD_CLOEXEC => {
             let least_fd = arg;
-            task.inner_handler(|inner| {
+            process.inner_handler(|inner| {
                 let new_fd = inner.fd_table.alloc_and_dup(fd, least_fd)?;
                 let fdinfo = inner
                     .fd_table
@@ -447,7 +450,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
             })
         }
         F_GETFD => {
-            let fdinfo = task
+            let fdinfo = process
                 .inner_lock()
                 .fd_table
                 .get(fd)
@@ -460,7 +463,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
         }
         F_SETFD => {
             let new_flags = FcntlFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL as usize)?;
-            task.inner_handler(|inner| {
+            process.inner_handler(|inner| {
                 let fdinfo = inner
                     .fd_table
                     .get_mut(fd)
@@ -472,7 +475,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
             })
         }
         F_GETFL => {
-            let fdinfo = task
+            let fdinfo = process
                 .inner_lock()
                 .fd_table
                 .get(fd)
@@ -481,7 +484,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
         }
         F_SETFL => {
             let new_flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL as usize)?;
-            task.inner_handler(|inner| {
+            process.inner_handler(|inner| {
                 let fdinfo = inner
                     .fd_table
                     .get_mut(fd)
@@ -519,8 +522,8 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: i32) -> SyscallRet {
     );
 
     let iovec = iovec_to_slice_vec(iov as *const Iovec, iovcnt);
-    let task = current_task().unwrap();
-    let fdinfo = task.inner_handler(|inner| inner.fd_table.get(fd));
+    let current_process = current_process();
+    let fdinfo = current_process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         if !fdinfo.file.writable() {
             return Err(1);

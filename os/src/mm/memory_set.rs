@@ -112,6 +112,7 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+
     /// Remove MapAreas在页表中的映射和释放对应的物理页帧
     /// **调用remove_areas后一定要刷新TLB**
     /// especially used for sys_munmap
@@ -417,7 +418,6 @@ impl MemorySet {
 
         (
             memory_set,
-            // user_stack_top - 32,
             user_stack_top,
             elf.header.pt2.entry_point() as usize,
             aux_vec,
@@ -433,6 +433,7 @@ impl MemorySet {
             areas,
             heap,
             brk,
+            mmap_start: 0,
         }
     }
     ///Clone a same `MemorySet`

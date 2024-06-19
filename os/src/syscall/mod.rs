@@ -92,17 +92,19 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
+use crate::signal::sys_kill;
 use crate::{
     config::SyscallRet,
     signal::{sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
 };
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
         SYS_EXIT => sys_exit(args[0] as i32),
         SYS_GETPID => sys_getpid(),
         SYS_CLONE => sys_clone(args[0], args[1], args[2], args[3], args[4]),
-        SYS_EXECVE => sys_exec(args[0], args[1], args[2]).await,
+        SYS_EXECVE => sys_execve(args[0], args[1], args[2]).await,
         SYS_UNAME => sys_uname(args[0]),
         SYS_GETTIMEOFDAY => sys_get_time(args[0]),
         SYS_BRK => sys_brk(args[0]),
@@ -163,7 +165,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as u32,
             args[3] as u32,
         ),
-        SYS_KILL => sys_kill(args[0] as i32, args[1] as i32),
+        SYS_KILL => sys_kill(args[0] as isize, args[1]),
         SYS_MPROTECT => sys_mprotect(args[0] as *const _, args[1], args[2] as i32),
         SYS_UTIMENSAT => sys_utimensat(
             args[0] as i32,

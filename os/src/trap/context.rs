@@ -23,11 +23,34 @@ pub struct TrapContext {
     pub kernel_satp: usize, // 49
 }
 
+// x0 zero Constant 0
+// x1 ra Return Address
+// x2 sp Stack Pointer
+// x3 gp Global Pointer
+// x4 tp Thread Pointer
+// x10 a0 and x11 a1 Function Arguments or Return Values
+
 impl TrapContext {
     ///set stack pointer to x_2 reg (sp)
     pub fn set_sp(&mut self, sp: usize) {
         self.x[2] = sp;
     }
+    pub fn set_entry_point(&mut self, entry_point: usize) {
+        self.sepc = entry_point;
+    }
+    pub fn set_return_value(&mut self, return_value: usize) {
+        self.x[10] = return_value;
+    }
+    pub fn set_thread_pointer(&mut self, thread_pointer: usize) {
+        self.x[4] = thread_pointer;
+    }
+    pub fn set_global_pointer(&mut self, global_pointer: usize) {
+        self.x[3] = global_pointer;
+    }
+    pub fn get_global_pointer(&self) -> usize {
+        self.x[3]
+    }
+
     ///init app context
     pub fn app_init_context(entry: usize, sp: usize, kernel_satp: usize) -> Self {
         let mut sstatus = sstatus::read();

@@ -4,6 +4,7 @@ use crate::{config::SyscallRet, utils::SyscallErr};
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MmapProt};
 use crate::task::current_task;
+use crate::task::processor::current_process;
 use log::{debug, trace, warn};
 
 // Todo?: 根据测例实际要实现的是sbrk?
@@ -12,7 +13,7 @@ pub fn sys_brk(brk: usize) -> SyscallRet {
     // static mut unaligned_brk: usize = 0;
     trace!("[sys_brk] enter. brk: {:#x}", brk);
     let current_task = current_task().expect("fail to get current task in sys_brk");
-    let current_memory_set = &mut current_task.inner_lock().memory_set;
+    let current_memory_set = &mut current_task.process.inner_lock().memory_set;
     // sbrk(0)是获取当前program brk(堆顶)
     if brk == 0 {
         return Ok(current_memory_set.brk);
@@ -74,7 +75,7 @@ pub async fn sys_mmap(
         Some(flags) => flags,
         None => return Err(SyscallErr::EINVAL.into()),
     };
-    let task = current_task().unwrap();
+    let task = current_process();
     trace!(
         "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}",
         start,
@@ -149,9 +150,7 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
     if start % PAGE_SIZE != 0 || len == 0 || start < MMAP_MIN_ADDR {
         return Err(SyscallErr::EINVAL.into());
     }
-    current_task()
-        .unwrap()
-        .inner_handler(|inner| inner.memory_set.do_unmap(start, len));
+    current_process().inner_handler(|inner| inner.memory_set.do_unmap(start, len));
     Ok(0)
 }
 

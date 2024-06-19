@@ -3,7 +3,7 @@ use crate::fs::path::Path;
 use crate::fs::{open_osinode, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
-use crate::task::schedule::spawn_thread;
+use crate::task::processor::current_process;
 use crate::task::{current_task, exit_current, yield_task, INITPROC};
 use crate::timer::{TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
@@ -11,10 +11,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::future::Future;
 use core::ptr::null;
+use core::sync::atomic::Ordering;
 use core::task::Poll;
 use core::time::Duration;
 use log::{debug, error, info, trace, warn};
 
+/// exit 语义，退出当前的线程。
+/// Simply set exit_code and change status to Zombie. More exiting works will de done by its parent.
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
     trace!("[sys_exit] enter");
     exit_current(exit_code);
@@ -22,6 +25,7 @@ pub fn sys_exit(exit_code: i32) -> SyscallRet {
 }
 
 pub async fn sys_yield() -> SyscallRet {
+    trace!("[sys_yield] enter");
     yield_task().await;
     Ok(0)
 }
@@ -38,48 +42,40 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
 
 pub fn sys_getpid() -> SyscallRet {
     trace!("[sys_getpid] enter");
-    Ok(current_task().unwrap().pid.0)
+    Ok(current_task().unwrap().getpid())
 }
 
 /// fake
 pub fn sys_getppid() -> SyscallRet {
     trace!("[sys_getppid] enter");
-    let parent_task = current_task().unwrap().inner_lock().parent.clone();
+    let parent_task = current_process().inner_lock().parent.clone();
     match parent_task {
-        None => Ok(INITPROC.pid.0),
+        None => Ok(INITPROC.getpid()),
         Some(parent_task) => match parent_task.upgrade() {
-            None => Ok(INITPROC.pid.0),
-            Some(parent_task) => Ok(parent_task.pid.0),
+            None => Ok(INITPROC.getpid()),
+            Some(parent_task) => Ok(parent_task.getpid()),
         },
     }
 }
 
 pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
     trace!("[sys_fork] enter");
-    let current_task = current_task().unwrap();
-    let new_task = current_task.fork(stack);
-    let new_pid = new_task.pid.0;
+    // 复制当前进程
+    let current_process = current_process();
+    let new_peocess = current_process.fork(stack);
+
+    let new_pid = new_peocess.getpid();
     trace!(
-        "[sys_fork] pid: {}, new_pid: {}",
-        current_task.getpid(),
+        "[sys_fork] parent pid: {}, new_pid: {}",
+        current_process.getpid(),
         new_pid
     );
-
-    // modify trap context of new_task, because it returns immediately after switching
-    let trap_cx = new_task.inner_lock().get_trap_cx();
-    // we do not have to move to next instruction since we have done it before
-    // for child process, fork returns 0
-    trap_cx.x[10] = 0;
-    if let Some(stack) = stack {
-        trap_cx.set_sp(stack);
-    }
-    // add new task to scheduler
-    spawn_thread(new_task);
     Ok(new_pid)
 }
 
-pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
-    trace!("[sys_exec] enter");
+pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
+    trace!("[sys_execve] enter");
+
     let path = Path::from(c_str_to_string(path as *const u8));
     let mut args = args as *const usize;
     let mut envs = envs as *const usize;
@@ -115,18 +111,19 @@ pub async fn sys_exec(path: usize, args: usize, envs: usize) -> SyscallRet {
             }
         }
     }
+
     // let path = translated_str(token, path as *const u8);
     if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs
         let all_data = app_inode.read_all().await;
-        let task = current_task().unwrap();
-        task.exec(all_data.as_slice(), args_vec, envs_vec);
+        let current_process = current_process();
+        current_process.exec(all_data.as_slice(), args_vec, envs_vec);
         Ok(0)
     } else if path.is_global() {
         // app linked in kernel
         if let Some(all_data) = get_app_data_by_name(&path.get_name()) {
-            let task = current_task().unwrap();
-            task.exec(all_data, args_vec, envs_vec);
+            let current_process = current_process();
+            current_process.exec(all_data, args_vec, envs_vec);
             Ok(0)
         } else {
             Err(1)
@@ -156,7 +153,7 @@ pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> Syscal
     trace!("[sys_wait4] enter");
     // 6.10 debug
     // debug!("[sys_wait4] parent pagetable");
-    // current_task().unwrap().inner_lock().memory_set.page_table.dump_all();
+    // current_process().unwrap().inner_lock().memory_set.page_table.dump_all();
     let options = WaitOption::from_bits(options).unwrap();
     WaitFuture::new(options, pid, exit_code_ptr).await
 }
@@ -185,9 +182,11 @@ impl Future for WaitFuture {
     ) -> Poll<Self::Output> {
         let task = current_task().unwrap();
         // find a child process
-        let mut inner = task.inner_lock();
+        // let mut inner = task.get_inner();
         let found_pid;
         let exit_code;
+
+        let mut inner = task.process.inner_lock();
 
         if !inner
             .children
@@ -216,7 +215,7 @@ impl Future for WaitFuture {
                 return Poll::Pending;
             }
         }
-        //
+
         drop(inner);
         if self.exit_status_addr != 0 {
             UserCheck::new().check_writable_pages(
@@ -227,10 +226,11 @@ impl Future for WaitFuture {
         let exit_status_ptr = self.exit_status_addr as *mut i32;
         if exit_status_ptr != core::ptr::null_mut() {
             unsafe {
-                // exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
-                exit_status_ptr.write_volatile(exit_code);
+                exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
             }
         }
+        debug!("wait task pid is {} ", found_pid);
+        debug!("exit code is {}", exit_code);
         return Poll::Ready(Ok(found_pid));
     }
 }
@@ -238,7 +238,7 @@ impl Future for WaitFuture {
 pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
     trace!("[sys_getcwd] enter");
     // let token = current_user_token();
-    let task = current_task().unwrap();
+    let task = current_process();
     let cwd = task.inner_handler(|inner| inner.cwd.to_string());
     let len = cwd.len() + 1;
     if buf == 0 {
@@ -257,9 +257,9 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SyscallRet {
 pub fn sys_clone(
     flags: usize,
     stack_ptr: usize,
-    _parent_tid_ptr: usize,
-    _tls_ptr: usize,
-    _chilren_tid_ptr: usize,
+    parent_tid_ptr: usize,
+    tls_ptr: usize,
+    chilren_tid_ptr: usize,
 ) -> SyscallRet {
     trace!("[sys_clone] enter");
     warn!("[sys_clone] not fully implemented");
@@ -271,29 +271,29 @@ pub fn sys_clone(
         Some(flag) => flag,
     };
 
-    // let current_task = current_task().unwrap();
+    // todo: 检查stack_ptr的是否可写
+    let stack = match stack_ptr {
+        0 => None,
+        stack => {
+            info!("[sys_clone] assign the user stack {:#x}", stack);
+            Some(stack)
+        }
+    };
+
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
-        let stack = match stack_ptr {
-            0 => None,
-            stack => {
-                info!("[sys_clone] assign the user stack {:#x}", stack);
-                Some(stack)
-            }
-        };
         sys_fork(stack)
-    // } else if clone_flags.contains(CloneFlags::CLONE_VM) {
-    //     panic!("unimplemented CLONE_VM!")
-
-    // clone [create a new thread]
-    // let new_pid = current_task.create_thread(
-    //     stack_ptr,
-    //     tls_ptr,
-    //     parent_tid_ptr,
-    //     chilren_tid_ptr,
-    //     clone_flags,
-    // );
-    // new_pid
+    } else if clone_flags.contains(CloneFlags::CLONE_VM) {
+        // clone [create a new thread]
+        unimplemented!();
+        // let new_pid = current_task().unwrap().create_thread(
+        //     stack,
+        //     tls_ptr,
+        //     parent_tid_ptr,
+        //     chilren_tid_ptr,
+        //     clone_flags,
+        // );
+        // new_pid
     } else {
         unimplemented!()
         // panic!("unimplemented clone_flags!")
@@ -312,17 +312,13 @@ bitflags! {
         /// 避免僵尸进程：通过正确响应SIGCHLD信号，父进程可以避免产生僵尸进程（zombie process）。僵尸进程是已经终止但父进程尚未收集其终止状态的进程。
         /// 默认情况下，SIGCHLD信号的处理方式是忽略，但是开发者可以根据需要设置自定义的信号处理函数来响应这个信号。在多线程程序中，如果需要，也可以将SIGCHLD信号的传递方式设置为线程安全。
         const SIGCHLD = (1 << 4) | (1 << 0);
-        ///  CLONE_VM (since Linux 2.0)
-        ///  If CLONE_VM is set, the calling process and the child process  run
-        ///  in  the same memory space.  In particular, memory writes performed
-        ///  by the calling process or by the child process are also visible in
-        ///  the other process.  Moreover, any memory mapping or unmapping per‐
-        ///  formed with mmap(2) or munmap(2) by the child or  calling  process
-        ///  also affects the other process.
-        ///  If  CLONE_VM is not set, the child process runs in a separate copy
-        ///  of the memory space of the calling process  at  the  time  of  the
-        ///  clone  call.   Memory writes or file mappings/unmappings performed
-        ///  by one of the processes do not affect the other, as with fork(2).
+        /// If CLONE_VM is set, the calling process and the child process run in the same memory space.
+        /// In particular, memory writes performed by the calling process or by the child process
+        /// are also visible in the other process.  Moreover, any memory mapping or unmapping per‐
+        /// formed with mmap(2) or munmap(2) by the child or calling process also affects the other process.
+        /// If CLONE_VM is not set, the child process runs in a separate copy of the memory space of
+        /// the calling process at the time of the clone call. Memory writes or file mappings/unmappings
+        /// performed by one of the processes do not affect the other, as with fork(2).
         const CLONE_VM = 1 << 8;
         const CLONE_FS = 1 << 9;
         const CLONE_FILES = 1 << 10;
@@ -350,11 +346,13 @@ bitflags! {
     }
 }
 
-pub fn sys_set_tid_address(_tidptr: *const usize) -> SyscallRet {
-    trace!("[sys_set_tid_address] enter, tidptr: {:?}", _tidptr);
+pub fn sys_set_tid_address(tidptr: *const usize) -> SyscallRet {
+    trace!("[sys_set_tid_address] enter, tidptr: {:?}", tidptr);
     warn!("[sys_set_tid_address] not fully implemented");
-    // info!("[sys_set_tid_address] tidptr: {:?}", _tidptr);
+    // todo: 这里需要检查对应的是否是可写的，如果不可写，直接返回
+
     let task = current_task().unwrap();
+    task.get_inner_mut().tid_addr.clear_tid_address = Some(tidptr as usize);
     Ok(task.getpid())
 }
 

@@ -12,6 +12,7 @@ use crate::drivers::BLOCK_DEVICE;
 use crate::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
 use crate::task::current_task;
+use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use crate::SyscallRet;
 use alloc::boxed::Box;
@@ -19,6 +20,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
+
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
 pub struct OSInode {
@@ -166,12 +168,12 @@ fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
         Ok(ROOT_INODE.clone())
     } else if dirfd == AT_FDCWD {
         // relative to cwd
-        let task = current_task().unwrap();
-        let cwd = &task.inner_lock().cwd;
+        let process = current_process();
+        let cwd = &process.inner_lock().cwd;
         ROOT_INODE.open_path(cwd, false, false)
     } else {
         // relative to dirfd
-        let task = current_task().unwrap();
+        let task = current_process();
         // let ret = task.inner_lock().fd_table[dirfd as usize]
         //     .clone()
         //     .unwrap()
@@ -227,8 +229,7 @@ pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Ar
 }
 
 pub fn open_fd(fd: usize) -> SysResult<Arc<dyn File>> {
-    let fdinfo = current_task()
-        .unwrap()
+    let fdinfo = current_process()
         .inner_handler(|inner| inner.fd_table.get(fd).ok_or(SyscallErr::EBADF as usize))?;
     let osinode = fdinfo.file;
     // .get_meta()
