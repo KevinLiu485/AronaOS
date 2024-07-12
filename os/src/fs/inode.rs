@@ -41,6 +41,7 @@ pub enum InodeMode {
 // }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(non_camel_case_types)]
 pub enum InodePerm {
     S_IREAD = 0x0100,
     S_IWRITE = 0x0080,

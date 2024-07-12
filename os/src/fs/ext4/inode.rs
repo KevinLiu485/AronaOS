@@ -1,16 +1,10 @@
 use crate::{
-    drivers::BLOCK_DEVICE,
     fs::inode::{Inode, InodeMeta, InodeMode},
     AsyncResult, SysResult,
 };
-use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc};
 use ext4_rs::Ext4;
-use log::error;
-// use ext4_rs::fuse_interface::Ext4;
-// use ext4_rs::fuse_interface;
-
-// extern crate ext4_rs;
-// use ext4_rs::Box;
+use log::{debug, error};
 
 pub struct Ext4Inode {
     fs: Arc<Ext4>,
@@ -19,9 +13,9 @@ pub struct Ext4Inode {
 }
 
 impl Ext4Inode {
-    // pub fn new(fs: Arc<Ext4>, ino: u64, meta: Arc<InodeMeta>) -> Self {
-    //     Self { fs, ino, meta }
-    // }
+    pub fn new(fs: Arc<Ext4>, meta: Arc<InodeMeta>) -> Self {
+        Self { fs, meta }
+    }
 
     /// update the `data_size` of the inode from disk
     fn update_size(&self) {
@@ -41,6 +35,7 @@ impl Ext4Inode {
     }
 
     fn get_size_from_ino(fs: &Arc<Ext4>, ino: u64) -> usize {
+        debug!("[get_size_from_ino]");
         fs.fuse_getattr(ino as u64)
             .map_err(|ext4_err| {
                 error!("[Ext4Inode::update_size] {:?}", ext4_err);
@@ -123,6 +118,7 @@ impl Inode for Ext4Inode {
         self.meta.clone()
     }
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+        debug!("[Ext4Inode::load_children_from_disk] enter.");
         assert_eq!(self.meta.mode, InodeMode::FileDIR);
         let mut meta_inner = self.meta.inner.lock();
         let dir_entries = self
@@ -135,9 +131,15 @@ impl Inode for Ext4Inode {
             .unwrap();
         dir_entries.iter().for_each(|entry| {
             let ino = entry.inode as usize;
-            let name = String::from_utf8(Vec::from(entry.name)).unwrap();
+            // let name = String::from_utf8(Vec::from(entry.name)).unwrap();
+            // let name = name.trim().to_string();
+            let name = entry.get_name();
+            debug!("[Ext4Inode::load_children_from_disk] name: {}", name);
+            if name == "." || name == ".." {
+                debug!("[Ext4Inode::load_children_from_disk] skip");
+                return;
+            }
             let path = self.meta.path.clone_and_append(&name);
-            // todo!("confirm version of ext4");
             let mode = dirent_inodetype_2_inodemode(unsafe { entry.inner.inode_type });
             let data_size = Self::get_size_from_ino(&self.fs, ino as u64);
 
@@ -148,12 +150,11 @@ impl Inode for Ext4Inode {
             });
             meta_inner.children.insert(name, inode);
         });
-        // todo!()
+        debug!("[Ext4Inode::load_children_from_disk] exit.");
     }
 
     fn clear(&self) {
-        // self.fs.fuse_unlink(parent, name);
-        todo!()
+        unimplemented!()
     }
 }
 

@@ -8,7 +8,6 @@ use crate::{
 
 use super::{
     block_cache::get_block_cache,
-    // block_dev::BlockDevice,
     fat::FAT32FileAllocTable,
     inode::FAT32Inode,
     layout::{FAT32BootSector, FAT32FSInfoSector},
@@ -21,28 +20,41 @@ pub struct FAT32FileSystem {
 }
 
 impl FAT32FileSystem {
-    pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<SpinNoIrqLock<Self>> {
+    /// Open a FAT32 file system, return Err() if not valid
+    pub fn open(block_device: Arc<dyn BlockDevice>) -> Result<Arc<SpinNoIrqLock<Self>>, ()> {
         // debug!("FAT32FileSystem::open()");
         let fs_meta = get_block_cache(0, block_device.clone()).lock().read(
             0,
             |boot_sector: &FAT32BootSector| {
                 info!("[FAT32FileSystem::open] boot_sector: {:?}", boot_sector);
-                assert!(
-                    boot_sector.is_valid(),
-                    "[FAT32FileSystem::open] Error loading boot_sector!"
-                );
-                Arc::new(FAT32Meta::new(boot_sector))
+                // assert!(
+                //     boot_sector.is_valid(),
+                //     "[FAT32FileSystem::open] Error loading boot_sector!"
+                // );
+                // if boot_sector.is_valid() {
+                //     Ok(Arc::new(FAT32Meta::new(boot_sector)))
+                // } else {
+                //     Err(())
+                // }
+                boot_sector
+                    .is_valid()
+                    .then(|| Arc::new(FAT32Meta::new(boot_sector)))
+                    .ok_or(())
             },
-        );
+        )?;
         let fs_info = get_block_cache(fs_meta.fs_info_sector_id, block_device.clone())
             .lock()
             .read(0, |fs_info_sector: &FAT32FSInfoSector| {
-                assert!(
-                    fs_info_sector.is_valid(),
-                    "FAT32FileSystem::open(): Error loading fs_info_sector!"
-                );
-                Arc::new(SpinNoIrqLock::new(FAT32Info::new(fs_info_sector)))
-            });
+                // assert!(
+                //     fs_info_sector.is_valid(),
+                //     "FAT32FileSystem::open(): Error loading fs_info_sector!"
+                // );
+                fs_info_sector
+                    .is_valid()
+                    .then(|| Arc::new(SpinNoIrqLock::new(FAT32Info::new(fs_info_sector))))
+                    .ok_or(())
+                // Arc::new(SpinNoIrqLock::new(FAT32Info::new(fs_info_sector)))
+            })?;
         let root_inode = Arc::new(FAT32Inode::new_root(
             Arc::new(FAT32FileAllocTable::new(
                 block_device.clone(),
@@ -50,13 +62,13 @@ impl FAT32FileSystem {
                 fs_meta.clone(),
             )),
             None,
-            &Path::new_absolute(),
+            &Path::root(),
             fs_meta.root_cluster_id,
         ));
-        Arc::new(SpinNoIrqLock::new(Self {
+        Ok(Arc::new(SpinNoIrqLock::new(Self {
             block_device,
             root_inode,
-        }))
+        })))
     }
 
     pub fn root_inode(&self) -> Arc<(dyn Inode + 'static)> {

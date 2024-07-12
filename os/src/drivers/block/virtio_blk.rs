@@ -47,7 +47,7 @@ impl ext4_rs::BlockDevice for VirtIOBlock {
             ext4_rs::BLOCK_SIZE / VIRTIO_BLOCK_SIZE + 1
         };
         ret.reserve(times);
-        for i in 0..times {
+        for _ in 0..times {
             self.0
                 .exclusive_access()
                 .read_block(block_id, &mut buf)

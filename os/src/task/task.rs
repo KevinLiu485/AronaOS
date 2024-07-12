@@ -92,7 +92,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: FdTable::new_bare(),
-                cwd: Path::new_absolute(),
+                cwd: Path::root(),
             }),
         }
     }
@@ -138,7 +138,7 @@ impl TaskControlBlock {
                         meta: FileMeta::new_bare(),
                     }))),
                 ]),
-                cwd: Path::new_absolute(),
+                cwd: Path::root(),
             }),
         };
         // prepare TrapContext in user space

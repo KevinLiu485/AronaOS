@@ -8,7 +8,11 @@ use super::inode::Inode;
 use super::path::Path;
 use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
+#[allow(unused)]
+use crate::drivers::block::EXT4_BLOCK_DEVICE;
 use crate::drivers::BLOCK_DEVICE;
+#[allow(unused)]
+use crate::fs::ext4::fs::Ext4FileSystem;
 use crate::fs::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
 use crate::task::current_task;
@@ -19,7 +23,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
-use log::debug;
+use log::{debug, info};
 
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
@@ -145,13 +149,27 @@ impl File for OSInode {
     }
 }
 
+#[cfg(not(feature = "ext4"))]
 lazy_static! {
     pub static ref ROOT_INODE: Arc<dyn Inode> = {
+        info!("FS type: fat32");
         FAT32FileSystem::open(BLOCK_DEVICE.clone())
+            .unwrap()
             .lock()
             .root_inode()
     };
 }
+
+#[cfg(feature = "ext4")]
+lazy_static! {
+    pub static ref ROOT_INODE: Arc<dyn Inode> = {
+        info!("FS type: ext4");
+        Ext4FileSystem::open(EXT4_BLOCK_DEVICE.clone())
+            .lock()
+            .root_inode()
+    };
+}
+
 /// List all files in the filesystems
 pub fn list_apps() {
     // println!("/**** ROOT APPS ****");

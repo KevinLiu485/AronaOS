@@ -52,7 +52,7 @@ impl Path {
         self.inner.pop() /* .unwrap_or(String::new()) */
     }
 
-    pub fn new_absolute() -> Self {
+    pub fn root() -> Self {
         Self {
             inner: Vec::new(),
             is_relative: false,

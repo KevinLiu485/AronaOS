@@ -27,3 +27,4 @@ debug = true
 [features]
 kernel_tests = []
 submit = []
+ext4 = []
