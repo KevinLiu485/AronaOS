@@ -1,4 +1,4 @@
-use crate::task::processor::get_local_hart;
+use crate::task::processor::{current_process, get_local_hart};
 use crate::task::INITPROC;
 use alloc::string::String;
 use core::{
@@ -94,7 +94,7 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
                 error!(
                     "[CPU ID:{}] current task is {}",
                     get_local_hart().hart_id,
-                    get_local_hart().current().unwrap().pid.0
+                    current_process().getpid(),
                 );
             } else if try_count == 0x1200000 {
                 INITPROC.print_all_task(String::from(""));

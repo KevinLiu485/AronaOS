@@ -48,8 +48,8 @@ const SYS_SET_TID_ADDRESS: usize = 96;
 const SYS_GETUID: usize = 174;
 const SYS_IOCTL: usize = 29;
 const SYS_EXIT_GROUP: usize = 94;
-const SYS_SIGACTION: usize = 134;
-const SYS_SIGPROCMASK: usize = 135;
+const SYS_RT_SIGACTION: usize = 134;
+const SYS_RT_SIGPROCMASK: usize = 135;
 const SYS_FCNTL: usize = 25;
 const SYS_WRITEV: usize = 66;
 const SYS_GETEUID: usize = 175;
@@ -59,16 +59,19 @@ const SYS_SYSINFO: usize = 179;
 const SYS_SYSLOG: usize = 116;
 const SYS_FSTATAT: usize = 79;
 const SYS_FACCESSAT: usize = 48;
-const SYS_KILL: usize = 129;
-const SYS_MPROTECT: usize = 226;
 const SYS_UTIMENSAT: usize = 88;
+const SYS_RT_SIGRETURN: usize = 139;
+const SYS_KILL: usize = 129;
+
+const SYS_MPROTECT: usize = 226;
+// const SYS_UTIMENSAT: usize = 88;
 const SYS_SENDFILE: usize = 71;
 const SYS_LSEEK: usize = 62;
 const SYS_GETPGID: usize = 155;
 
 mod fs;
 mod mm;
-mod process;
+pub(crate) mod process;
 mod util;
 
 use fs::*;
@@ -78,14 +81,18 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
-use crate::config::SyscallRet;
+use crate::{
+    config::SyscallRet,
+    signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
+};
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
     match syscall_id {
         SYS_EXIT => sys_exit(args[0] as i32),
         SYS_GETPID => sys_getpid(),
         SYS_CLONE => sys_clone(args[0], args[1], args[2], args[3], args[4]),
-        SYS_EXECVE => sys_exec(args[0], args[1], args[2]).await,
+        SYS_EXECVE => sys_execve(args[0], args[1], args[2]).await,
         SYS_UNAME => sys_uname(args[0]),
         SYS_GETTIMEOFDAY => sys_get_time(args[0]),
         SYS_BRK => sys_brk(args[0]),
@@ -124,8 +131,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_GETUID => sys_getuid(),
         SYS_IOCTL => sys_ioctl(args[0] as i32, args[1], args[2] as usize),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
-        SYS_SIGACTION => sys_sigaction(),
-        SYS_SIGPROCMASK => sys_sigprocmask(),
+        SYS_RT_SIGACTION => sys_rt_sigaction(args[0], args[1], args[2]),
+        SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1], args[2]),
+        SYS_RT_SIGRETURN => sys_rt_sigerturn(),
         SYS_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2]),
         SYS_WRITEV => sys_writev(args[0], args[1], args[2] as i32).await,
         SYS_GETEUID => sys_geteuid(),
@@ -145,14 +153,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as u32,
             args[3] as u32,
         ),
-        SYS_KILL => sys_kill(args[0] as i32, args[1] as i32),
-        SYS_MPROTECT => sys_mprotect(args[0] as *const _, args[1], args[2] as i32),
         SYS_UTIMENSAT => sys_utimensat(
             args[0] as i32,
             args[1] as *const _,
             args[2] as *const _,
             args[3] as i32,
         ),
+
+        SYS_MPROTECT => sys_mprotect(args[0], args[1], args[2]),
+        SYS_KILL => sys_kill(args[0] as isize, args[1]),
         SYS_SENDFILE => {
             sys_sendfile(
                 args[0] as i32,

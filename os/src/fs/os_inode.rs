@@ -15,7 +15,8 @@ use crate::drivers::BLOCK_DEVICE;
 use crate::fs::ext4::fs::Ext4FileSystem;
 use crate::fs::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
-use crate::task::current_task;
+// use crate::task::current_task;
+use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use crate::SyscallRet;
 use alloc::boxed::Box;
@@ -234,12 +235,12 @@ fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
         Ok(ROOT_INODE.clone())
     } else if dirfd == AT_FDCWD {
         // relative to cwd
-        let task = current_task().unwrap();
-        let cwd = &task.inner_lock().cwd;
+        let process = current_process();
+        let cwd = &process.inner_lock().cwd;
         ROOT_INODE.open_path(cwd, false, false)
     } else {
         // relative to dirfd
-        let task = current_task().unwrap();
+        let task = current_process();
         // let ret = task.inner_lock().fd_table[dirfd as usize]
         //     .clone()
         //     .unwrap()
@@ -299,9 +300,7 @@ pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Ar
 /// open a `dyn File` by `fd`
 /// as `Err` differs from different syscalls(e.g. `read` and `sendfile`), only return `Option` rather than `Result`.
 pub fn open_fd(fd: usize) -> Option<Arc<dyn File>> {
-    let fdinfo = current_task()
-        .unwrap()
-        .inner_handler(|inner| inner.fd_table.get(fd))?;
+    let fdinfo = current_process().inner_handler(|inner| inner.fd_table.get(fd))?;
     let file = fdinfo.file;
     // .get_meta()
     // .inode

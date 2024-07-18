@@ -2,8 +2,9 @@ use crate::mm::{MapPermission, VirtAddr};
 use crate::{config::SyscallRet, utils::SyscallErr};
 
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
-use crate::ctypes::{MmapFlags, MmapProt};
-use crate::task::current_task;
+use crate::ctypes::{MmapFlags, MMAPPROT};
+// use crate::task::current_task;
+use crate::task::processor::current_process;
 use log::{trace, warn};
 
 // Todo?: 根据测例实际要实现的是sbrk?
@@ -11,8 +12,8 @@ use log::{trace, warn};
 pub fn sys_brk(brk: usize) -> SyscallRet {
     // static mut unaligned_brk: usize = 0;
     trace!("[sys_brk] enter. brk: {:#x}", brk);
-    let current_task = current_task().expect("fail to get current task in sys_brk");
-    let current_memory_set = &mut current_task.inner_lock().memory_set;
+    let process = current_process();
+    let current_memory_set = &mut process.inner_lock().memory_set;
     // sbrk(0)是获取当前program brk(堆顶)
     if brk == 0 {
         return Ok(current_memory_set.brk);
@@ -63,7 +64,7 @@ pub async fn sys_mmap(
 
     //处理参数
     // let prot = MMAPPROT::from_bits(prot as u32);
-    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
+    let prot = MMAPPROT::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     // let prot = match MmapProt::from_bits(prot as u32) {
     //     Some(prot) => prot,
     //     None => return Err(SyscallErr::EINVAL.into()),
@@ -76,7 +77,7 @@ pub async fn sys_mmap(
     //     Some(flags) => flags,
     //     None => return Err(SyscallErr::EINVAL.into()),
     // };
-    let task = current_task().unwrap();
+    let task = current_process();
     trace!(
         "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}",
         start,
@@ -162,19 +163,26 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
     if start % PAGE_SIZE != 0 || len == 0 || start < MMAP_MIN_ADDR {
         return Err(SyscallErr::EINVAL.into());
     }
-    current_task()
-        .unwrap()
-        .inner_handler(|inner| inner.memory_set.do_unmap(start, len));
+    current_process().inner_handler(|inner| inner.memory_set.do_unmap(start, len));
     Ok(0)
 }
 
-pub fn sys_mprotect(addr: *const u8, len: usize, prot: i32) -> SyscallRet {
+pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
+    let prot = MMAPPROT::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
+    let perm: MapPermission = prot.into();
     trace!(
-        "[sys_mprotect] enter. addr: {:?}, len: {:#x}, prot: {}",
+        "[sys_mprotect] addr: {:x}, len: {:x}, prot: {:?}",
         addr,
         len,
         prot
     );
-    warn!("[sys_mprotect] not implemented.");
-    Ok(0)
+    if addr % PAGE_SIZE != 0 || len == 0 {
+        return Err(SyscallErr::EINVAL.into());
+    }
+    // 先要检查是否有权限
+    // 1. 检查是否有对应的MapArea
+    // 2. 检查是否有对应的权限, 不能增加权限
+
+    // 不修改MapArea的权限，只修改页表中的权限
+    current_process().inner_handler(|inner| inner.memory_set.do_mprotect(addr, len, perm))
 }

@@ -1,7 +1,10 @@
 use crate::mm::address::VirtPageNum;
 use crate::mm::frame_allocator::frame_alloc;
 use crate::mm::page_table::{PTEFlags, PageTable, PageTableEntry};
-use crate::task::current_task;
+// use crate::syscall::process;
+use crate::task::processor::current_process;
+// use crate::task::current_task;
+// use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use alloc::sync::Arc;
 use log::error;
@@ -18,8 +21,8 @@ pub fn handle_recoverable_page_fault(
             // fork COW area
             // 如果refcnt == 1, 则直接修改pte, 否则, 分配新的frame, 修改pte, 更新MemorySet
             // debug!("handle cow page fault(cow), vpn {:#x}", vpn.0);
-            let current_task = current_task().unwrap();
-            let memory_set = &mut current_task.inner_lock().memory_set;
+            let process = current_process();
+            let memory_set = &mut process.inner_lock().memory_set;
             // debug!("get current task");
             let heap = memory_set.heap.as_mut().unwrap();
             // rev是因为一般来说, COW区域都是后续创建的(如mmap)

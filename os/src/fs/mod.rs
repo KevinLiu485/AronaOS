@@ -1,4 +1,5 @@
 //! File system in os
+// pub mod ctypes;
 mod devfs;
 mod ext4;
 mod fat32;
@@ -8,6 +9,9 @@ pub mod inode;
 mod os_inode;
 pub mod path;
 pub mod pipe;
+// mod stdio;
+
+// pub use ctypes::*;
 // mod stdio;
 pub mod tty;
 

@@ -40,6 +40,7 @@ pub mod logging;
 pub mod mm;
 pub mod mutex;
 pub mod sbi;
+mod signal;
 pub mod sync;
 pub mod syscall;
 pub mod task;
@@ -105,6 +106,10 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("");
         print!("\u{1B}[0m");
 
+        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+        unsafe {
+            sstatus::set_sum();
+        }
         clear_bss();
         logging::init();
         mm::init();
@@ -140,6 +145,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         // info!("cpu: {} start!", hart_id);
     }
 
+    // executor::run_forever();
     if hart_id == 0 {
         executor::run_forever();
     } else {

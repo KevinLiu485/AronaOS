@@ -1,4 +1,5 @@
-    .section .test.usercheck
+    .section .text.usercheck
+    .align 12
     .global __try_write_user_u8
     .global __try_access_user_error_trap
 

@@ -1,6 +1,6 @@
 use super::{handle_recoverable_page_fault, PageTable, VirtAddr};
 use crate::trap::set_kernel_trap_entry;
-use crate::utils::SyscallErr;
+use crate::SysResult;
 use core::arch::global_asm;
 use log::trace;
 use riscv::register::satp;
@@ -38,7 +38,7 @@ impl UserCheck {
     }
     /// Check whether the pages are writable
     /// 1. the kernel try to write to the COW page in the user space
-    pub fn check_writable_pages(&self, buf: *const u8, len: usize) -> Result<(), SyscallErr> {
+    pub fn check_writable_pages(&self, buf: *const u8, len: usize) -> SysResult<()> {
         trace!("[check_writable_pages] buf: {:p}, len: {:#x}", buf, len);
         let buf_start = VirtAddr::from(buf as usize).floor();
         let buf_end = VirtAddr::from(buf as usize + len).ceil();

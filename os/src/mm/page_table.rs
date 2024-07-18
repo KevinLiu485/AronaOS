@@ -316,6 +316,16 @@ impl PageTable {
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
+    /// remap a page with new PTEFlags, keep the old ppn
+    pub fn update_flags(&mut self, vpn: VirtPageNum, flags: PTEFlags) {
+        let pte = self.find_pte(vpn).unwrap();
+        assert!(
+            pte.is_valid(),
+            "vpn {:?} is not mapped before update_flags",
+            vpn
+        );
+        *pte = PageTableEntry::new(pte.ppn(), flags | PTEFlags::V);
+    }
     #[allow(unused)]
     /// Delete a mapping form `vpn`
     pub fn unmap(&mut self, vpn: VirtPageNum) {

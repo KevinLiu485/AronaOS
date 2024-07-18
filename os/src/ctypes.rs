@@ -85,7 +85,9 @@ pub struct TimeVal {
 
 bitflags! {
     /// MMAP memeory protection
-    pub struct MmapProt: u32 {
+    pub struct MMAPPROT: u32 {
+        /// cannot be accessed at all
+        const PROT_NONE = 0;
         /// Readable
         const PROT_READ = 1 << 0;
         /// Writeable
@@ -95,16 +97,16 @@ bitflags! {
     }
 }
 
-impl From<MmapProt> for MapPermission {
-    fn from(prot: MmapProt) -> Self {
+impl From<MMAPPROT> for MapPermission {
+    fn from(prot: MMAPPROT) -> Self {
         let mut map_permission = MapPermission::from_bits(0).unwrap();
-        if prot.contains(MmapProt::PROT_READ) {
+        if prot.contains(MMAPPROT::PROT_READ) {
             map_permission |= MapPermission::R;
         }
-        if prot.contains(MmapProt::PROT_WRITE) {
+        if prot.contains(MMAPPROT::PROT_WRITE) {
             map_permission |= MapPermission::W;
         }
-        if prot.contains(MmapProt::PROT_EXEC) {
+        if prot.contains(MMAPPROT::PROT_EXEC) {
             map_permission |= MapPermission::X;
         }
         map_permission
