@@ -55,8 +55,6 @@ pub trait Inode: Send + Sync {
     fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize>;
     fn mknod(&self, this: Arc<dyn Inode>, name: &str, mode: InodeMode)
         -> SysResult<Arc<dyn Inode>>;
-    // fn find(&self, this: Arc<dyn Inode>, name: &str) -> SysResult<Arc<dyn Inode>>;
-    // fn list(&self, this: Arc<dyn Inode>) -> SysResult<Vec<Arc<dyn Inode>>>;
     fn get_meta(&self) -> Arc<InodeMeta>;
     fn load_children_from_disk(&self, this: Arc<dyn Inode>);
     /// clear the file content, inode still exists

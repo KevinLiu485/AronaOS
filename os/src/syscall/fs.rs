@@ -15,6 +15,7 @@ use crate::fs::fd_table::FdInfo;
 use crate::fs::inode::{Inode, InodeMode};
 use crate::fs::path::Path;
 use crate::fs::pipe::Pipe;
+use crate::fs::tty::TTY;
 use crate::fs::{
     create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
 };
@@ -71,17 +72,25 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
         "[sys_openat] dirfd: {}, pathname: {}, flags: {:?}",
         dirfd, path, flags,
     );
-    if let Ok(inode) = open_osinode(dirfd, &path, flags) {
-        let mode = inode.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().mode);
+    if let Ok(osinode) = open_osinode(dirfd, &path, flags) {
+        let mode = osinode.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().mode);
         if mode == InodeMode::FileDIR
             && (flags.contains(OpenFlags::WRONLY) || flags.contains(OpenFlags::RDWR))
         {
             return Err(SyscallErr::EISDIR as usize);
         }
-        let fd = task
-            .inner_lock()
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(inode));
+        let fd = if mode == InodeMode::FileCHR {
+            // let tty_file =
+            //     TtyFile::new(osinode.inner_handler(|inner| inner.inode.clone().unwrap()));
+            // let tty_file = Arc::new(tty_file);
+            task.inner_lock()
+                .fd_table
+                .alloc_and_set(0, FdInfo::default_flags(TTY.clone()))
+        } else {
+            task.inner_lock()
+                .fd_table
+                .alloc_and_set(0, FdInfo::default_flags(osinode))
+        };
         info!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
             task.pid, path, fd
@@ -164,7 +173,7 @@ fn get_dirents(inode: Arc<dyn Inode>, start_index: usize, len: usize) -> Vec<Dir
                 let mut d_name = name.clone().into_bytes();
                 d_name.resize(MAX_NAME_LEN, 0u8);
                 let d_type = inode.get_meta().mode as u8;
-                debug!("[sys_getdents64] d_name: {}", name);
+                // debug!("[sys_getdents64] d_name: {}", name);
                 Dirent {
                     d_ino: inode.get_meta().ino,
                     d_off: 0,
@@ -274,11 +283,12 @@ pub fn sys_umount2() -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_ioctl(fd: i32, request: usize, argp: *const u8) -> SyscallRet {
+pub fn sys_ioctl(fd: i32, request: usize, argp: usize) -> SyscallRet {
     trace!("[sys_ioctl] enter. fd: {}, request: {}", fd, request);
     warn!("[sys_ioctl] not fully implemented");
 
     let file = open_fd(fd as usize).ok_or(SyscallErr::EBADF as usize)?;
+    file.ioctl(request, argp)?;
     Ok(0)
 }
 
@@ -491,7 +501,7 @@ pub fn sys_utimensat(
     warn!("[sys_utimensat] not fully implemented");
     let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
         .map_err(|_| SyscallErr::ENOENT as usize)?;
-    debug!("[sys_utimensat] return Ok");
+    // debug!("[sys_utimensat] return Ok");
     Ok(0)
 }
 

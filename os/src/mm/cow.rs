@@ -4,7 +4,7 @@ use crate::mm::page_table::{PTEFlags, PageTable, PageTableEntry};
 use crate::task::current_task;
 use crate::utils::SyscallErr;
 use alloc::sync::Arc;
-use log::{debug, error};
+use log::error;
 
 /// call this function only when scause.cause() == Exception::LoadPageFault || Exception::StorePageFault
 /// 1. fork COW area
@@ -17,10 +17,10 @@ pub fn handle_recoverable_page_fault(
         if pte.is_cow() {
             // fork COW area
             // 如果refcnt == 1, 则直接修改pte, 否则, 分配新的frame, 修改pte, 更新MemorySet
-            debug!("handle cow page fault(cow), vpn {:#x}", vpn.0);
+            // debug!("handle cow page fault(cow), vpn {:#x}", vpn.0);
             let current_task = current_task().unwrap();
             let memory_set = &mut current_task.inner_lock().memory_set;
-            debug!("get current task");
+            // debug!("get current task");
             let heap = memory_set.heap.as_mut().unwrap();
             // rev是因为一般来说, COW区域都是后续创建的(如mmap)
             for area in memory_set.areas.iter_mut().rev() {
@@ -30,7 +30,7 @@ pub fn handle_recoverable_page_fault(
                     if Arc::strong_count(data_frame) == 1 {
                         // 直接修改pte
                         // clear COW bit and set valid bit
-                        debug!("ref_cnt = 1");
+                        // debug!("ref_cnt = 1");
                         let mut flags = pte.flags();
                         flags.remove(PTEFlags::COW);
                         flags.insert(PTEFlags::W);
@@ -68,7 +68,7 @@ pub fn handle_recoverable_page_fault(
                 if Arc::strong_count(data_frame) == 1 {
                     // 直接修改pte
                     // clear COW bit and set valid bit
-                    debug!("ref_cnt = 1");
+                    // debug!("ref_cnt = 1");
                     let mut flags = pte.flags();
                     flags.remove(PTEFlags::COW);
                     flags.insert(PTEFlags::W);

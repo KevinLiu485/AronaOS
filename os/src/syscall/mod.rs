@@ -10,22 +10,6 @@
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
 
-// rCore user space syscall interface
-// const SYSCALL_OPEN: usize = 56;
-// const SYSCALL_CLOSE: usize = 57;
-// const SYSCALL_READ: usize = 63;
-// const SYSCALL_WRITE: usize = 64;
-// const SYSCALL_EXIT: usize = 93;
-// const SYSCALL_YIELD: usize = 124;
-// const SYSCALL_UNAME: usize = 160;
-// const SYSCALL_GET_TIME: usize = 169;
-// const SYSCALL_GETPID: usize = 172;
-// const SYSCALL_BRK: usize = 214;
-// const SYSCALL_FORK: usize = 220;
-// const SYSCALL_EXEC: usize = 221;
-// const SYSCALL_MMAP: usize = 222;
-// const SYSCALL_WAITPID: usize = 260;
-
 // POSIX syscall interface
 const SYS_GETCWD: usize = 17;
 const SYS_PIPE2: usize = 59;
@@ -80,6 +64,7 @@ const SYS_MPROTECT: usize = 226;
 const SYS_UTIMENSAT: usize = 88;
 const SYS_SENDFILE: usize = 71;
 const SYS_LSEEK: usize = 62;
+const SYS_GETPGID: usize = 155;
 
 mod fs;
 mod mm;
@@ -137,7 +122,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
 
         SYS_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *const usize),
         SYS_GETUID => sys_getuid(),
-        SYS_IOCTL => sys_ioctl(args[0] as i32, args[1], args[2] as *const _),
+        SYS_IOCTL => sys_ioctl(args[0] as i32, args[1], args[2] as usize),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SYS_SIGACTION => sys_sigaction(),
         SYS_SIGPROCMASK => sys_sigprocmask(),
@@ -178,6 +163,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             .await
         }
         SYS_LSEEK => sys_lseek(args[0] as i32, args[1] as isize, args[2] as i32),
+        SYS_GETPGID => sys_getpgid(args[0] as i32),
         _ => unsupported(syscall_id),
     }
 }

@@ -35,7 +35,7 @@ impl Ext4Inode {
     }
 
     fn get_size_from_ino(fs: &Arc<Ext4>, ino: u64) -> usize {
-        debug!("[get_size_from_ino]");
+        // debug!("[get_size_from_ino]");
         fs.fuse_getattr(ino as u64)
             .map_err(|ext4_err| {
                 error!("[Ext4Inode::update_size] {:?}", ext4_err);
@@ -118,7 +118,7 @@ impl Inode for Ext4Inode {
         self.meta.clone()
     }
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
-        debug!("[Ext4Inode::load_children_from_disk] enter.");
+        // debug!("[Ext4Inode::load_children_from_disk] enter.");
         assert_eq!(self.meta.mode, InodeMode::FileDIR);
         let mut meta_inner = self.meta.inner.lock();
         let dir_entries = self
@@ -134,9 +134,9 @@ impl Inode for Ext4Inode {
             // let name = String::from_utf8(Vec::from(entry.name)).unwrap();
             // let name = name.trim().to_string();
             let name = entry.get_name();
-            debug!("[Ext4Inode::load_children_from_disk] name: {}", name);
+            // debug!("[Ext4Inode::load_children_from_disk] name: {}", name);
             if name == "." || name == ".." {
-                debug!("[Ext4Inode::load_children_from_disk] skip");
+                // debug!("[Ext4Inode::load_children_from_disk] skip");
                 return;
             }
             let path = self.meta.path.clone_and_append(&name);
@@ -150,7 +150,7 @@ impl Inode for Ext4Inode {
             });
             meta_inner.children.insert(name, inode);
         });
-        debug!("[Ext4Inode::load_children_from_disk] exit.");
+        // debug!("[Ext4Inode::load_children_from_disk] exit.");
     }
 
     fn clear(&self) {

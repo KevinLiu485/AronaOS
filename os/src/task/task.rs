@@ -3,7 +3,8 @@ use super::aux::*;
 use super::{pid_alloc, PidHandle};
 use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
-use crate::fs::{FileMeta, Stdin, Stdout};
+use crate::fs::tty::TtyFile;
+// use crate::fs::FileMeta;
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::trap::TrapContext;
@@ -124,19 +125,13 @@ impl TaskControlBlock {
                 fd_table: FdTable::new(vec![
                     // 0 -> stdin
                     // Some(FdInfo{file: Arc::new(Stdin), flags: OpenFlags::empty()}),
-                    Some(FdInfo::default_flags(Arc::new(Stdin {
-                        meta: FileMeta::new_bare(),
-                    }))),
+                    Some(FdInfo::default_flags(Arc::new(TtyFile::new(true, false)))),
                     // 1 -> stdout
                     // Some(FdInfo{file: Arc::new(Stdout), flags: OpenFlags::empty()}),
-                    Some(FdInfo::default_flags(Arc::new(Stdout {
-                        meta: FileMeta::new_bare(),
-                    }))),
+                    Some(FdInfo::default_flags(Arc::new(TtyFile::new(false, true)))),
                     // 2 -> stderr
                     // Some(FdInfo{file: Arc::new(Stdout), flags: OpenFlags::empty()}),
-                    Some(FdInfo::default_flags(Arc::new(Stdout {
-                        meta: FileMeta::new_bare(),
-                    }))),
+                    Some(FdInfo::default_flags(Arc::new(TtyFile::new(false, true)))),
                 ]),
                 cwd: Path::root(),
             }),

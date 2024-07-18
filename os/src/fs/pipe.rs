@@ -8,8 +8,8 @@ const PIPE_BUFFER_SIZE: usize = 4096;
 
 pub struct Pipe {
     buffer: Arc<SpinNoIrqLock<PipeRingBuffer>>,
-    readable: bool,
-    writeable: bool,
+    // readable: bool,
+    // writeable: bool,
     meta: FileMeta,
 }
 
@@ -25,15 +25,15 @@ impl Pipe {
         (
             Arc::new(Self {
                 buffer: buffer.clone(),
-                readable: true,
-                writeable: false,
-                meta: FileMeta::new_bare(),
+                // readable: true,
+                // writeable: false,
+                meta: FileMeta::new_bare(true, false),
             }),
             Arc::new(Self {
                 buffer: buffer.clone(),
-                readable: false,
-                writeable: true,
-                meta: FileMeta::new_bare(),
+                // readable: false,
+                // writeable: true,
+                meta: FileMeta::new_bare(false, true),
             }),
         )
     }
@@ -78,7 +78,7 @@ impl File for Pipe {
             // if self.buffer.lock().eof() {
             //     return Ok(0);
             // }
-            if !self.readable {
+            if !self.meta.readable {
                 return Err(SyscallErr::EBADF.into());
             }
             loop {
@@ -100,7 +100,7 @@ impl File for Pipe {
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
         // debug!("[Pipe::write] entered");
         Box::pin(async move {
-            if !self.writeable {
+            if !self.meta.writable {
                 return Err(SyscallErr::EBADF.into());
             }
             Ok(self.write_inner(buf))
@@ -118,7 +118,7 @@ impl File for Pipe {
 
 impl Drop for Pipe {
     fn drop(&mut self) {
-        if self.writeable {
+        if self.meta.writable {
             let mut buffer = self.buffer.lock();
             buffer.eof = true;
         }

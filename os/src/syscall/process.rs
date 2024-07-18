@@ -13,7 +13,7 @@ use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
 use core::time::Duration;
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace, warn};
 
 pub fn sys_exit(exit_code: i32) -> SyscallRet {
     trace!("[sys_exit] enter");
@@ -155,7 +155,7 @@ bitflags! {
 pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> SyscallRet {
     trace!("[sys_wait4] enter");
     // 6.10 debug
-    debug!("[sys_wait4] parent pagetable");
+    // debug!("[sys_wait4] parent pagetable");
     // current_task()
     //     .unwrap()
     //     .inner_lock()
@@ -396,4 +396,10 @@ pub fn sys_kill(pid: i32, sig: i32) -> SyscallRet {
     trace!("[sys_kill] enter kill pid: {}, sig: {}", pid, sig);
     warn!("[sys_kill] not implemented");
     Ok(0)
+}
+
+pub fn sys_getpgid(pid: i32) -> SyscallRet {
+    trace!("[sys_getpgid] pid: {}", pid);
+    warn!("[sys_getpgid] not fully implemented");
+    sys_getpid()
 }

@@ -23,13 +23,13 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
-use log::{debug, info};
+use log::info;
 
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
 pub struct OSInode {
-    readable: bool,
-    writable: bool,
+    // readable: bool,
+    // writable: bool,
     // meta: SpinNoIrqLock<FileMeta>,
     meta: FileMeta,
 }
@@ -64,8 +64,8 @@ impl OSInode {
     /// Construct an OS inode from a inode
     pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Self {
         Self {
-            readable,
-            writable,
+            // readable,
+            // writable,
             // meta: SpinNoIrqLock::new(FileMeta {
             //     inode: Some(inode),
             //     offset: 0,
@@ -78,7 +78,7 @@ impl OSInode {
             //         dentry_index: 0,
             //     }),
             // },
-            meta: FileMeta::new(Some(inode), 0, 0),
+            meta: FileMeta::new(Some(inode), 0, 0, readable, writable),
         }
     }
     /// Read all data inside a inode into vector
@@ -110,7 +110,7 @@ impl File for OSInode {
     // }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            if !self.readable {
+            if !self.meta.readable {
                 return Err(SyscallErr::EBADF.into());
             }
             let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
@@ -122,8 +122,8 @@ impl File for OSInode {
     }
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            debug!("[OSInode::write] buf: {:?}", buf);
-            if !self.writable {
+            // debug!("[OSInode::write] buf: {:?}", buf);
+            if !self.meta.writable {
                 return Err(SyscallErr::EBADF.into());
             }
             let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();

@@ -1,17 +1,22 @@
 //! File system in os
+mod devfs;
 mod ext4;
 mod fat32;
 pub mod fd_table;
+pub mod init;
 pub mod inode;
 mod os_inode;
 pub mod path;
 pub mod pipe;
-mod stdio;
+// mod stdio;
+pub mod tty;
 
 use crate::{
     config::AsyncResult,
     mutex::SpinNoIrqLock,
-    timer::TimeSpec, // mm::UserBuffer,
+    timer::TimeSpec,
+    utils::SyscallErr,
+    SyscallRet, // mm::UserBuffer,
 };
 
 pub struct FileMetaInner {
@@ -21,12 +26,22 @@ pub struct FileMetaInner {
 }
 
 pub struct FileMeta {
+    pub readable: bool,
+    pub writable: bool,
     pub inner: SpinNoIrqLock<FileMetaInner>,
 }
 
 impl FileMeta {
-    pub fn new(inode: Option<Arc<dyn Inode>>, offset: usize, dentry_index: usize) -> Self {
+    pub fn new(
+        inode: Option<Arc<dyn Inode>>,
+        offset: usize,
+        dentry_index: usize,
+        readable: bool,
+        writable: bool,
+    ) -> Self {
         Self {
+            readable,
+            writable,
             inner: SpinNoIrqLock::new(FileMetaInner {
                 inode,
                 offset,
@@ -35,17 +50,13 @@ impl FileMeta {
         }
     }
 
-    pub fn new_bare() -> Self {
-        FileMeta::new(None, 0, 0)
+    pub fn new_bare(readable: bool, writable: bool) -> Self {
+        FileMeta::new(None, 0, 0, readable, writable)
     }
 }
 
 /// File trait
 pub trait File: Send + Sync {
-    // /// If readable
-    // fn readable(&self) -> bool;
-    // /// If writable
-    // fn writable(&self) -> bool;
     /// Read file to `UserBuffer`, return `Err(EBADF)` if not readable
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize>;
     /// Write `UserBuffer` to file, return `Err(EBADF)` if not writable
@@ -56,6 +67,11 @@ pub trait File: Send + Sync {
     /// set offset to `offset`, return the offset **BEFORE SEEK**, which differs from `linux lseek`.
     /// return `None` if the file is not seekable
     fn seek(&self, offset: usize) -> Option<usize>;
+
+    fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet {
+        error!("ioctl not implemented");
+        Err(SyscallErr::ENOTTY as usize)
+    }
 }
 
 #[derive(Debug)]
@@ -129,6 +145,8 @@ pub const AT_REMOVEDIR: u32 = 0x200;
 use alloc::sync::Arc;
 use fat32::BLOCK_SIZE;
 use inode::Inode;
+use log::error;
 // use alloc::sync::Arc;
-pub use os_inode::{create_dir, list_apps, open_fd, open_inode, open_osinode, OSInode, OpenFlags};
-pub use stdio::{Stdin, Stdout};
+// pub use devfs::tty::TtyFile;
+pub use os_inode::{create_dir, open_fd, open_inode, open_osinode, OSInode, OpenFlags};
+// pub use stdio::{Stdin, Stdout};

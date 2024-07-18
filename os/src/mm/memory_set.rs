@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::fmt::Debug;
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+use log::{info, warn};
 use riscv::register::satp;
 
 #[allow(unused)]
@@ -130,17 +130,17 @@ impl MemorySet {
         }
         let start_vpn = VirtAddr::from(start).floor();
         let end_vpn = VirtAddr::from(end).ceil();
-        debug!(
-            "[MemorySet::get_unmapped_area] mapping [{:?}, {:?})",
-            {
-                let start_va: VirtAddr = start_vpn.into();
-                start_va
-            },
-            {
-                let end_va: VirtAddr = end_vpn.into();
-                end_va
-            }
-        );
+        // debug!(
+        //     "[MemorySet::get_unmapped_area] mapping [{:?}, {:?})",
+        //     {
+        //         let start_va: VirtAddr = start_vpn.into();
+        //         start_va
+        //     },
+        //     {
+        //         let end_va: VirtAddr = end_vpn.into();
+        //         end_va
+        //     }
+        // );
         Some(VPNRange::new(start_vpn, end_vpn))
         // if !self.check_vpn_range_conflict(range) {
         //     return range;
@@ -347,18 +347,18 @@ impl MemorySet {
 
                 // BUGGY: map_offset is not considered. Elf section is NOT aligned to PAGE_SIZE
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
-                debug!(
-                    "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:#x}",
-                    {
-                        let start_va: VirtAddr = map_area.vpn_range.get_start().into();
-                        start_va
-                    },
-                    {
-                        let end_va: VirtAddr = map_area.vpn_range.get_end().into();
-                        end_va
-                    },
-                    map_offset,
-                );
+                // debug!(
+                //     "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:#x}",
+                //     {
+                //         let start_va: VirtAddr = map_area.vpn_range.get_start().into();
+                //         start_va
+                //     },
+                //     {
+                //         let end_va: VirtAddr = map_area.vpn_range.get_end().into();
+                //         end_va
+                //     },
+                //     map_offset,
+                // );
                 memory_set.push(
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),

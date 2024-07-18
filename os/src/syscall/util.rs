@@ -1,4 +1,4 @@
-use log::{debug, error, trace, warn};
+use log::{error, trace, warn};
 
 use crate::{
     ctypes::*,
@@ -67,7 +67,7 @@ pub fn sys_clock_gettime(clock_id: usize, tp: *mut TimeSpec) -> SyscallRet {
     match clock_id {
         CLOCK_REALTIME => {
             let time_ms = get_time_ms();
-            debug!("[sys_clock_gettime] get_time_ms: {}", time_ms);
+            // debug!("[sys_clock_gettime] get_time_ms: {}", time_ms);
             let time_spec = TimeSpec {
                 sec: time_ms / 1000,
                 nsec: time_ms % 1000 * 1000000,
