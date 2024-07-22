@@ -260,7 +260,11 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
     trace!("sys_kill: pid {}, signo {}", pid, signo);
     warn!("[sys_kill] not fully implemented");
     if pid > 0 {
-        // fake, send to current process for test
+        error!("only support pid == 0");
+        todo!();
+    } else if pid == 0 {
+        // if pid == 0, send signal to process group.
+        // as no process group now, it act the same as sending to itself
         let thread = current_thread().unwrap();
         thread
             .get_inner_mut()
@@ -269,7 +273,7 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
             .insert(SigBitmap::from_bits(1 << (signo - 1)).unwrap());
         Ok(0)
     } else {
-        error!("only support pid > 0 without thread");
+        error!("only support pid == 0");
         todo!();
     }
 }
