@@ -69,6 +69,8 @@ const SYS_SENDFILE: usize = 71;
 const SYS_LSEEK: usize = 62;
 const SYS_GETPGID: usize = 155;
 
+const SYS_FUTEX: usize = 202;
+
 mod fs;
 mod mm;
 pub(crate) mod process;
@@ -82,8 +84,7 @@ pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
 use crate::{
-    config::SyscallRet,
-    signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
+    config::SyscallRet, futex::sys_futex, signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask}
 };
 
 /// handle syscall exception with `syscall_id` and other arguments
@@ -173,6 +174,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         }
         SYS_LSEEK => sys_lseek(args[0] as i32, args[1] as isize, args[2] as i32),
         SYS_GETPGID => sys_getpgid(args[0] as i32),
+
+        SYS_FUTEX => sys_futex(args[0], args[1] as i32, args[2] as u32, args[3], args[4], args[5] as u32),
         _ => unsupported(syscall_id),
     }
 }

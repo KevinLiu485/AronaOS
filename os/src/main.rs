@@ -47,6 +47,7 @@ pub mod task;
 pub mod timer;
 pub mod trap;
 pub mod utils;
+pub mod futex;
 
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};

@@ -347,6 +347,9 @@ impl ProcessInner {
     }
 }
 
+/// The reference type of a task
+pub type TaskRef = Arc<Thread>;
+
 /// [‘Thread’] 调度和任务执行的基本单位，有主线程（类似原本进程的语义）和普通线程的区分
 /// process 自己共享的资源
 pub struct Thread {
