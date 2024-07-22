@@ -1,5 +1,6 @@
 use alloc::{boxed::Box, sync::Arc};
 use lazy_static::lazy_static;
+// use log::debug;
 
 use crate::{
     mutex::SpinNoIrqLock, sbi::console_getchar, task::yield_task, utils::SyscallErr, AsyncResult,
@@ -118,6 +119,8 @@ impl File for TtyFile {
                 //     .check_writable_slice(value as *mut u8, core::mem::size_of::<Pid>())?;
                 unsafe {
                     *(argp as *mut u32) = self.inner.lock().fg_pgid;
+                    // debug!("[TtyFile::ioctl] fake");
+                    // *(argp as *mut u32) = 114514 as u32;
                     log::info!("[TtyFile::ioctl] get fg pgid {}", *(argp as *const u32));
                 }
                 Ok(0)

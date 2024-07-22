@@ -5,7 +5,7 @@ use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
 // use crate::task::current_task;
 use crate::task::processor::current_process;
-use log::{trace, warn};
+use log::{debug, trace, warn};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -119,7 +119,7 @@ pub async fn sys_mmap(
         start = VirtAddr::from(vpn_range.get_start()).into();
         return Ok(start);
     } else {
-        // debug!("[sys_mmap] file mmap");
+        debug!("[sys_mmap] file mmap");
         // 文件映射
         // 需要offset为page aligned
         if offset % PAGE_SIZE != 0 {
