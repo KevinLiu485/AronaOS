@@ -10,8 +10,8 @@ os/src/link_app.S
 os/src/linker.ld
 
 fs-img-src/**/*.img
-tmp
-utils
+/tmp/
+/utils/
 
 ./kernel-qemu
 ./sbi-qemu
