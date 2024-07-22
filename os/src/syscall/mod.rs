@@ -77,6 +77,8 @@ const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
 
+const SYS_FUTEX: usize = 202;
+
 mod fs;
 mod mm;
 pub(crate) mod process;
@@ -91,6 +93,7 @@ use util::{sys_clock_getres, sys_clock_gettime, sys_get_time, sys_sysinfo, sys_t
 
 use crate::{
     config::SyscallRet,
+    futex::sys_futex,
     signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
 };
 
@@ -181,6 +184,18 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
 
         SYS_LSEEK => sys_lseek(args[0] as i32, args[1] as isize, args[2] as i32),
         SYS_GETPGID => sys_getpgid(args[0] as i32),
+
+        SYS_FUTEX => {
+            sys_futex(
+                args[0],
+                args[1] as i32,
+                args[2] as u32,
+                args[3],
+                args[4],
+                args[5] as u32,
+            )
+            .await
+        }
         SYS_GETTID => sys_gettid(),
         SYS_READV => sys_readv(args[0], args[1], args[2] as i32).await,
         SYS_SCHED_GETAFFINITY => dummy(SYS_SCHED_GETAFFINITY, "sys_sched_getaffinity"),
