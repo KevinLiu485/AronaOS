@@ -34,6 +34,7 @@ mod drivers;
 mod executor;
 // pub mod fat32;
 pub mod fs;
+pub mod futex;
 pub mod lang_items;
 pub mod loader;
 pub mod logging;
@@ -47,7 +48,6 @@ pub mod task;
 pub mod timer;
 pub mod trap;
 pub mod utils;
-pub mod futex;
 
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};

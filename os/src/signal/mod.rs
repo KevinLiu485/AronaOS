@@ -2,12 +2,12 @@ mod action;
 mod signo;
 
 use action::{ign_sig_handler, term_sig_handler, SignalDefault};
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 
 pub use action::SigHandlers;
 pub use signo::*;
 
-
+use crate::task::processor::current_process;
 use crate::task::task::PROCESS_MANAGER;
 use crate::{
     mm::user_check::UserCheck, task::processor::current_thread, utils::SyscallErr, SyscallRet,
@@ -263,42 +263,34 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
     warn!("[sys_kill] not fully implemented");
     match pid {
         0 => {
-            for (_, proc) in PROCESS_MANAGER.lock().0.iter() {
+            for (_, proc) in PROCESS_MANAGER.lock().iter() {
                 if let Some(proc) = proc.upgrade() {
-                    let sig_info = SigInfo {
-                        signo: signo as usize,
-                        errno: 0,
-                    };
                     debug!(
                         "proc {} send signal {} to proc {}",
-                        current_process().pid(),
+                        current_process().getpid(),
                         signo,
-                        proc.pid()
+                        proc.getpid()
                     );
-                    proc.send_signal(sig_info);
+                    proc.send_signal(signo);
                 } else {
                     continue;
                 }
             }
         }
         1 => {
-            for (_, proc) in PROCESS_MANAGER.lock().0.iter() {
+            for (_, proc) in PROCESS_MANAGER.lock().iter() {
                 if let Some(proc) = proc.upgrade() {
-                    if proc.pid() == 0 {
+                    if proc.getpid() == 0 {
                         // init proc
                         continue;
                     }
-                    let sig_info = SigInfo {
-                        signo: signo as usize,
-                        errno: 0,
-                    };
                     debug!(
                         "proc {} send signal {} to proc {}",
-                        current_process().pid(),
+                        current_process().getpid(),
                         signo,
-                        proc.pid()
+                        proc.getpid()
                     );
-                    proc.send_signal(sig_info);
+                    proc.send_signal(signo);
                 } else {
                     continue;
                 }
@@ -309,26 +301,22 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
             if pid < 0 {
                 pid = -pid;
             }
-            if let Some(proc) = PROCESS_MANAGER.lock().0.get(&(pid as usize)) {
+            if let Some(proc) = PROCESS_MANAGER.lock().get(&(pid as usize)) {
                 if let Some(proc) = proc.upgrade() {
-                    let sig_info = SigInfo {
-                        signo: signo as usize,
-                        errno: 0,
-                    };
                     debug!(
                         "proc {} send signal {} to proc {}",
-                        current_process().pid(),
+                        current_process().getpid(),
                         signo,
-                        proc.pid()
+                        proc.getpid()
                     );
-                    proc.send_signal(sig_info);
+                    proc.send_signal(signo);
                 } else {
                     // No such proc
-                    return Err(SyscallErr::ESRCH);
+                    return Err(SyscallErr::ESRCH.into());
                 }
             } else {
                 // No such proc
-                return Err(SyscallErr::ESRCH);
+                return Err(SyscallErr::ESRCH.into());
             }
         }
     }

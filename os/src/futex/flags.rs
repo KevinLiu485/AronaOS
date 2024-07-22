@@ -23,7 +23,6 @@ pub const FUTEX_LOCK_PI2: i32 = 13;
 pub const FLAGS_SHARED: i32 = 0x10;
 pub const FLAGS_CLOCKRT: i32 = 0x20;
 
-
 // Futex bitset
 pub const FUTEX_BITSET_MATCH_ANY: u32 = u32::MAX;
 
@@ -31,7 +30,7 @@ pub fn futex_op_to_flag(op: i32) -> i32 {
     let mut flags = 0;
     if (op & FUTEX_PRIVATE_FLAG) == 0 {
         flags = flags | FLAGS_SHARED;
-    } 
+    }
     if (op & FUTEX_CLOCK_REALTIME) != 0 {
         flags = flags | FLAGS_CLOCKRT;
     }

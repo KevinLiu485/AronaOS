@@ -1,6 +1,7 @@
 //! RISC-V timer-related functionality
 
 use crate::config::{SyscallRet, CLOCK_FREQ};
+use crate::ctypes::NSEC_PER_SEC;
 use crate::sbi::set_timer;
 use core::future::Future;
 use core::pin::Pin;

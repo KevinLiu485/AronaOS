@@ -51,8 +51,6 @@ pub fn jhash_final(mut a: u32, mut b: u32, mut c: u32) -> u32 {
     c
 }
 
-
-
 pub fn jhash2(mut key: &[u32], initval: u32) -> u32 {
     let mut a = JHASH_INITVAL
         .wrapping_add(key.len() as u32)
