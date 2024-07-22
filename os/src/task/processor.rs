@@ -74,6 +74,11 @@ pub fn current_thread() -> Option<Arc<Thread>> {
     get_local_hart().current()
 }
 
+///Get running task
+pub fn current_thread_uncheck() -> Arc<Thread> {
+    get_local_hart().current().unwrap()
+}
+
 pub fn current_process() -> Arc<Process> {
     current_thread().unwrap().process.clone()
 }

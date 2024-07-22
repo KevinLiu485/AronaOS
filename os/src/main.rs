@@ -34,6 +34,7 @@ mod drivers;
 mod executor;
 // pub mod fat32;
 pub mod fs;
+pub mod futex;
 pub mod lang_items;
 pub mod loader;
 pub mod logging;
