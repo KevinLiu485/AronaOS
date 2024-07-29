@@ -21,6 +21,7 @@ extern "C" {
     fn __try_access_user_error_trap();
     #[allow(improper_ctypes)]
     fn __try_write_user_u8(user_addr: usize) -> TryOpRet;
+    fn __tray_read_user_u8(user_addr: usize) -> TryOpRet;
 }
 
 impl Drop for UserCheck {
@@ -62,6 +63,14 @@ impl UserCheck {
     }
     fn try_write_user(&self, user_addr: usize) -> Option<Scause> {
         let ret = unsafe { __try_write_user_u8(user_addr) };
+        match ret.is_err {
+            0 => None,
+            _ => Some(ret.scause),
+        }
+    }
+    #[allow(unused)]
+    fn try_read_user(&self, user_addr: usize) -> Option<Scause> {
+        let ret = unsafe { __tray_read_user_u8(user_addr) };
         match ret.is_err {
             0 => None,
             _ => Some(ret.scause),

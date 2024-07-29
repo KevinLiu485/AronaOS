@@ -74,7 +74,7 @@ impl Process {
 
     pub fn send_signal(&self, signo: usize) {
         for (_, thread) in self.inner.lock().threads.iter_mut() {
-            let mut task = thread.upgrade().unwrap();
+            let task = thread.upgrade().unwrap();
             task.send_signal(signo)
         }
     }

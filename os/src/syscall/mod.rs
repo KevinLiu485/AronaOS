@@ -70,6 +70,8 @@ const SYS_LSEEK: usize = 62;
 const SYS_GETPGID: usize = 155;
 
 const SYS_FUTEX: usize = 202;
+const SYS_GETTID: usize = 178;
+const SYS_MADVISE: usize = 233;
 
 mod fs;
 mod mm;
@@ -176,6 +178,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         }
         SYS_LSEEK => sys_lseek(args[0] as i32, args[1] as isize, args[2] as i32),
         SYS_GETPGID => sys_getpgid(args[0] as i32),
+        SYS_GETTID => sys_getpid(),
+        SYS_MADVISE => sys_madvise(args[0], args[1], args[2] as i32),
 
         SYS_FUTEX => {
             sys_futex(

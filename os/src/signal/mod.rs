@@ -121,10 +121,10 @@ pub fn handle_signals() {
                         ign_sig_handler();
                     }
                     SignalDefault::Stop => {
-                        todo!();
+                        unimplemented!();
                     }
                     SignalDefault::Cont => {
-                        todo!();
+                        unimplemented!();
                     }
                     SignalDefault::Core => {
                         term_sig_handler();
@@ -277,27 +277,6 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
                 }
             }
         }
-        /*
-        1 => {
-            for (_, proc) in PROCESS_MANAGER.lock().iter() {
-                if let Some(proc) = proc.upgrade() {
-                    if proc.getpid() == 0 {
-                        // init proc
-                        continue;
-                    }
-                    debug!(
-                        "proc {} send signal {} to proc {}",
-                        current_process().getpid(),
-                        signo,
-                        proc.getpid()
-                    );
-                    proc.send_signal(signo);
-                } else {
-                    continue;
-                }
-            }
-        }
-        */
         _ => {
             let mut pid = pid;
             if pid < 0 {

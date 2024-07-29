@@ -104,6 +104,31 @@ impl MemorySet {
             0,
         );
     }
+
+    /// used for lazy allocation
+    pub fn insert_anonymous_area(&mut self, vpn_range: VPNRange, permission: MapPermission) {
+        self.push(
+            MapArea::from_vpn_range(vpn_range, MapType::Anonymous, permission),
+            None,
+            0,
+        )
+    }
+
+    /// allocate physical frame, update pagetable entry, insert frame into area.data_frames
+    pub fn manual_alloc_for_lazy(&mut self, vpn: VirtPageNum) {
+        if let Some(pte) = self.page_table.find_pte(vpn) {
+            for area in self.areas.iter_mut().rev() {
+                if area.vpn_range.contains(vpn) {
+                    let frame = frame_alloc().unwrap();
+                    let ppn = frame.ppn;
+                    info!("[manual_alloc_for_lazy] vpn: {:?}, ppn: {:?}", vpn, ppn);
+                    *pte = PageTableEntry::new(ppn, pte.flags());
+                    area.data_frames.insert(vpn, Arc::new(frame));
+                }
+            }
+        }
+    }
+
     ///Remove `MapArea` that starts with `start_vpn`
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
@@ -205,7 +230,7 @@ impl MemorySet {
     /// especially used for sys_munmap and sys_mmap
     /// 参数合法性由调用者保证
     pub fn do_unmap(&mut self, start: usize, len: usize) {
-        warn!("[MemroySet::do_unmap] not fully implemented!");
+        //warn!("[MemroySet::do_unmap] not fully implemented!");
         let overlap_areas = self.wipe_overlap(start, len);
         // 删除overlap_areas在页表中的映射和释放对应的物理页帧
         // Todo: 未检查用户是否有权限删除
@@ -217,7 +242,7 @@ impl MemorySet {
     /// change the protection on **pages**, 不修改`MapArea.map_perm`的权限
     /// `MapArea.map_perm`应该是用户对于这个区域的最大权限
     pub fn do_mprotect(&mut self, addr: usize, len: usize, perm: MapPermission) -> SyscallRet {
-        warn!("[MemorySet::do_mprotect] not fully implemented!");
+        //warn!("[MemorySet::do_mprotect] not fully implemented!");
         let end = addr + len;
         let vpn_range = VPNRange::new(VirtAddr::from(addr).floor(), VirtAddr::from(end).ceil());
         let mut found;
@@ -672,6 +697,10 @@ impl MapArea {
                 ppn = frame.ppn;
                 self.data_frames.insert(vpn, Arc::new(frame));
             }
+            MapType::Anonymous => {
+                // map Anonymous area to physical address 0
+                ppn = PhysPageNum::from(0)
+            }
         }
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
         page_table.map(vpn, ppn, pte_flags);
@@ -737,6 +766,7 @@ impl MapArea {
 pub enum MapType {
     Linear,
     Framed,
+    Anonymous,
 }
 
 bitflags! {

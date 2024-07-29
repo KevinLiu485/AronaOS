@@ -1,13 +1,14 @@
 use crate::mm::address::VirtPageNum;
 use crate::mm::frame_allocator::frame_alloc;
 use crate::mm::page_table::{PTEFlags, PageTable, PageTableEntry};
+use crate::mm::PhysPageNum;
 // use crate::syscall::process;
 use crate::task::processor::current_process;
 // use crate::task::current_task;
 // use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use alloc::sync::Arc;
-use log::error;
+use log::{error, info};
 
 /// call this function only when scause.cause() == Exception::LoadPageFault || Exception::StorePageFault
 /// 1. fork COW area
@@ -93,10 +94,26 @@ pub fn handle_recoverable_page_fault(
                     return Ok(());
                 }
             }
+            error!("cow page fault recover failed");
             return Err(SyscallErr::EFAULT);
         } else {
             // lazy allocation
-            error!("unimplemented lazy allocation");
+            if pte.ppn() == PhysPageNum::from(0) {
+                //info!("handle mmap anonamous areas");
+                let process = current_process();
+                let memory_set = &mut process.inner_lock().memory_set;
+                // 分配物理页帧, 更新页表, 管理MapArea::data_frames
+                for area in memory_set.areas.iter_mut().rev() {
+                    if area.vpn_range.contains(vpn) {
+                        let frame = frame_alloc().unwrap();
+                        let ppn = frame.ppn;
+                        *pte = PageTableEntry::new(ppn, pte.flags());
+                        area.data_frames.insert(vpn, Arc::new(frame));
+                        return Ok(());
+                    }
+                }
+            }
+            error!("lazy allocation fault recover failed");
             return Err(SyscallErr::EFAULT);
         }
     } else {

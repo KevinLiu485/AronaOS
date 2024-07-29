@@ -76,7 +76,7 @@ pub async fn sys_futex(
             futex_wait(uaddr.into(), flags, val, deadline, val3).await
         }
         FUTEX_WAKE => futex_wake(uaddr.into(), flags, val).await,
-        //FUTEX_WAKE_BITSET => futex_wake_bitset(uaddr.into(), flags, val, val3).await,
+        FUTEX_WAKE_BITSET => futex_wake_bitset(uaddr.into(), flags, val, val3).await,
         FUTEX_REQUEUE => futex_requeue(uaddr.into(), flags, val, uaddr2.into(), val2 as u32).await,
         FUTEX_CMP_REQUEUE => {
             error!("[linux_syscall_api] futex: unsupported futex operation: FUTEX_CMP_REQUEUE");
