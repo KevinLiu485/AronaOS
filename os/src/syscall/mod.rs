@@ -77,6 +77,7 @@ const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
 const SYS_FUTEX: usize = 202;
+const SYS_MADVISE: usize = 233;
 
 mod fs;
 mod mm;
@@ -197,6 +198,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // Weird bug, you cannot enter shell with next line enabled.
         SYS_SCHED_SETSCHEDULER => dummy(SYS_SCHED_SETSCHEDULER, "sys_sched_setscheduler"),
         SYS_CLOCK_GETRES => sys_clock_getres(args[0], args[1] as *mut _),
+        SYS_GETTID => sys_getpid(),
+        SYS_MADVISE => sys_madvise(args[0], args[1], args[2] as i32),
+
         SYS_FUTEX => {
             sys_futex(
                 args[0],
