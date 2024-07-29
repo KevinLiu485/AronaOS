@@ -5,11 +5,32 @@ use core::mem;
 
 bitflags! {
     pub struct OpenFlags: u32 {
+        const APPEND = 1 << 10;
+        const ASYNC = 1 << 13;
+        const DIRECT = 1 << 14;
+        const DSYNC = 1 << 12;
+        const EXCL = 1 << 7;
+        const NOATIME = 1 << 18;
+        const NOCTTY = 1 << 8;
+        const NOFOLLOW = 1 << 17;
+        const PATH = 1 << 21;
+        const TEMP = 1 << 15;
+        /// Read only
         const RDONLY = 0;
+        /// Write only
         const WRONLY = 1 << 0;
+        /// Read & Write
         const RDWR = 1 << 1;
-        const CREATE = 1 << 9;
-        const TRUNC = 1 << 10;
+        /// Allow create
+        const CREATE = 1 << 6;
+        /// Clear file and return an empty one
+        const TRUNC = 1 << 9;
+        /// Directory
+        const DIRECTORY = 1 << 16;
+        /// Enable the close-on-exec flag for the new file descriptor
+        const CLOEXEC = 1 << 19;
+        /// When possible, the file is opened in nonblocking mode
+        const NONBLOCK = 1 << 11;
     }
 }
 
@@ -93,6 +114,15 @@ pub struct Utsname {
 pub struct TimeSpec {
     pub sec: usize,
     pub nsec: usize,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct TimeVal {
+    /// seconds
+    pub sec: usize,
+    /// microseconds
+    pub usec: usize,
 }
 
 bitflags! {
@@ -180,6 +210,13 @@ bitflags! {
         const CLONE_IO = 1 << 31;
     }
 }
+
+
+pub const SEEK_SET: i32 = 0; /* Seek from beginning of file.  */
+pub const SEEK_CUR: i32 = 1; /* Seek from current position.  */
+pub const SEEK_END: i32 = 2; /* Seek from end of file.  */
+pub const SEEK_DATA: i32 = 3; /* Seek to next data.  */
+pub const SEEK_HOLE: i32 = 4; /* Seek to next hole.  */
 
 
 pub const NSEC_PER_SEC: usize = 10_0000_0000;

@@ -5,7 +5,6 @@ use core::fmt::Display;
 use crate::mutex::SpinNoIrqLock;
 use alloc::vec::Vec;
 use lazy_static::*;
-use log::debug;
 
 ///Pid Allocator struct
 pub struct PidAllocator {
@@ -54,7 +53,7 @@ pub struct PidHandle(pub usize);
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        debug!("drop pid {}", self.0);
+        // debug!("drop pid {}", self.0);
         PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }

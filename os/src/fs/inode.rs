@@ -1,5 +1,3 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
-
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
@@ -18,17 +16,45 @@ use super::path::Path;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum InodeMode {
-    FileDIR,
-    FileREG,
+    FileSOCK = 0xC000, /* socket */
+    FileLNK = 0xA000,  /* symbolic link */
+    FileREG = 0x8000,  /* regular file */
+    FileBLK = 0x6000,  /* block device */
+    FileDIR = 0x4000,  /* directory */
+    FileCHR = 0x2000,  /* character device */
+    FileFIFO = 0x1000, /* FIFO */
+}
+
+// impl From<u32> for InodeMode {
+//     fn from(value: u32) -> Self {
+//         match value {
+//             0xC000 => InodeMode::FileSOCK,
+//             0xA000 => InodeMode::FileLNK,
+//             0x8000 => InodeMode::FileREG,
+//             0x6000 => InodeMode::FileBLK,
+//             0x4000 => InodeMode::FileDIR,
+//             0x2000 => InodeMode::FileCHR,
+//             0x1000 => InodeMode::FileFIFO,
+//             _ => panic!("Invalid InodeMode value: {}", value),
+//         }
+//     }
+// }
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum InodePerm {
+    S_IREAD = 0x0100,
+    S_IWRITE = 0x0080,
+    S_IEXEC = 0x0040,
+    S_ISUID = 0x0800,
+    S_ISGID = 0x0400,
 }
 
 pub trait Inode: Send + Sync {
-    fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AsyncResult<usize>;
-    fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AsyncResult<usize>;
+    fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize>;
+    fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize>;
     fn mknod(&self, this: Arc<dyn Inode>, name: &str, mode: InodeMode)
         -> SysResult<Arc<dyn Inode>>;
-    fn find(&self, this: Arc<dyn Inode>, name: &str) -> SysResult<Arc<dyn Inode>>;
-    fn list(&self, this: Arc<dyn Inode>) -> SysResult<Vec<Arc<dyn Inode>>>;
     fn get_meta(&self) -> Arc<InodeMeta>;
     fn load_children_from_disk(&self, this: Arc<dyn Inode>);
     /// clear the file content, inode still exists
@@ -36,28 +62,45 @@ pub trait Inode: Send + Sync {
 }
 
 impl dyn Inode {
-    pub fn insert_child(&self, name: String, inode: Arc<dyn Inode>) {
-        self.get_meta().inner.lock().children.insert(name, inode);
+    pub fn find(self: &Arc<Self>, name: &str) -> SysResult<Arc<dyn Inode>> {
+        if self.get_meta().mode != InodeMode::FileDIR {
+            return Err(1);
+        }
+        self.get_meta()
+            .children_handler(self.clone(), |children| match children.get(name) {
+                Some(inode) => Ok(inode.clone()),
+                _ => Err(1),
+            })
     }
 
-    pub fn sync(&self) {
-        todo!();
+    // pub fn list(&self, this: Arc<dyn Inode>) -> SysResult<Vec<Arc<dyn Inode>>> {
+    pub fn list(self: &Arc<Self>) -> SysResult<Vec<Arc<dyn Inode>>> {
+        if self.get_meta().mode != InodeMode::FileDIR {
+            return Err(1);
+        }
+        Ok(self.get_meta().children_handler(self.clone(), |children| {
+            children.values().cloned().collect()
+        }))
     }
+    // pub fn insert_child(&self, name: String, inode: Arc<dyn Inode>) {
+    //     self.get_meta().inner.lock().children.insert(name, inode);
+    // }
+
+    // pub fn sync(&self) {
+    //     todo!();
+    // }
 
     pub fn get_name(&self) -> String {
         self.get_meta().name.clone()
     }
 
-    pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
-        let child = self.mknod(self.clone(), name, mode)?;
-        log::info!("[mkdir_v] child inode name {}", name);
-        self.get_meta()
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), child.clone());
-        Ok(child)
-    }
+    // pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
+    //     let child = self.mknod(self.clone(), name, mode)?;
+    //     self.get_meta().children_handler(self.clone(), |chidren| {
+    //         chidren.insert(name.to_string(), child.clone());
+    //     });
+    //     Ok(child)
+    // }
 
     pub fn mknod_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
         let child = self.mknod(self.clone(), name, mode)?;
@@ -73,36 +116,33 @@ impl dyn Inode {
         create_file: bool,
         create_dir: bool,
     ) -> SysResult<Arc<dyn Inode>> {
-        let mut current_dir = self.clone();
+        let mut current_node = self.clone();
         for (i, name) in path.get_inner().iter().enumerate() {
             if name == "." {
                 continue;
             } else if name == ".." {
-                if let Some(new_dir) = current_dir.get_meta().inner.lock().parent.clone() {
-                    current_dir = new_dir.upgrade().unwrap();
+                if let Some(new_dir) = current_node.get_meta().inner.lock().parent.clone() {
+                    current_node = new_dir.upgrade().unwrap();
                 } else {
                     return Err(1);
                 }
             } else {
                 // name is a String
-                if let Ok(new_dir) = current_dir.find(current_dir.clone(), name)
-                // .get_meta()
-                // .children_handler(current_dir.clone(), |children| children.get(name).clone())
-                {
-                    current_dir = new_dir.clone();
+                if let Ok(new_node) = current_node.find(name) {
+                    current_node = new_node.clone();
                 } else if i == path.len() - 1 && create_file {
                     debug!("[open_path] file {} created", name);
-                    current_dir = current_dir.mknod_v(name, InodeMode::FileREG).unwrap();
+                    current_node = current_node.mknod_v(name, InodeMode::FileREG).unwrap();
                 } else if i == path.len() - 1 && create_dir {
                     debug!("[open_path] dir {} created", name);
-                    current_dir = current_dir.mkdir_v(name, InodeMode::FileDIR).unwrap();
+                    current_node = current_node.mknod_v(name, InodeMode::FileDIR).unwrap();
                 } else {
                     debug!("[open_path] file {} not found", name);
                     return Err(1);
                 }
             }
         }
-        Ok(current_dir)
+        Ok(current_node)
     }
 
     pub fn delete(&self) {
@@ -136,7 +176,8 @@ impl InodeMeta {
         parent: Option<Arc<dyn Inode>>,
         path: Path,
         mode: InodeMode,
-        data_len: usize,
+        data_size: usize,
+        ino: usize,
     ) -> Self {
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),
@@ -144,7 +185,7 @@ impl InodeMeta {
         };
 
         Self {
-            ino: INODE_NUMBER.fetch_add(1, Ordering::Relaxed),
+            ino,
             mode,
             name: path.get_name(),
             path,
@@ -154,12 +195,14 @@ impl InodeMeta {
                 st_ctim: TimeSpec::new(),
                 parent,
                 children: BTreeMap::new(),
-                data_len,
+                data_size,
                 state: InodeState::Init,
             }),
         }
     }
 
+    /// use this method **instead of** access inode.meta.inner.children directly
+    /// to ensure children are loaded from disk before use  
     /// We can do whatever we want to do on children by providing a handler
     pub fn children_handler<T>(
         &self,
@@ -202,9 +245,7 @@ pub struct InodeMetaInner {
     /// USE INODEMETA::GET_CHILDREN() TO ENSURE CHILDREN ARE LOADED FROM DISK BEFORE USE
     pub children: BTreeMap<String, Arc<dyn Inode>>,
     /// file content len
-    pub data_len: usize,
+    pub data_size: usize,
     // inode state, mainly for Dir inode
     pub state: InodeState,
 }
-
-static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);

@@ -32,7 +32,7 @@ mod config;
 pub mod ctypes;
 mod drivers;
 mod executor;
-pub mod fat32;
+// pub mod fat32;
 pub mod fs;
 pub mod lang_items;
 pub mod loader;
@@ -40,6 +40,7 @@ pub mod logging;
 pub mod mm;
 pub mod mutex;
 pub mod sbi;
+mod signal;
 pub mod sync;
 pub mod syscall;
 pub mod task;
@@ -49,7 +50,7 @@ pub mod utils;
 
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};
-use log::info;
+
 use riscv::register::sstatus;
 
 use crate::config::*;
@@ -105,6 +106,10 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("");
         print!("\u{1B}[0m");
 
+        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+        unsafe {
+            sstatus::set_sum();
+        }
         clear_bss();
         logging::init();
         mm::init();
@@ -113,7 +118,8 @@ pub fn rust_main(hart_id: usize) -> ! {
         trap::init();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-        fs::list_apps();
+        // fs::list_apps();
+        fs::init::init();
         // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
         unsafe {
             sstatus::set_sum();
@@ -136,9 +142,10 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         KERNEL_SPACE.lock().activate();
-        info!("cpu: {} start!", hart_id);
+        // info!("cpu: {} start!", hart_id);
     }
 
+    // executor::run_forever();
     if hart_id == 0 {
         executor::run_forever();
     } else {
@@ -148,16 +155,16 @@ pub fn rust_main(hart_id: usize) -> ! {
 
 #[allow(unused)]
 fn start_all_cpu(hart_id: usize) {
-    info!("cpu:{} Hello, world!", hart_id);
+    // info!("cpu:{} Hello, world!", hart_id);
     for i in 0..4 {
         if i == hart_id {
             continue;
         }
         let status = hart_start(i, 0x80200000);
-        info!(
-            "hart {} start to wake up hart {}... status {}",
-            hart_id, i, status
-        );
+        // info!(
+        //     "hart {} start to wake up hart {}... status {}",
+        //     hart_id, i, status
+        // );
     }
 }
 

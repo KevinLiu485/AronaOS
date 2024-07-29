@@ -11,18 +11,22 @@
 #  		By default, AronaOS will run in release mode.
 # - `IMG`: Run with `IMG=fs.img` to specify the filesystem image, without packing img.
 #		By default, AronaOS will first pack then run with `$(FS_DIR)/fs.img`.
+# - `FS`: Run with `FS=ext4` to specify the filesystem type.
+# 		By default, AronaOS will run with FAT32.
 
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
 MODE_ARG :=
-# FEATURE_ARG :=
+FEATURE_ARGS :=
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-FS_IMG_ROOT := $(FS_DIR)/root
+# FS_IMG_ROOT := $(FS_DIR)/root
+FS_IMG_ROOT := $(FS_DIR)/root-2024-part
+# FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
 FS_IMG := $(FS_DIR)/fs.img
 # FS_IMG := ../sdcard.img
 
@@ -32,6 +36,8 @@ SUBMIT :=
 KTEST :=
 SMP := 2
 IMG := 
+MEM_SIZE = 128M
+FS := fat32
 
 # BOARD
 BOARD := qemu
@@ -47,13 +53,17 @@ ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
 
-# ifeq ($(SUBMIT), true)
-# 	FEATURE_ARG += submit
-# endif
+ifeq ($(SUBMIT), true)
+	FEATURE_ARGS += submit
+endif
 
-# ifeq ($(KTEST), true)
-# 	FEATURE_ARG += kernel_tests
-# endif
+ifeq ($(KTEST), true)
+	FEATURE_ARGS += kernel_tests
+endif
+
+ifeq ($(FS), ext4)
+	FEATURE_ARGS += ext4
+endif
 
 # build: env $(KERNEL_BIN)
 
@@ -74,7 +84,7 @@ $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 # Pack FS_IMG_ROOT into FAT32 fs.img
-fs-img: 
+fs-img: build-muslc
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
@@ -87,23 +97,38 @@ fs-img:
 	@echo "finish pack fs-img"
 
 build-user: 
-ifeq ($(SUBMIT), true)
-	@cd ../user && make build SUBMIT=true
-else 
-	@cd ../user && make build
-endif
+	@cd ../user && make build SUBMIT=$(SUBMIT)
+
+# ifeq ($(SUBMIT), true)
+# 	@cd ../user && make build SUBMIT=true
+# else 
+# 	@cd ../user && make build
+# endif
+
+build-muslc:
+	@cd ../muslc && make build
+	@rm -rf $(FS_IMG_ROOT)/muslc
+	@mkdir -p $(FS_IMG_ROOT)/muslc
+	@cp -r ../muslc/bin/* $(FS_IMG_ROOT)/muslc
 
 kernel: build-user
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
 	@cargo fmt
 ifeq ($(SUBMIT), true)
-	@cargo build --offline --release --features "submit"
-else ifeq ($(KTEST), true)
-	@LOG=$(LOG) cargo build $(MODE_ARG) --features "kernel_tests"
-else
-	@LOG=$(LOG) cargo build $(MODE_ARG)
+	cargo build --offline --release --features "$(FEATURE_ARGS)"
+else ifeq ($(FEATURE_ARGS), )
+	LOG=$(LOG) cargo build $(MODE_ARG)
+else 
+	LOG=$(LOG) cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
 endif
+# ifeq ($(SUBMIT), true)
+# 	@cargo build --offline --release --features "submit"
+# else ifeq ($(KTEST), true)
+# 	@LOG=$(LOG) cargo build $(MODE_ARG) --features "kernel_tests"
+# else
+# 	@LOG=$(LOG) cargo build $(MODE_ARG)
+# endif
 	@rm src/linker.ld
 
 clean:
@@ -119,7 +144,7 @@ clean:
 
 QEMU_ARGS := -machine virt \
 			 -kernel $(KERNEL_BIN) \
-			 -m 128M -nographic \
+			 -m $(MEM_SIZE) -nographic \
 			 -smp $(SMP) \
 			 -bios $(BOOTLOADER_ELF) \
 			 -drive file=$(FS_IMG),if=none,format=raw,id=x0 \
@@ -138,12 +163,15 @@ move-cargo:
 submit: move-cargo build move-bin
 
 run: env build 
-	@qemu-system-riscv64 $(QEMU_ARGS)
+	qemu-system-riscv64 $(QEMU_ARGS)
 
-run-only:
-	@qemu-system-riscv64 $(QEMU_ARGS)
+last:
+	qemu-system-riscv64 $(QEMU_ARGS)
+
+trace: 
+	$(MAKE) run LOG=TRACE
 
 gdbserver: env build
-	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
+	qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
-.PHONY: run run-only submit gdbserver clean
+.PHONY: run last submit gdbserver clean trace

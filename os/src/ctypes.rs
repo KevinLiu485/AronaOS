@@ -22,7 +22,7 @@ pub struct Utsname {
 impl Default for Utsname {
     fn default() -> Self {
         Self {
-            sysname: Self::from_str("Aronaos"),
+            sysname: Self::from_str("AronaOS"),
             nodename: Self::from_str("LAPTOP"),
             release: Self::from_str("5.15.146.1-standard"),
             version: Self::from_str("#1 SMP Thu Jan"),
@@ -73,19 +73,21 @@ pub struct TimeVal {
     pub usec: usize,
 }
 
-/// sys_nanosleep
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TimeSecs {
-    /// seconds
-    pub tv_sec: usize,
-    /// nanoseconds
-    pub tv_nsec: usize,
-}
+// / sys_nanosleep
+// #[repr(C)]
+// #[derive(Clone, Copy, Debug, Default)]
+// pub struct TimeSecs {
+//     /// seconds
+//     pub tv_sec: usize,
+//     /// nanoseconds
+//     pub tv_nsec: usize,
+// }
 
 bitflags! {
     /// MMAP memeory protection
     pub struct MMAPPROT: u32 {
+        /// cannot be accessed at all
+        const PROT_NONE = 0;
         /// Readable
         const PROT_READ = 1 << 0;
         /// Writeable
@@ -114,7 +116,7 @@ impl From<MMAPPROT> for MapPermission {
 bitflags! {
     /// determines whether updates to the mapping are visible to other processes mapping the same region, and whether
     /// updates are carried through to the underlying file.
-    pub struct MMAPFLAGS: u32 {
+    pub struct MmapFlags: u32 {
         /// MAP_SHARED
         const MAP_SHARED = 1 << 0;
         /// MAP_PRIVATE

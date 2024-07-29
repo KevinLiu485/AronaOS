@@ -2,7 +2,7 @@ use core::future::Future;
 
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
-use log::debug;
+use log::trace;
 
 use crate::mutex::SpinNoIrqLock;
 
@@ -69,7 +69,7 @@ pub fn run_until_idle() -> usize {
 
 #[allow(unused)]
 pub fn run_forever() -> ! {
-    debug!("run_forever(): entered");
+    trace!("[run_forever] enter");
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
             //debug!(run_forever(): fetch a task");
