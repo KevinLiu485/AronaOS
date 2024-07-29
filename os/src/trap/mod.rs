@@ -19,7 +19,7 @@ use crate::task::processor::current_thread;
 use crate::task::{current_trap_cx, exit_current, yield_task};
 use crate::timer::set_next_trigger;
 use core::arch::global_asm;
-use log::{debug, error};
+use log::error;
 use riscv::register::satp;
 use riscv::register::{
     mtvec::TrapMode,
@@ -101,12 +101,12 @@ pub async fn trap_handler() {
             // recoverable page fault:
             // 1. fork COW area
             // 2. lazy allocation
-            debug!(
-                "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
-                stval,
-                current_trap_cx().sepc,
-                scause.cause()
-            );
+            // debug!(
+            //     "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
+            //     stval,
+            //     current_trap_cx().sepc,
+            //     scause.cause()
+            // );
             // stval is the faulting virtual address, current_trap_cx().sepc is the faulting instruction
             let vpn = VirtAddr::from(stval).floor();
             let satp = satp::read().bits();
@@ -117,6 +117,7 @@ pub async fn trap_handler() {
                     stval,
                     current_trap_cx().sepc,
                 );
+                page_table.dump_all();
                 // page fault exit code
                 exit_current(-2);
             }

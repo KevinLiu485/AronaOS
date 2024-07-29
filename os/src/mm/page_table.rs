@@ -305,14 +305,9 @@ impl PageTable {
         }
         result
     }
-    #[allow(unused)]
     /// Create a mapping form `vpn` to `ppn`
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        // if vpn.0 & 0x4000000 == 0 {
-        //     trace!("[PageTable::map] map: {:?} -> {:?}", vpn, ppn);
-        // }
         let pte = self.find_pte_create(vpn).unwrap();
-        //let pte = self.find_pte(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
@@ -321,12 +316,17 @@ impl PageTable {
         let pte = self.find_pte(vpn).unwrap();
         assert!(
             pte.is_valid(),
-            "vpn {:?} is not mapped before update_flags",
+            "[update_flags] vpn {:?} is not mapped before update_flags",
             vpn
         );
-        *pte = PageTableEntry::new(pte.ppn(), flags | PTEFlags::V);
+
+        let mut full_flag = pte.flags();
+        full_flag.remove(PTEFlags::R | PTEFlags::W | PTEFlags::X);
+        full_flag.insert(flags);
+        *pte = PageTableEntry::new(pte.ppn(), full_flag);
+        // *pte = PageTableEntry::new(pte.ppn(), flags | PTEFlags::V | PTEFlags::U);
     }
-    #[allow(unused)]
+    // #[allow(unused)]
     /// Delete a mapping form `vpn`
     pub fn unmap(&mut self, vpn: VirtPageNum) {
         let pte = self.find_pte(vpn).unwrap();

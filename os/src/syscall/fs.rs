@@ -8,7 +8,7 @@ use alloc::sync::Arc;
 // use alloc::vec::{self, Vec};
 use alloc::vec;
 use alloc::vec::Vec;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 
 use crate::config::SyscallRet;
 use crate::fs::fd_table::FdInfo;
@@ -92,6 +92,10 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
         if mode == InodeMode::FileDIR
             && (flags.contains(OpenFlags::WRONLY) || flags.contains(OpenFlags::RDWR))
         {
+            error!(
+                "[sys_openat] pid {} fail to open file: {}",
+                process.pid, path
+            );
             return Err(SyscallErr::EISDIR as usize);
         }
         let fd = if mode == InodeMode::FileCHR {
@@ -114,7 +118,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
         );
         Ok(fd)
     } else {
-        info!(
+        error!(
             "[sys_openat] pid {} fail to open file: {}",
             process.pid, path
         );
@@ -148,6 +152,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 
 pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
     trace!("[sys_fstat] enter");
+    debug!("[sys_fstat] fd: {}", fd);
     let file = open_fd(fd).ok_or(SyscallErr::EBADF)?;
     let inode = file
         .get_meta()
@@ -294,17 +299,17 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_mount() -> SyscallRet {
-    trace!("[sys_mount] enter");
-    warn!("[sys_mount] not implemented");
-    Ok(0)
-}
+// pub fn sys_mount() -> SyscallRet {
+//     trace!("[sys_mount] enter");
+//     warn!("[sys_mount] not implemented");
+//     Ok(0)
+// }
 
-pub fn sys_umount2() -> SyscallRet {
-    trace!("[sys_umount2] enter");
-    warn!("[sys_umount2] not implemented");
-    Ok(0)
-}
+// pub fn sys_umount2() -> SyscallRet {
+//     trace!("[sys_umount2] enter");
+//     warn!("[sys_umount2] not implemented");
+//     Ok(0)
+// }
 
 pub fn sys_ioctl(fd: i32, request: usize, argp: usize) -> SyscallRet {
     trace!("[sys_ioctl] enter. fd: {}, request: {}", fd, request);
@@ -410,11 +415,11 @@ pub struct Iovec {
     pub iov_len: usize,
 }
 
-fn iovec_to_slice_vec<'a>(iov: *const Iovec, iovcnt: i32) -> Vec<&'a [u8]> {
+fn iovec_to_slice_vec<'a>(iov: *const Iovec, iovcnt: i32) -> Vec<&'a mut [u8]> {
     let iovec = unsafe { core::slice::from_raw_parts(iov, iovcnt as usize) };
     iovec
         .iter()
-        .map(|iov| unsafe { core::slice::from_raw_parts(iov.iov_base as *const u8, iov.iov_len) })
+        .map(|iov| unsafe { core::slice::from_raw_parts_mut(iov.iov_base as *mut u8, iov.iov_len) })
         .collect()
 }
 
@@ -441,6 +446,28 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: i32) -> SyscallRet {
     }
 }
 
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: i32) -> SyscallRet {
+    trace!(
+        "[readv] enter. fd: {}, iov: {:#x}, iovcnt: {}",
+        fd,
+        iov as usize,
+        iovcnt
+    );
+
+    let mut iovec = iovec_to_slice_vec(iov as *const Iovec, iovcnt);
+    let process = current_process();
+    let fdinfo = process.inner_handler(|inner| inner.fd_table.get(fd));
+    if let Some(fdinfo) = fdinfo {
+        let mut ret: usize = 0;
+        for slice in iovec.iter_mut() {
+            ret += fdinfo.file.read(slice).await?;
+        }
+        Ok(ret)
+    } else {
+        Err(1)
+    }
+}
+
 /// Poll Fd
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -453,23 +480,49 @@ pub struct PollFd {
     pub revents: i16,
 }
 
+bitflags! {
+    /// Poll events
+    pub struct PollEvents: i16 {
+        /// There is data to read
+        const POLLIN = 1 << 0;
+        /// Execption about fd
+        const POLLPRI = 1 << 1;
+        /// There is data to write
+        const POLLOUT = 1 << 2;
+        /// Error condition
+        const POLLERR = 1 << 3;
+        /// Hang up
+        const POLLHUP = 1 << 4;
+        /// Invalid request: fd not open
+        const POLLNVAL = 1 << 5;
+    }
+}
+
+// do not support timeout and sigmask
 pub fn sys_ppoll(
     fds_ptr: usize,
     nfds: usize,
-    timeout_ptr: usize,
-    sigmask_ptr: usize,
+    _timeout_ptr: usize,
+    _sigmask_ptr: usize,
 ) -> SyscallRet {
     trace!(
-        "[sys_ppoll] enter. nfds: {}, timeout_ptr: {:#x}, sigmask_ptr: {:#x}",
+        // "[sys_ppoll] enter. nfds: {}, timeout_ptr: {:#x}, sigmask_ptr: {:#x}",
+        "[sys_ppoll] enter. nfds: {}",
         nfds,
-        timeout_ptr,
-        sigmask_ptr
+        // timeout_ptr,
+        // sigmask_ptr
     );
-    warn!("[sys_ppoll] not implemented");
-    let _fds = unsafe { core::slice::from_raw_parts(fds_ptr as *const PollFd, nfds) };
-    let _timeout = unsafe { &*(timeout_ptr as *const TimeSpec) };
-    let _sigmask = unsafe { &*(sigmask_ptr as *const usize) };
-    Ok(0)
+    warn!("[sys_ppoll] not fully implemented");
+    let fds = unsafe { core::slice::from_raw_parts_mut(fds_ptr as *mut PollFd, nfds) };
+    // let _timeout = unsafe { &*(timeout_ptr as *const TimeSpec) };
+    // let _sigmask = unsafe { &*(sigmask_ptr as *const usize) };
+    let mut ret = 0;
+    for fd in fds {
+        debug!("[sys_ppoll] fd: {}, events: {}", fd.fd, fd.events);
+        fd.revents = fd.events;
+        ret += 1;
+    }
+    Ok(ret)
 }
 
 pub fn sys_fstatat(dirfd: i32, pathname: *const u8, buf: *mut Fstat, flags: i32) -> SyscallRet {
@@ -526,7 +579,6 @@ pub fn sys_utimensat(
     warn!("[sys_utimensat] not fully implemented");
     let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
         .map_err(|_| SyscallErr::ENOENT as usize)?;
-    // debug!("[sys_utimensat] return Ok");
     Ok(0)
 }
 
@@ -626,4 +678,31 @@ pub fn sys_lseek(fd: i32, offset: isize, whence: i32) -> SyscallRet {
         }
         _ => Err(SyscallErr::EINVAL as usize),
     }
+}
+
+pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {
+    trace!(
+        "[sys_socketpair] domain: {}, socket_type: {}, protocol: {}, sv: {:#x}",
+        domain,
+        socket_type,
+        protocol,
+        sv
+    );
+    let process = current_process();
+    let socket_pair = Pipe::new_socketpair();
+    let fdret = process.inner_handler(|inner| {
+        let fd1 = inner
+            .fd_table
+            .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()));
+        let fd2 = inner
+            .fd_table
+            .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()));
+        (fd1, fd2)
+    });
+    let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    let fdset_ptr = sv as *mut [i32; 2];
+    unsafe {
+        ptr::write(fdset_ptr, fdret);
+    }
+    Ok(0)
 }

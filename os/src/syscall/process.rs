@@ -45,7 +45,6 @@ pub fn sys_getpid() -> SyscallRet {
     Ok(current_thread().unwrap().getpid())
 }
 
-/// fake
 pub fn sys_getppid() -> SyscallRet {
     trace!("[sys_getppid] enter");
     let parent_task = current_process().inner_lock().parent.clone();
@@ -151,14 +150,6 @@ bitflags! {
 
 pub async fn sys_wait4(pid: isize, exit_code_ptr: usize, options: i32) -> SyscallRet {
     trace!("[sys_wait4] enter");
-    // 6.10 debug
-    // debug!("[sys_wait4] parent pagetable");
-    // current_task()
-    //     .unwrap()
-    //     .inner_lock()
-    //     .memory_set
-    //     .page_table
-    //     .dump_all();
     let options = WaitOption::from_bits(options).unwrap();
     WaitFuture::new(options, pid, exit_code_ptr).await
 }
@@ -235,8 +226,8 @@ impl Future for WaitFuture {
                 exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
             }
         }
-        debug!("wait task pid is {} ", found_pid);
-        debug!("exit code is {}", exit_code);
+        // debug!("wait task pid is {} ", found_pid);
+        // debug!("exit code is {}", exit_code);
         return Poll::Ready(Ok(found_pid));
     }
 }
@@ -276,6 +267,7 @@ pub fn sys_clone(
         }
         Some(flag) => flag,
     };
+    debug!("[sys_clone] clone flags: {:?}", clone_flags);
 
     // todo: 检查stack_ptr的是否可写
     let stack = match stack_ptr {
@@ -288,9 +280,11 @@ pub fn sys_clone(
 
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
+        debug!("[sys_clone] fork");
         sys_fork(stack)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone [create a new thread]
+        debug!("[sys_clone] create thread");
         let new_pid = current_process().clone_thread(
             stack,
             tls_ptr,
@@ -300,8 +294,7 @@ pub fn sys_clone(
         );
         new_pid
     } else {
-        unimplemented!()
-        // panic!("unimplemented clone_flags!")
+        unimplemented!("unsupported clone flags")
     }
 }
 
@@ -361,11 +354,11 @@ pub fn sys_set_tid_address(tidptr: *const usize) -> SyscallRet {
     Ok(thread.getpid())
 }
 
-pub fn sys_getuid() -> SyscallRet {
-    trace!("[sys_getuid] enter");
-    warn!("[sys_getuid] not fully implemented");
-    Ok(0)
-}
+// pub fn sys_getuid() -> SyscallRet {
+//     trace!("[sys_getuid] enter");
+//     warn!("[sys_getuid] not implemented");
+//     Ok(0)
+// }
 
 pub fn sys_exit_group(exit_code: i32) -> SyscallRet {
     trace!("[sys_exit_group] enter");
@@ -373,15 +366,9 @@ pub fn sys_exit_group(exit_code: i32) -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_geteuid() -> SyscallRet {
-    trace!("[sys_geteuid] enter");
-    warn!("[sys_getuid] not fully implemented");
-    Ok(0)
-}
-
-// pub fn sys_kill(pid: i32, sig: i32) -> SyscallRet {
-//     trace!("[sys_kill] enter kill pid: {}, sig: {}", pid, sig);
-//     warn!("[sys_kill] not implemented");
+// pub fn sys_geteuid() -> SyscallRet {
+//     trace!("[sys_geteuid] enter");
+//     warn!("[sys_getuid] not implemented");
 //     Ok(0)
 // }
 
@@ -390,3 +377,33 @@ pub fn sys_getpgid(pid: i32) -> SyscallRet {
     warn!("[sys_getpgid] not fully implemented");
     sys_getpid()
 }
+
+pub fn sys_gettid() -> SyscallRet {
+    trace!("[sys_gettid] enter");
+    warn!("[sys_gettid] not fully implemented");
+    sys_getpid()
+}
+
+// pub fn sys_sched_getaffinity() -> SyscallRet {
+//     trace!("[sys_sched_getaffinity] enter");
+//     warn!("[sys_sched_getaffinity] not implemented");
+//     Ok(0)
+// }
+
+// pub fn sys_sched_getscheduler() -> SyscallRet {
+//     trace!("[sys_sched_getscheduler] enter");
+//     warn!("[sys_sched_getscheduler] not implemented");
+//     Ok(0)
+// }
+
+// pub fn sys_sched_getparam() -> SyscallRet {
+//     trace!("[sys_sched_getparam] enter");
+//     warn!("[sys_sched_getparam] not implemented");
+//     Ok(0)
+// }
+
+// pub fn sys_sched_setscheduler() -> SyscallRet {
+//     trace!("[sys_sched_setscheduler] enter");
+//     warn!("[sys_sched_setscheduler] not implemented");
+//     Ok(0)
+// }

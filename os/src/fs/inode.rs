@@ -128,10 +128,7 @@ impl dyn Inode {
                 }
             } else {
                 // name is a String
-                if let Ok(new_node) = current_node.find(name)
-                // .get_meta()
-                // .children_handler(current_dir.clone(), |children| children.get(name).clone())
-                {
+                if let Ok(new_node) = current_node.find(name) {
                     current_node = new_node.clone();
                 } else if i == path.len() - 1 && create_file {
                     debug!("[open_path] file {} created", name);

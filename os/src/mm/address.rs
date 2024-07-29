@@ -2,7 +2,7 @@
 
 use super::PageTableEntry;
 use crate::config::{KERNEL_BASE, PAGE_SIZE, PAGE_SIZE_BITS};
-use core::fmt::{self, Debug, Formatter};
+use core::fmt::{self, Debug, Display, Formatter};
 use core::ops::Sub;
 
 const PA_WIDTH_SV39: usize = 56;
@@ -366,5 +366,11 @@ impl VPNRange {
     /// used for page fault handler
     pub fn contains(self, other: VirtPageNum) -> bool {
         self.get_start() <= other && other < self.get_end()
+    }
+}
+
+impl Display for VPNRange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "[{:?}, {:?})", self.get_start(), self.get_end())
     }
 }

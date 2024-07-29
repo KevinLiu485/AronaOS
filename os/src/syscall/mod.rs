@@ -68,6 +68,14 @@ const SYS_MPROTECT: usize = 226;
 const SYS_SENDFILE: usize = 71;
 const SYS_LSEEK: usize = 62;
 const SYS_GETPGID: usize = 155;
+const SYS_GETTID: usize = 178;
+const SYS_READV: usize = 65;
+const SYS_SCHED_GETAFFINITY: usize = 123;
+const SYS_SCHED_GETSCHEDULER: usize = 120;
+const SYS_SCHED_GETPARAM: usize = 121;
+const SYS_SOCKETPAIR: usize = 199;
+const SYS_SCHED_SETSCHEDULER: usize = 119;
+const SYS_CLOCK_GETRES: usize = 114;
 
 mod fs;
 mod mm;
@@ -75,11 +83,11 @@ pub(crate) mod process;
 mod util;
 
 use fs::*;
-use log::error;
+use log::{error, warn};
 use mm::*;
 use process::*;
 pub use process::{WaitFuture, WaitOption};
-use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
+use util::{sys_clock_getres, sys_clock_gettime, sys_get_time, sys_sysinfo, sys_times, sys_uname};
 
 use crate::{
     config::SyscallRet,
@@ -119,16 +127,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_DUP3 => sys_dup3(args[0], args[1]),
         SYS_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYS_PIPE2 => sys_pipe2(args[0] as *const u8),
-        SYS_LINKAT => unsupported(SYS_LINKAT),
-        SYS_MOUNT => sys_mount(),
-        SYS_UMOUNT2 => sys_umount2(),
-
+        SYS_LINKAT => dummy(SYS_LINKAT, "sys_linkat"),
+        SYS_MOUNT => dummy(SYS_MOUNT, "sys_mount"),
+        SYS_UMOUNT2 => dummy(SYS_UMOUNT2, "sys_umount2"),
         SYS_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYS_GETPPID => sys_getppid(),
         SYS_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
 
         SYS_SET_TID_ADDRESS => sys_set_tid_address(args[0] as *const usize),
-        SYS_GETUID => sys_getuid(),
+        SYS_GETUID => dummy(SYS_GETUID, "sys_getuid"),
         SYS_IOCTL => sys_ioctl(args[0] as i32, args[1], args[2] as usize),
         SYS_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SYS_RT_SIGACTION => sys_rt_sigaction(args[0], args[1], args[2]),
@@ -136,11 +143,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_RT_SIGRETURN => sys_rt_sigerturn(),
         SYS_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2]),
         SYS_WRITEV => sys_writev(args[0], args[1], args[2] as i32).await,
-        SYS_GETEUID => sys_geteuid(),
+        SYS_GETEUID => dummy(SYS_GETEUID, "sys_geteuid"),
         SYS_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]),
         SYS_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut _),
         SYS_SYSINFO => sys_sysinfo(args[0] as *mut _),
-        SYS_SYSLOG => sys_syslog(),
+        SYS_SYSLOG => dummy(SYS_SYSLOG, "sys_syslog"),
         SYS_FSTATAT => sys_fstatat(
             args[0] as i32,
             args[1] as *const u8,
@@ -171,15 +178,40 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+
         SYS_LSEEK => sys_lseek(args[0] as i32, args[1] as isize, args[2] as i32),
         SYS_GETPGID => sys_getpgid(args[0] as i32),
-        _ => unsupported(syscall_id),
+        SYS_GETTID => sys_gettid(),
+        SYS_READV => sys_readv(args[0], args[1], args[2] as i32).await,
+        SYS_SCHED_GETAFFINITY => dummy(SYS_SCHED_GETAFFINITY, "sys_sched_getaffinity"),
+        SYS_SCHED_GETSCHEDULER => dummy(SYS_SCHED_GETSCHEDULER, "sys_sched_getscheduler"),
+        SYS_SCHED_GETPARAM => dummy(SYS_SCHED_GETPARAM, "sys_sched_getparam"),
+        SYS_SOCKETPAIR => sys_socketpair(
+            args[0] as u32,
+            args[1] as u32,
+            args[2] as u32,
+            args[3] as usize,
+        ),
+        // Weird bug, you cannot enter shell with next line enabled.
+        SYS_SCHED_SETSCHEDULER => dummy(SYS_SCHED_SETSCHEDULER, "sys_sched_setscheduler"),
+        SYS_CLOCK_GETRES => sys_clock_getres(args[0], args[1] as *mut _),
+        _ => unknown(syscall_id),
     }
 }
 
-fn unsupported(syscall_id: usize) -> SyscallRet {
+/// we know that the syscall but not implemented
+fn dummy(syscall_id: usize, syscall_name: &str) -> SyscallRet {
+    warn!(
+        "Unimplemented syscall: {}, id: {}",
+        syscall_name, syscall_id
+    );
+    Ok(0)
+}
+
+/// unknown syscall
+fn unknown(syscall_id: usize) -> SyscallRet {
     // panic!("Unsupported syscall_id: {}", syscall_id);
-    error!("Unsupported syscall_id: {}", syscall_id);
+    error!("Unknown syscall_id: {}", syscall_id);
     let _ = sys_exit(0);
     Ok(0)
 }

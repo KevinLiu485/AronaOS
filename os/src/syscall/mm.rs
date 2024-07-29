@@ -79,12 +79,13 @@ pub async fn sys_mmap(
     // };
     let task = current_process();
     trace!(
-        "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}",
+        "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}, prot: {:?}",
         start,
         len,
         fd,
         offset,
-        flags
+        flags,
+        prot,
     );
     if len == 0 {
         return Err(SyscallErr::EINVAL.into());
@@ -100,7 +101,7 @@ pub async fn sys_mmap(
     permission |= MapPermission::U;
     // 匿名映射
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        // debug!("[sys_mmap] anonymous mmap");
+        debug!("[sys_mmap] anonymous mmap");
         //需要fd为-1, offset为0
         if fd != -1 || offset != 0 {
             return Err(SyscallErr::EINVAL.into());
@@ -117,6 +118,7 @@ pub async fn sys_mmap(
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
         task.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
+        debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
         return Ok(start);
     } else {
         debug!("[sys_mmap] file mmap");
@@ -140,6 +142,8 @@ pub async fn sys_mmap(
             .memory_set
             .insert_framed_area(vpn_range, permission);
 
+        let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
+        task.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
         // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
@@ -152,6 +156,7 @@ pub async fn sys_mmap(
             // file is seekable, then seek back
             file.seek(origin_offset);
         }
+        debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
         return Ok(start);
     }
     // todo!()
@@ -164,6 +169,7 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
         return Err(SyscallErr::EINVAL.into());
     }
     current_process().inner_handler(|inner| inner.memory_set.do_unmap(start, len));
+    debug!("[sys_munmap] success");
     Ok(0)
 }
 
@@ -171,12 +177,13 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
     let prot = MMAPPROT::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let perm: MapPermission = prot.into();
     trace!(
-        "[sys_mprotect] addr: {:x}, len: {:x}, prot: {:?}",
+        "[sys_mprotect] addr: 0x{:x}, len: 0x{:x}, prot: {:?}",
         addr,
         len,
         prot
     );
     if addr % PAGE_SIZE != 0 || len == 0 {
+        debug!("[sys_mprotect] EINVAL");
         return Err(SyscallErr::EINVAL.into());
     }
     // 先要检查是否有权限

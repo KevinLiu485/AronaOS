@@ -24,7 +24,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
-use log::info;
+use log::{error, info};
 
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
@@ -147,6 +147,10 @@ impl File for OSInode {
             Some(ret)
         })
         // self.set_offset(offset);
+    }
+    fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet {
+        error!("[OSInode] ioctl not implemented");
+        Err(SyscallErr::ENOTTY as usize)
     }
 }
 

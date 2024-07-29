@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::fmt::Debug;
 use lazy_static::lazy_static;
-use log::{info, warn};
+use log::{debug, info, warn};
 // use log::{debug, info, warn};
 use riscv::register::satp;
 
@@ -98,6 +98,7 @@ impl MemorySet {
     }
     /// Assume that no conflicts, 由caller保证
     pub fn insert_framed_area(&mut self, vpn_range: VPNRange, permission: MapPermission) {
+        debug!("[insert_framed_area] vpn: {}, {:?}", vpn_range, permission);
         self.push(
             MapArea::from_vpn_range(vpn_range, MapType::Framed, permission),
             None,
@@ -228,9 +229,10 @@ impl MemorySet {
             for area in self.areas.iter().rev() {
                 if area.vpn_range.contains(vpn) {
                     // check permission, perm can only be a **subset** of area.map_perm
-                    if !area.map_perm.contains(perm) {
-                        return Err(SyscallErr::EACCES.into());
-                    }
+                    // if !area.map_perm.contains(perm) {
+                    //     debug!("[do_mprotect] EACCES");
+                    //     return Err(SyscallErr::EACCES.into());
+                    // }
                     // remap
                     let pte_flags = PTEFlags::from_bits(perm.bits).unwrap();
                     self.page_table.update_flags(vpn, pte_flags);
@@ -239,9 +241,11 @@ impl MemorySet {
                 }
             }
             if !found {
+                debug!("[do_mprotect] EFAULT");
                 return Err(SyscallErr::EFAULT.into());
             }
         }
+        debug!("[do_mprotect] success");
         Ok(0)
     }
     /// map sigreturn trampoline

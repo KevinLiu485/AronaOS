@@ -9,6 +9,8 @@ pub mod inode;
 mod os_inode;
 pub mod path;
 pub mod pipe;
+mod procfs;
+// pub mod socketpair;
 // mod stdio;
 
 // pub use ctypes::*;
@@ -19,7 +21,7 @@ use crate::{
     config::AsyncResult,
     mutex::SpinNoIrqLock,
     timer::TimeSpec,
-    utils::SyscallErr,
+    // utils::SyscallErr,
     SyscallRet, // mm::UserBuffer,
 };
 
@@ -72,10 +74,11 @@ pub trait File: Send + Sync {
     /// return `None` if the file is not seekable
     fn seek(&self, offset: usize) -> Option<usize>;
 
-    fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet {
-        error!("ioctl not implemented");
-        Err(SyscallErr::ENOTTY as usize)
-    }
+    fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet;
+    // fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet {
+    //     error!("ioctl not implemented");
+    //     Err(SyscallErr::ENOTTY as usize)
+    // }
 }
 
 #[derive(Debug)]
@@ -149,7 +152,7 @@ pub const AT_REMOVEDIR: u32 = 0x200;
 use alloc::sync::Arc;
 use fat32::BLOCK_SIZE;
 use inode::Inode;
-use log::error;
+// use log::error;
 // use alloc::sync::Arc;
 // pub use devfs::tty::TtyFile;
 pub use os_inode::{create_dir, open_fd, open_inode, open_osinode, OSInode, OpenFlags};

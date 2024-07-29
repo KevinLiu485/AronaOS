@@ -26,7 +26,7 @@ pub fn sys_uname(uts: usize) -> SyscallRet {
 // #[allow(unused)]
 pub fn sys_times(buf: usize) -> SyscallRet {
     trace!("[sys_times] enter");
-    warn!("[sys_times] not implemented");
+    warn!("[sys_times] not fully implemented");
     let buf = buf as *mut Tms;
     let tms = Tms::default();
     unsafe {
@@ -122,7 +122,7 @@ pub struct Sysinfo {
 
 pub fn sys_sysinfo(info: *mut Sysinfo) -> SyscallRet {
     trace!("[sys_sysinfo] enter.");
-    warn!("[sys_sysinfo] not implemented");
+    warn!("[sys_sysinfo] not fully implemented");
     let sys_info = Sysinfo {
         uptime: (get_time_ms() / 1000) as i64,
         loads: [0; 3],
@@ -145,8 +145,21 @@ pub fn sys_sysinfo(info: *mut Sysinfo) -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_syslog() -> SyscallRet {
-    trace!("[sys_syslog] enter");
-    warn!("[sys_syslog] not implemented");
+// pub fn sys_syslog() -> SyscallRet {
+//     trace!("[sys_syslog] enter");
+//     warn!("[sys_syslog] not implemented");
+//     Ok(0)
+// }
+
+pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
+    trace!(
+        "[sys_clock_getres] enter. clock_id: {}, res: {:#x}",
+        clock_id,
+        res as usize
+    );
+    warn!("[sys_clock_getres] not fully implemented");
+    unsafe {
+        res.write_volatile(TimeSpec { sec: 0, nsec: 1 });
+    }
     Ok(0)
 }

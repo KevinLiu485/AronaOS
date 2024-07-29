@@ -1,6 +1,7 @@
 use alloc::{boxed::Box, sync::Arc};
+use log::error;
 
-use crate::{mutex::SpinNoIrqLock, task::yield_task, utils::SyscallErr, AsyncResult};
+use crate::{mutex::SpinNoIrqLock, task::yield_task, utils::SyscallErr, AsyncResult, SyscallRet};
 
 use super::{File, FileMeta};
 
@@ -8,8 +9,6 @@ const PIPE_BUFFER_SIZE: usize = 4096;
 
 pub struct Pipe {
     buffer: Arc<SpinNoIrqLock<PipeRingBuffer>>,
-    // readable: bool,
-    // writeable: bool,
     meta: FileMeta,
 }
 
@@ -20,20 +19,38 @@ impl Pipe {
             buffer: [0; PIPE_BUFFER_SIZE],
             read_pos: 0,
             write_pos: 0,
-            eof: false,
+            // eof: false,
+            writer_count: 1,
         }));
         (
             Arc::new(Self {
                 buffer: buffer.clone(),
-                // readable: true,
-                // writeable: false,
                 meta: FileMeta::new_bare(true, false),
             }),
             Arc::new(Self {
                 buffer: buffer.clone(),
-                // readable: false,
-                // writeable: true,
                 meta: FileMeta::new_bare(false, true),
+            }),
+        )
+    }
+
+    /// the only difference from `pipe` is, both fds are readable and writable
+    pub fn new_socketpair() -> (Arc<Self>, Arc<Self>) {
+        let buffer = Arc::new(SpinNoIrqLock::new(PipeRingBuffer {
+            buffer: [0; PIPE_BUFFER_SIZE],
+            read_pos: 0,
+            write_pos: 0,
+            // eof: false,
+            writer_count: 2,
+        }));
+        (
+            Arc::new(Self {
+                buffer: buffer.clone(),
+                meta: FileMeta::new_bare(true, true),
+            }),
+            Arc::new(Self {
+                buffer: buffer.clone(),
+                meta: FileMeta::new_bare(true, true),
             }),
         )
     }
@@ -66,18 +83,8 @@ impl Pipe {
 }
 
 impl File for Pipe {
-    // fn readable(&self) -> bool {
-    //     self.readable
-    // }
-
-    // fn writable(&self) -> bool {
-    //     self.writeable
-    // }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            // if self.buffer.lock().eof() {
-            //     return Ok(0);
-            // }
             if !self.meta.readable {
                 return Err(SyscallErr::EBADF.into());
             }
@@ -98,7 +105,6 @@ impl File for Pipe {
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
-        // debug!("[Pipe::write] entered");
         Box::pin(async move {
             if !self.meta.writable {
                 return Err(SyscallErr::EBADF.into());
@@ -114,13 +120,19 @@ impl File for Pipe {
     fn seek(&self, _offset: usize) -> Option<usize> {
         None
     }
+
+    fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet {
+        error!("[Pipe] ioctl not implemented");
+        Err(SyscallErr::ENOTTY as usize)
+    }
 }
 
 impl Drop for Pipe {
     fn drop(&mut self) {
         if self.meta.writable {
             let mut buffer = self.buffer.lock();
-            buffer.eof = true;
+            // buffer.eof = true;
+            buffer.writer_count -= 1;
         }
     }
 }
@@ -129,8 +141,10 @@ struct PipeRingBuffer {
     buffer: [u8; PIPE_BUFFER_SIZE],
     read_pos: usize,
     write_pos: usize,
-    // whether writer exists
-    eof: bool,
+    // // whether writer exists
+    // eof: bool,
+    // number of writers, if writer_count == 0, then eof
+    writer_count: usize,
 }
 
 impl PipeRingBuffer {
@@ -153,6 +167,7 @@ impl PipeRingBuffer {
         }
     }
     fn eof(&self) -> bool {
-        self.eof
+        self.writer_count == 0
+        // self.eof
     }
 }
