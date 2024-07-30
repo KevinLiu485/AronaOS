@@ -63,7 +63,7 @@ pub struct MemorySet {
     /// Option是因为Kernel没有, from_global是不分配heap
     pub heap: Option<MapArea>,
     pub brk: usize,
-    /// we take a simple but powerful strategy to manage mmap
+    /// we take a simple but powerful strategy to manage mmap_start
     /// mmap starts from [`MMAP_MIN_ADDR`], only increases, never decreases
     /// in this way, no memory waste, no conflict, only [`MMAPFLAGS::MAP_FIXED`] cannot be supported
     pub mmap_start: usize,

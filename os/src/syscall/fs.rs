@@ -627,3 +627,11 @@ pub fn sys_lseek(fd: i32, offset: isize, whence: i32) -> SyscallRet {
         _ => Err(SyscallErr::EINVAL as usize),
     }
 }
+
+pub async fn sys_sync() -> SyscallRet {
+    // todo: titanix fake implementation may need to do more
+    trace!("[sys_sync] start to sync...");
+    warn!("[sys_sync] not implemented.");
+    trace!("[sys_sync] sync finished");
+    Ok(0)
+}

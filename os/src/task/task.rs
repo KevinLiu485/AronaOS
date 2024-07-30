@@ -1,7 +1,7 @@
 //!Implementation of [`Thread`]
 use super::aux::*;
 use super::processor::current_thread_uncheck;
-use super::{current_trap_cx, pid_alloc, PidHandle};
+use super::{current_trap_cx, id_alloc, IdHandle};
 use crate::config::SyscallRet;
 use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
@@ -36,7 +36,7 @@ lazy_static! {
 /// ['Process'] 负责管理进程资源的单位，有着自己的Thread都共享的资源，本身并不参与调度
 /// 记录了主线程，以保持以前现有进程的一致性
 pub struct Process {
-    pub pid: Arc<PidHandle>,   // 自己的main thread的pid也是这个 id（加arc的原因）
+    pub pid: Arc<IdHandle>,    // 自己的main thread的pid也是这个 id（加arc的原因）
     pub is_zombie: AtomicBool, // 这个放到inner外面主要是为了防止死锁
     pub inner: SpinNoIrqLock<ProcessInner>,
 }
@@ -159,7 +159,7 @@ impl Process {
         parent_inner.memory_set.activate();
 
         // 分配新的pid
-        let pid_handle = Arc::new(pid_alloc());
+        let pid_handle = Arc::new(id_alloc());
         // 复制进程资源
         let child = Arc::new(Self {
             pid: pid_handle.clone(),
@@ -230,7 +230,7 @@ impl Process {
         trap_context.set_global_pointer(current_trap_cx().get_global_pointer()); // Global pointer
 
         // 新建一个线程
-        let pid = Arc::new(pid_alloc());
+        let pid = Arc::new(id_alloc());
         let new_thread = Arc::new(Thread::new(
             self.clone(),
             current_thread(),
@@ -269,7 +269,7 @@ pub fn new_initproc(elf_data: &[u8]) -> Arc<Thread> {
     // println!("  entry_point: {}", entry_point);
     let kernel_satp = KERNEL_SPACE.lock().token();
     // alloc a pid and a kernel stack in kernel space
-    let pid_handle = Arc::new(pid_alloc());
+    let pid_handle = Arc::new(id_alloc());
 
     let process = Arc::new(Process {
         pid: pid_handle.clone(),
@@ -362,7 +362,7 @@ pub type TaskRef = Arc<Thread>;
 /// process 自己共享的资源
 pub struct Thread {
     /// immutable
-    pid: Arc<PidHandle>,
+    pid: Arc<IdHandle>,
     /// 自己属于的进程
     pub process: Arc<Process>,
     /// mutable
@@ -413,7 +413,7 @@ impl Thread {
         main_thread: Option<Arc<Thread>>,
         trap_context: TrapContext,
         ustack_top: usize,
-        tid: Arc<PidHandle>,
+        tid: Arc<IdHandle>,
     ) -> Self {
         // todo: main thread 这里有一个信号的操作
         let sig_set;
@@ -459,7 +459,7 @@ impl Thread {
         another: &Arc<Thread>,
         new_process: Arc<Process>,
         stack: Option<usize>,
-        pid: Arc<PidHandle>,
+        pid: Arc<IdHandle>,
     ) -> Self {
         Self {
             pid: pid.clone(),

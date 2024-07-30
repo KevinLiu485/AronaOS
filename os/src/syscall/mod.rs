@@ -72,10 +72,15 @@ const SYS_GETPGID: usize = 155;
 const SYS_FUTEX: usize = 202;
 const SYS_GETTID: usize = 178;
 const SYS_MADVISE: usize = 233;
+const SYSCALL_SYNC: usize = 81;
+const SYSCALL_SHMGET: usize = 194;
+const SYSCALL_RT_SIGTIMEDWAIT: usize = 137;
+const SYSCALL_PRLIMIT64: usize = 261;
 
 mod fs;
 mod mm;
 pub(crate) mod process;
+pub(crate) mod resource;
 mod util;
 
 use fs::*;
@@ -85,6 +90,8 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_gettime, sys_get_time, sys_sysinfo, sys_syslog, sys_times, sys_uname};
 
+use crate::signal::sys_rt_sigtimedwait;
+use crate::syscall::resource::{sys_prlimit64, RLimit};
 use crate::{
     config::SyscallRet,
     futex::sys_futex,
@@ -192,6 +199,19 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+        SYSCALL_SYNC => sys_sync().await,
+        SYSCALL_SHMGET => sys_shmget(args[0], args[1], args[2] as u32),
+        SYSCALL_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(
+            args[0] as *const u32,
+            args[1] as *const u8,
+            args[2] as *const u8,
+        ),
+        SYSCALL_PRLIMIT64 => sys_prlimit64(
+            args[0],
+            args[1] as u32,
+            args[2] as *const RLimit,
+            args[3] as *mut RLimit,
+        ),
         _ => unsupported(syscall_id),
     }
 }
