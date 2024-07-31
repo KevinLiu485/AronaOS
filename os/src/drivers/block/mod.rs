@@ -11,11 +11,11 @@ use lazy_static::*;
 
 lazy_static! {
     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());
-    pub static ref EXT4_BLOCK_DEVICE: Arc<dyn ext4_rs::BlockDevice> =
-        Arc::new(BlockDeviceImpl::new());
+    // pub static ref EXT4_BLOCK_DEVICE: Arc<dyn ext4_rs::BlockDevice> =
+    //     Arc::new(BlockDeviceImpl::new());
 }
 
-const VIRTIO_BLOCK_SIZE: usize = 512;
+pub const VIRTIO_BLOCK_SIZE: usize = 512;
 
 #[allow(unused)]
 pub fn block_device_test() {

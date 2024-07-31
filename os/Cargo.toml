@@ -23,8 +23,10 @@ ext4_rs = { path = "../ext4" }
 
 [profile.release]
 debug = true
+# opt-level = 0
 
 [features]
 kernel_tests = []
 submit = []
 ext4 = []
+default = ["ext4"]

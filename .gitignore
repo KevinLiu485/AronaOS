@@ -16,3 +16,6 @@ fs-img-src/**/*.img
 ./kernel-qemu
 ./sbi-qemu
 ./sdcard.img
+
+/ext4-old/
+# /ext4/

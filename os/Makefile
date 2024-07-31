@@ -12,7 +12,7 @@
 # - `IMG`: Run with `IMG=fs.img` to specify the filesystem image, without packing img.
 #		By default, AronaOS will first pack then run with `$(FS_DIR)/fs.img`.
 # - `FS`: Run with `FS=ext4` to specify the filesystem type.
-# 		By default, AronaOS will run with FAT32.
+# 		By default, AronaOS will run with fat32.
 
 # Building
 TARGET := riscv64gc-unknown-none-elf
@@ -66,12 +66,15 @@ ifeq ($(FS), ext4)
 endif
 
 # build: env $(KERNEL_BIN)
-
+ifeq ($(SUBMIT), true)
+build: $(KERNEL_BIN)
+else
 ifeq ($(IMG), )
 build: $(KERNEL_BIN) fs-img
 else
 FS_IMG = $(IMG)
 build: $(KERNEL_BIN)
+endif
 endif
 
 env:
@@ -88,10 +91,16 @@ fs-img: build-muslc
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+ifeq ($(FS), ext4)
+	@mkfs.ext4 $(FS_IMG)
+	@mkdir -p mnt
+	@sudo mount -t ext4 -o loop $(FS_IMG) mnt
+else
 	@mkfs.vfat -F 32 $(FS_IMG)
 	@mkdir -p mnt
 	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
-	@cp -r $(FS_IMG_ROOT)/* mnt
+endif
+	@sudo cp -r $(FS_IMG_ROOT)/* mnt
 	@sudo umount -v mnt
 	@rm -rf mnt
 	@echo "finish pack fs-img"
@@ -122,25 +131,10 @@ else ifeq ($(FEATURE_ARGS), )
 else 
 	LOG=$(LOG) cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
 endif
-# ifeq ($(SUBMIT), true)
-# 	@cargo build --offline --release --features "submit"
-# else ifeq ($(KTEST), true)
-# 	@LOG=$(LOG) cargo build $(MODE_ARG) --features "kernel_tests"
-# else
-# 	@LOG=$(LOG) cargo build $(MODE_ARG)
-# endif
 	@rm src/linker.ld
 
 clean:
 	@cargo clean
-
-# QEMU_ARGS := -machine virt \
-# 			 -nographic \
-# 			 -bios $(BOOTLOADER) \
-# 			 -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
-# 			 -drive file=$(FS_IMG),if=none,format=raw,id=x0 \
-# 			 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0\
-# 			 -smp 4
 
 QEMU_ARGS := -machine virt \
 			 -kernel $(KERNEL_BIN) \

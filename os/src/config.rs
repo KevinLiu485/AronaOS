@@ -20,6 +20,9 @@ pub const MMAP_MIN_ADDR: usize = 0x20_0000_0000; // mmap area: 128GB
 
 pub const SIG_NUM: usize = 33;
 
+// used in OSInode::read_all(), can be optimized when app data size is known
+pub const LOAD_APP_SLICE_SIZE: usize = 0x1_0000; // 64KB
+
 // pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 // pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
 

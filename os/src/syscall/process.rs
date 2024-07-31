@@ -7,11 +7,11 @@ use crate::task::processor::{current_process, current_thread};
 use crate::task::{exit_current, yield_task, INITPROC};
 use crate::timer::{TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
+use crate::utils::checksum::calculate_checksum;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::future::Future;
 use core::ptr::null;
-// use core::sync::atomic::Ordering;
 use core::task::Poll;
 use core::time::Duration;
 use log::{debug, error, info, trace, warn};
@@ -103,7 +103,6 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
                     break;
                 }
                 envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
-                // debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
                 unsafe {
                     envs = envs.add(1);
                 }
@@ -111,10 +110,33 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
         }
     }
 
-    // let path = translated_str(token, path as *const u8);
     if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs
+        // debug!("[sys_execve] file size: {}", {
+        //     let app_file: Arc<dyn File> = app_inode.clone();
+        //     let inner = app_file.get_meta().inner.lock();
+        //     inner
+        //         .inode
+        //         .as_ref()
+        //         .unwrap()
+        //         .get_meta()
+        //         .inner
+        //         .lock()
+        //         .data_size
+        // });
         let all_data = app_inode.read_all().await;
+        debug!(
+            "[sys_exec] app data len: {}, checksum: {}",
+            all_data.len(),
+            calculate_checksum(all_data.as_slice())
+        );
+        // print_file(&all_data);
+        // for i in 0..all_data.len() {
+        //     if i % 35 == 0 {
+        //         println!("");
+        //     }
+        //     print!("{:02x} ", all_data[i]);
+        // }
         let current_process = current_process();
         current_process.exec(all_data.as_slice(), args_vec, envs_vec);
         Ok(0)
