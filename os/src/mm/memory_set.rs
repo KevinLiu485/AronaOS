@@ -98,7 +98,7 @@ impl MemorySet {
     }
     /// Assume that no conflicts, 由caller保证
     pub fn insert_framed_area(&mut self, vpn_range: VPNRange, permission: MapPermission) {
-        debug!("[insert_framed_area] vpn: {}, {:?}", vpn_range, permission);
+        // debug!("[insert_framed_area] vpn: {}, {:?}", vpn_range, permission);
         self.push(
             MapArea::from_vpn_range(vpn_range, MapType::Framed, permission),
             None,

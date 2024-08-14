@@ -7,14 +7,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# riscv = { path = "vendor/riscv", features = ["inline-asm"] }
-riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+riscv = { path = "vendor/riscv", features = ["inline-asm"] }
+# riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
 buddy_system_allocator = "0.6"
 bitflags = "1.2.1"
 xmas-elf = "0.7.0"
-# virtio-drivers = { path = "vendor/virtio-drivers" }
-virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5" }
+virtio-drivers = { path = "vendor/virtio-drivers" }
+# virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5" }
 log = "0.4"
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
 async-task = { version = "4.4.0", default-features = false }
@@ -23,8 +23,10 @@ ext4_rs = { path = "../ext4" }
 
 [profile.release]
 debug = true
+# opt-level = 0
 
 [features]
 kernel_tests = []
 submit = []
 ext4 = []
+default = ["ext4"]

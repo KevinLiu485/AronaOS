@@ -1,14 +1,15 @@
+use core::borrow::BorrowMut;
+
 use crate::{
     fs::inode::{Inode, InodeMeta, InodeMode},
     AsyncResult, SysResult,
 };
-use alloc::{boxed::Box, sync::Arc};
-use ext4_rs::Ext4;
-use log::{debug, error};
+use alloc::{boxed::Box, string::ToString, sync::Arc};
+use ext4_rs::{Ext4, Ext4File, Ext4InodeRef, Ext4MountPoint, OpenFlag};
+use log::{debug, error, warn};
 
 pub struct Ext4Inode {
     fs: Arc<Ext4>,
-    // ino: u64,
     meta: Arc<InodeMeta>,
 }
 
@@ -24,60 +25,94 @@ impl Ext4Inode {
     }
 
     fn get_size(&self) -> usize {
-        self.fs
-            .fuse_getattr(self.meta.ino as u64)
-            .map_err(|ext4_err| {
-                error!("[Ext4Inode::update_size] {:?}", ext4_err);
-                ext4_err.error() as usize
-            })
-            .unwrap()
-            .size as usize
+        // self.fs
+        //     .fuse_getattr(self.meta.ino as u64)
+        //     .map_err(|ext4_err| {
+        //         error!("[Ext4Inode::update_size] {:?}", ext4_err);
+        //         ext4_err.error() as usize
+        //     })
+        //     .unwrap()
+        //     .size as usize
+        Ext4Inode::get_size_from_ino(&self.fs, self.meta.ino as u64)
     }
 
     fn get_size_from_ino(fs: &Arc<Ext4>, ino: u64) -> usize {
         // debug!("[get_size_from_ino]");
-        fs.fuse_getattr(ino as u64)
-            .map_err(|ext4_err| {
-                error!("[Ext4Inode::update_size] {:?}", ext4_err);
-                ext4_err.error() as usize
-            })
-            .unwrap()
-            .size as usize
+        // fs.fuse_getattr(ino as u64)
+        //     .map_err(|ext4_err| {
+        //         error!("[Ext4Inode::update_size] {:?}", ext4_err);
+        //         ext4_err.error() as usize
+        //     })
+        //     .unwrap()
+        //     .size as usize
+        let inode_ref = Ext4InodeRef::get_inode_ref(Arc::downgrade(fs), ino as u32);
+        inode_ref.inner.inode.inode_get_size() as usize
+    }
+
+    fn create_ext4_file(&self, offset: usize) -> Ext4File {
+        Ext4File {
+            mp: Ext4MountPoint::new("/"),
+            inode: self.meta.ino as u32,
+            flags: OpenFlag::O_RDWR.bits(),
+            fsize: self.meta.inner.lock().data_size as u64,
+            fpos: offset,
+        }
     }
 }
 
 impl Inode for Ext4Inode {
     fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            let data = self
+            // let _ = self.fs.fuse_open(self.meta.ino as u64, 0);
+            // let data = self
+            //     .fs
+            // .fuse_read(
+            //     self.meta.ino as u64,
+            //     0,
+            //     offset as i64,
+            //     buf.len() as u32,
+            //     0,
+            //     None,
+            // )
+            // .map_err(|ext4_err| {
+            //     error!("[Ext4Inode::read] {:?}", ext4_err);
+            //     ext4_err.error() as usize
+            // })?;
+            let mut read_cnt = 0usize;
+            let _ = self
                 .fs
-                .fuse_read(
-                    self.meta.ino as u64,
-                    0,
-                    offset as i64,
-                    buf.len() as u32,
-                    0,
-                    None,
+                .ext4_file_read(
+                    &mut self.create_ext4_file(offset),
+                    buf,
+                    buf.len(),
+                    &mut read_cnt,
                 )
                 .map_err(|ext4_err| {
                     error!("[Ext4Inode::read] {:?}", ext4_err);
                     ext4_err.error() as usize
                 })?;
-            buf[..data.len()].copy_from_slice(&data);
-            Ok(data.len())
+            Ok(read_cnt)
         })
     }
     fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize> {
+        // todo!();
+        // Box::pin(async move {
+        //     let data = self
+        //         .fs
+        //         .fuse_write(self.meta.ino as u64, 0, offset as i64, buf, 0, 0, None)
+        //         .map_err(|ext4_err| {
+        //             error!("[Ext4Inode::write] {:?}", ext4_err);
+        //             ext4_err.error() as usize
+        //         })?;
+        //     self.update_size();
+        //     Ok(data as usize)
+        // })
         Box::pin(async move {
-            let data = self
+            let _ = self
                 .fs
-                .fuse_write(self.meta.ino as u64, 0, offset as i64, buf, 0, 0, None)
-                .map_err(|ext4_err| {
-                    error!("[Ext4Inode::write] {:?}", ext4_err);
-                    ext4_err.error() as usize
-                })?;
+                .ext4_file_write(&mut self.create_ext4_file(offset), buf, buf.len());
             self.update_size();
-            Ok(data as usize)
+            Ok(buf.len())
         })
     }
     fn mknod(
@@ -86,29 +121,46 @@ impl Inode for Ext4Inode {
         name: &str,
         mode: InodeMode,
     ) -> SysResult<Arc<dyn Inode>> {
+        // todo!();
         if self.meta.mode != InodeMode::FileDIR {
             return Err(1);
         }
-        let new_inode_ref = if mode == InodeMode::FileDIR {
-            self.fs
-                .fuse_mkdir(self.meta.ino as u64, name, mode as u32, 0)
-                .map_err(|ext4_err| {
-                    error!("[Ext4Inode::mknod] {:?}", ext4_err);
-                    ext4_err.error() as usize
-                })
+        let new_path = self.get_meta().path.to_string() + "/" + name;
+        let new_ino = if mode == InodeMode::FileDIR {
+            // self.fs
+            //     .fuse_mkdir(self.meta.ino as u64, name, mode as u32, 0)
+            //     .map_err(|ext4_err| {
+            //         error!("[Ext4Inode::mknod] {:?}", ext4_err);
+            //         ext4_err.error() as usize
+            //     })
+            // let dir_name =
+            // let _ = self.fs.ext4_dir_mk(&new_path);
+            let mut file_out = Ext4File::new();
+            let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", false);
+            file_out.inode
         } else if mode == InodeMode::FileREG {
-            self.fs
-                .fuse_mknod(self.meta.ino as u64, name, mode as u32, 0, 0)
-                .map_err(|ext4_err| {
-                    error!("[Ext4Inode::mknod] {:?}", ext4_err);
-                    ext4_err.error() as usize
-                })
+            // self.fs
+            //     .fuse_mknod(self.meta.ino as u64, name, mode as u32, 0, 0)
+            //     .map_err(|ext4_err| {
+            //         error!("[Ext4Inode::mknod] {:?}", ext4_err);
+            //         ext4_err.error() as usize
+            //     })
+            let mut file_out = Ext4File::new();
+            let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", true);
+            file_out.inode
         } else {
-            Err(1)
-        }?;
+            // Err(1)
+            return Err(1);
+        };
         let name = self.meta.path.clone_and_append(name);
-        let ino = new_inode_ref.inode_num as usize;
-        let meta = Arc::new(InodeMeta::new(Some(this.clone()), name, mode, 0, ino));
+        // let ino = new_ino as usize;
+        let meta = Arc::new(InodeMeta::new(
+            Some(this.clone()),
+            name,
+            mode,
+            0,
+            new_ino as usize,
+        ));
         Ok(Arc::new(Ext4Inode {
             fs: self.fs.clone(),
             meta,
@@ -123,12 +175,13 @@ impl Inode for Ext4Inode {
         let mut meta_inner = self.meta.inner.lock();
         let dir_entries = self
             .fs
-            .fuse_readdir(self.meta.ino as u64, 0, 0)
-            .map_err(|ext4_err| {
-                error!("[Ext4Inode::load_children_from_disk] {:?}", ext4_err);
-                ext4_err.error() as usize
-            })
-            .unwrap();
+            // .fuse_readdir(self.meta.ino as u64, 0, 0)
+            .read_dir_entry(self.meta.ino as u64);
+        // .map_err(|ext4_err| {
+        //     error!("[Ext4Inode::load_children_from_disk] {:?}", ext4_err);
+        //     ext4_err.error() as usize
+        // })
+        // .unwrap();
         dir_entries.iter().for_each(|entry| {
             let ino = entry.inode as usize;
             // let name = String::from_utf8(Vec::from(entry.name)).unwrap();
@@ -154,7 +207,8 @@ impl Inode for Ext4Inode {
     }
 
     fn clear(&self) {
-        unimplemented!()
+        // warn!("[Ext4Inode::clear] not implemented");
+        // unimplemented!()
     }
 }
 

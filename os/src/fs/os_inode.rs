@@ -8,11 +8,14 @@ use super::inode::Inode;
 use super::path::Path;
 use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
+// use crate::drivers::block::EXT4_BLOCK_DEVICE;
 #[allow(unused)]
-use crate::drivers::block::EXT4_BLOCK_DEVICE;
 use crate::drivers::BLOCK_DEVICE;
 #[allow(unused)]
+use crate::fs::ext4::block_cache::EXT4_BLOCK_CACHE_MANAGER;
+#[allow(unused)]
 use crate::fs::ext4::fs::Ext4FileSystem;
+#[allow(unused)]
 use crate::fs::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
 // use crate::task::current_task;
@@ -21,6 +24,7 @@ use crate::utils::SyscallErr;
 use crate::SyscallRet;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
@@ -29,21 +33,11 @@ use log::{error, info};
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
 pub struct OSInode {
-    // readable: bool,
-    // writable: bool,
-    // meta: SpinNoIrqLock<FileMeta>,
     meta: FileMeta,
 }
-/// The OS inode inner in 'UPSafeCell'
-// pub struct OSInodeInner {
-//     inode: Arc<dyn Inode>,
-//     offset: usize,
-//     dentry_index: usize,
-// }
 
 impl OSInode {
     fn get_offset(&self) -> usize {
-        // self.meta.lock().offset
         self.meta.inner.lock().offset
     }
 
@@ -57,7 +51,6 @@ impl OSInode {
 
     pub fn get_path(&self) -> Path {
         self.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().path.clone())
-        // self.inode.get_meta().path.clone()
     }
 }
 
@@ -65,50 +58,36 @@ impl OSInode {
     /// Construct an OS inode from a inode
     pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Self {
         Self {
-            // readable,
-            // writable,
-            // meta: SpinNoIrqLock::new(FileMeta {
-            //     inode: Some(inode),
-            //     offset: 0,
-            //     dentry_index: 0,
-            // }),
-            // meta: FileMeta {
-            //     inner: SpinNoIrqLock::new(FileMetaInner {
-            //         inode: Some(inode),
-            //         offset: 0,
-            //         dentry_index: 0,
-            //     }),
-            // },
             meta: FileMeta::new(Some(inode), 0, 0, readable, writable),
         }
     }
     /// Read all data inside a inode into vector
+    // pub async fn read_all(&self) -> Vec<u8> {
+    //     let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
+    //     let mut buffer = [0u8; LOAD_APP_SLICE_SIZE];
+    //     let mut v: Vec<u8> = Vec::new();
+    //     loop {
+    //         let offset = self.get_offset();
+    //         let len = inode.read(offset, &mut buffer).await;
+    //         let len = len.unwrap();
+    //         if len == 0 {
+    //             break;
+    //         }
+    //         self.set_offset(offset + len);
+    //         v.extend_from_slice(&buffer[..len]);
+    //     }
+    //     v
+    // }
     pub async fn read_all(&self) -> Vec<u8> {
         let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
-        // let inode = self.inode.clone();
-        let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::new();
-        loop {
-            let offset = self.get_offset();
-            let len = inode.read(offset, &mut buffer).await;
-            let len = len.unwrap();
-            if len == 0 {
-                break;
-            }
-            self.set_offset(offset + len);
-            v.extend_from_slice(&buffer[..len]);
-        }
+        let size = inode.get_meta().inner.lock().data_size;
+        let mut v = vec![0u8; size];
+        assert!(inode.read(0, v.as_mut_slice()).await.unwrap() == size);
         v
     }
 }
 
 impl File for OSInode {
-    // fn readable(&self) -> bool {
-    //     self.readable
-    // }
-    // fn writable(&self) -> bool {
-    //     self.writable
-    // }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
             if !self.meta.readable {
@@ -129,7 +108,6 @@ impl File for OSInode {
             }
             let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
             let offset = self.get_offset();
-            // let file_size = self.meta.inner.lock().inode.unwrap().get_meta().inner.lock().data_size;
             let write_size = inode.write(offset, buf).await?;
             self.set_offset(offset + write_size);
             Ok(write_size)
@@ -146,7 +124,6 @@ impl File for OSInode {
             inner.offset = offset;
             Some(ret)
         })
-        // self.set_offset(offset);
     }
     fn ioctl(&self, _request: usize, _argp: usize) -> SyscallRet {
         error!("[OSInode] ioctl not implemented");
@@ -169,7 +146,7 @@ lazy_static! {
 lazy_static! {
     pub static ref ROOT_INODE: Arc<dyn Inode> = {
         info!("FS type: ext4");
-        Ext4FileSystem::open(EXT4_BLOCK_DEVICE.clone())
+        Ext4FileSystem::open(EXT4_BLOCK_CACHE_MANAGER.clone())
             .lock()
             .root_inode()
     };
@@ -177,13 +154,11 @@ lazy_static! {
 
 /// List all files in the filesystems
 pub fn list_apps() {
-    // println!("/**** ROOT APPS ****");
     println!("[kernel] ROOT FILES >>>");
     for app in ROOT_INODE.list().unwrap() {
         print!("{} \t", app.get_name());
     }
     println!("");
-    // println!("**************/");
 }
 
 bitflags! {
@@ -245,13 +220,6 @@ fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
     } else {
         // relative to dirfd
         let task = current_process();
-        // let ret = task.inner_lock().fd_table[dirfd as usize]
-        //     .clone()
-        //     .unwrap()
-        //     .get_meta()
-        //     .inode
-        //     .unwrap();
-        // ret
         let ret = task
             .inner_lock()
             .fd_table
@@ -272,15 +240,6 @@ fn open_cwd(dirfd: isize, path: &Path) -> SysResult<Arc<dyn Inode>> {
 
 /// Open a inode by `dirfd` and `path`
 pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<dyn Inode>> {
-    // match open_cwd(dirfd, path).open_path(path, flags.contains(OpenFlags::CREATE), false) {
-    //     Ok(inode) => {
-    //         if flags.contains(OpenFlags::TRUNC) {
-    //             inode.clear();
-    //         }
-    //         Ok(inode)
-    //     }
-    //     Err(e) => Err(e),
-    // }
     open_cwd(dirfd, path).and_then(|cwd| {
         cwd.open_path(path, flags.contains(OpenFlags::CREATE), false)
             .and_then(|inode| {
@@ -296,7 +255,13 @@ pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<
 pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     match open_inode(dirfd, path, flags) {
-        Ok(inode) => Ok(Arc::new(OSInode::new(readable, writable, inode))),
+        Ok(inode) => {
+            // debug!(
+            //     "[open_osinode] inode size: {}",
+            //     inode.get_meta().inner.lock().data_size
+            // );
+            Ok(Arc::new(OSInode::new(readable, writable, inode)))
+        }
         Err(e) => Err(e),
     }
 }
@@ -306,19 +271,11 @@ pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Ar
 pub fn open_fd(fd: usize) -> Option<Arc<dyn File>> {
     let fdinfo = current_process().inner_handler(|inner| inner.fd_table.get(fd))?;
     let file = fdinfo.file;
-    // .get_meta()
-    // .inode
-    // .ok_or(SyscallErr::EBADF as usize)?;
     Some(file)
 }
 
 /// Create a directory by `dirfd` and `path`
 pub fn create_dir(dirfd: isize, path: &Path) -> SyscallRet {
-    // match open_cwd(dirfd, path).open_path(path, false, true) {
-    //     Ok(_) => Ok(0),
-    //     Err(e) => Err(e),
-    // }
-    // open_cwd(dirfd, path).and_then(|cwd| cwd.open_path(path, false, true).and_then(|_| Ok(0)))
     let cwd_inode = open_cwd(dirfd, path)?;
     cwd_inode.open_path(path, false, true).map(|_| 0)
 }
