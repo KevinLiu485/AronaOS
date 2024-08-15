@@ -1,5 +1,6 @@
 //!Implementation of [`Thread`]
 use super::aux::*;
+use super::processor::current_thread_uncheck;
 use super::{current_trap_cx, pid_alloc, PidHandle};
 use crate::config::SyscallRet;
 use crate::fs::fd_table::{FdInfo, FdTable};
@@ -8,7 +9,7 @@ use crate::fs::tty::TtyFile;
 // use crate::fs::FileMeta;
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
-use crate::signal::{SigHandlers, SigSet};
+use crate::signal::{SigBitmap, SigHandlers, SigSet};
 use crate::syscall::process::CloneFlags;
 use crate::task::processor::current_thread;
 use crate::task::schedule::spawn_thread;
@@ -69,6 +70,13 @@ impl Process {
     }
     pub fn get_pgid(&self) -> usize {
         self.inner.lock().pgid
+    }
+
+    pub fn send_signal(&self, signo: usize) {
+        for (_, thread) in self.inner.lock().threads.iter_mut() {
+            let task = thread.upgrade().unwrap();
+            task.send_signal(signo)
+        }
     }
 
     pub fn print_all_task(&self, indent: String) {
@@ -347,6 +355,9 @@ impl ProcessInner {
     }
 }
 
+/// The reference type of a task
+pub type TaskRef = Arc<Thread>;
+
 /// [‘Thread’] 调度和任务执行的基本单位，有主线程（类似原本进程的语义）和普通线程的区分
 /// process 自己共享的资源
 pub struct Thread {
@@ -379,6 +390,17 @@ impl Thread {
 
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+
+    pub fn send_signal(&self, signo: usize) {
+        self.get_inner_mut()
+            .sig_set
+            .pending_sigs
+            .insert(SigBitmap::from_bits(1 << (signo - 1)).unwrap())
+    }
+
+    pub fn have_signals(&self) -> bool {
+        !self.get_inner_mut().sig_set.pending_sigs.is_empty()
     }
 
     /// Get the mutable ref of trap context
@@ -632,4 +654,8 @@ pub struct TidAddress {
     pub set_tid_address: Option<usize>,
     /// Clear tid address
     pub clear_tid_address: Option<usize>,
+}
+
+pub fn current_have_signals() -> bool {
+    current_thread_uncheck().have_signals()
 }

@@ -5,7 +5,7 @@ use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
 // use crate::task::current_task;
 use crate::task::processor::current_process;
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -60,7 +60,7 @@ pub async fn sys_mmap(
     offset: usize,
 ) -> SyscallRet {
     trace!("[sys_mmap] enter");
-    warn!("[sys_mmap] not fully implemented");
+    //warn!("[sys_mmap] not fully implemented");
 
     //处理参数
     // let prot = MMAPPROT::from_bits(prot as u32);
@@ -77,7 +77,7 @@ pub async fn sys_mmap(
     //     Some(flags) => flags,
     //     None => return Err(SyscallErr::EINVAL.into()),
     // };
-    let task = current_process();
+    let proc = current_process();
     trace!(
         "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}, prot: {:?}",
         start,
@@ -95,7 +95,7 @@ pub async fn sys_mmap(
     }
     // mmap区域最低地址为MMAP_MIN_ADDR
     // let mut start: usize = start.max(MMAP_MIN_ADDR);
-    let mut start = task.inner_handler(|inner| inner.memory_set.mmap_start);
+    let mut start = proc.inner_handler(|inner| inner.memory_set.mmap_start);
     let mut permission = prot.into();
     // 注意加上U权限
     permission |= MapPermission::U;
@@ -106,17 +106,21 @@ pub async fn sys_mmap(
         if fd != -1 || offset != 0 {
             return Err(SyscallErr::EINVAL.into());
         }
-        let vpn_range = task
+        let vpn_range = proc
             .inner_lock()
             .memory_set
             .get_unmapped_area(start, len)
             .ok_or(SyscallErr::ENOMEM)?;
-        task.inner_lock()
+        proc.inner_lock()
+            .memory_set
+            .insert_anonymous_area(vpn_range, permission);
+        /*
+        proc.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
-
+        */
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
-        task.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
+        proc.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
         debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
         return Ok(start);
@@ -128,22 +132,22 @@ pub async fn sys_mmap(
             return Err(SyscallErr::EINVAL.into());
         }
         // 读取文件
-        let file = task
+        let file = proc
             .inner_handler(|inner| inner.fd_table.get(fd as usize))
             .unwrap()
             .file;
-        let vpn_range = task
+        let vpn_range = proc
             .inner_lock()
             .memory_set
             .get_unmapped_area(start, len)
             .ok_or(SyscallErr::ENOMEM)?;
         //task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
-        task.inner_lock()
+        proc.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
 
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
-        task.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
+        proc.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
         // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
@@ -163,7 +167,7 @@ pub async fn sys_mmap(
 }
 
 pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
-    trace!("[sys_munmap] enter");
+    info!("[sys_munmap] start: 0x{:x}, len: 0x{:x}", start, len);
     // start必须页对齐, 且要大于等于MMAP_MIN_ADDR
     if start % PAGE_SIZE != 0 || len == 0 || start < MMAP_MIN_ADDR {
         return Err(SyscallErr::EINVAL.into());
@@ -192,4 +196,9 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
 
     // 不修改MapArea的权限，只修改页表中的权限
     current_process().inner_handler(|inner| inner.memory_set.do_mprotect(addr, len, perm))
+}
+
+/// fake implementation
+pub fn sys_madvise(addr: usize, len: usize, advise: i32) -> SyscallRet {
+    return Ok(0);
 }

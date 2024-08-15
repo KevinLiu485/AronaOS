@@ -119,10 +119,10 @@ pub fn handle_signals() {
                         ign_sig_handler();
                     }
                     SignalDefault::Stop => {
-                        todo!();
+                        unimplemented!();
                     }
                     SignalDefault::Cont => {
-                        todo!();
+                        unimplemented!();
                     }
                     SignalDefault::Core => {
                         term_sig_handler();

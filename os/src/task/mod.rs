@@ -10,7 +10,7 @@ pub(crate) mod processor;
 pub mod schedule;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
-mod task;
+pub mod task;
 
 use crate::loader::get_app_data_by_name;
 use crate::sbi::shutdown;
