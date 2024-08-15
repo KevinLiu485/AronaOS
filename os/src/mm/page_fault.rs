@@ -8,7 +8,7 @@ use crate::task::processor::current_process;
 // use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use alloc::sync::Arc;
-use log::{error, info};
+use log::error;
 
 /// call this function only when scause.cause() == Exception::LoadPageFault || Exception::StorePageFault
 /// 1. fork COW area

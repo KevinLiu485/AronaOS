@@ -24,8 +24,10 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-# FS_IMG_ROOT := $(FS_DIR)/root-2024	# packing this one is quite slow, causing by /ltp
-FS_IMG_ROOT := $(FS_DIR)/root-2024-part	# deleted dynamic-link and /ltp
+# packing this one is quite slow, causing by /ltp
+# FS_IMG_ROOT := $(FS_DIR)/root-2024
+# deleted dynamic-link and /ltp
+FS_IMG_ROOT := $(FS_DIR)/root-2024-part
 # FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
 FS_IMG := $(FS_DIR)/fs.img
 # FS_IMG := ../sdcard.img
@@ -157,7 +159,7 @@ move-cargo:
 
 submit: move-cargo build move-bin
 
-run: env build 
+run: move-cargo env build 
 	qemu-system-riscv64 $(QEMU_ARGS)
 
 last:
@@ -166,7 +168,7 @@ last:
 trace: 
 	$(MAKE) run LOG=TRACE
 
-gdbserver: env build
+gdbserver: move-cargo env build
 	qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 .PHONY: run last submit gdbserver clean trace

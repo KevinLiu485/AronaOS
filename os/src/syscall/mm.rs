@@ -5,7 +5,7 @@ use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
 // use crate::task::current_task;
 use crate::task::processor::current_process;
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -199,6 +199,7 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
 }
 
 /// fake implementation
+#[allow(unused)]
 pub fn sys_madvise(addr: usize, len: usize, advise: i32) -> SyscallRet {
     return Ok(0);
 }

@@ -21,6 +21,7 @@ extern "C" {
     fn __try_access_user_error_trap();
     #[allow(improper_ctypes)]
     fn __try_write_user_u8(user_addr: usize) -> TryOpRet;
+    #[allow(improper_ctypes)]
     fn __tray_read_user_u8(user_addr: usize) -> TryOpRet;
 }
 

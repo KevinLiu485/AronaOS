@@ -348,7 +348,7 @@ impl Ext4 {
         // Load the root inode reference
         let mut current_inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), 2);
 
-        let mount_name = self
+        let _mount_name = self
             .mount_point
             .mount_name
             .to_str()
@@ -724,7 +724,7 @@ impl Ext4 {
         let inode_size = inode_ref.inner.inode.inode_get_size();
 
         if inode_size > new_size {
-            let r = inode_ref.truncate_inode(new_size);
+            let _r = inode_ref.truncate_inode(new_size);
         }
 
         return_errno_with_message!(Errnum::ENOTSUP, "not support");
@@ -895,7 +895,7 @@ impl Ext4 {
         let mut current_inode_ref =
             Ext4InodeRef::get_inode_ref(self.self_ref.clone(), parent_inode);
 
-        let mount_name = self
+        let _mount_name = self
             .mount_point
             .mount_name
             .to_str()
