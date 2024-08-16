@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::fmt::Debug;
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 // use log::{debug, info, warn};
 use riscv::register::satp;
 
@@ -366,7 +366,7 @@ impl MemorySet {
     /// returns (memory_set, user_sp, entry_point, aux_vec).
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
         let mut memory_set = Self::new_from_global();
-        // map program headers of elf, with U flag
+        // map program headers of elf, with U flagtrace!();
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         let ph_count = elf_header.pt2.ph_count();

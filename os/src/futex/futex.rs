@@ -19,7 +19,7 @@ use crate::{
         task::{current_have_signals, TaskRef},
         yield_task,
     },
-    timer::current_time,
+    timer::current_time_duration,
     utils::SyscallErr,
     SyscallRet, PAGE_SIZE_BITS,
 };
@@ -154,7 +154,7 @@ pub async fn futex_wait(
             drop(hash_bucket);
         }
         if let Some(deadline) = deadline {
-            let now = current_time();
+            let now = current_time_duration();
             is_timeout = deadline < now;
         }
         if deadline.is_none() || !is_timeout {

@@ -34,10 +34,25 @@ impl TimeSpec {
     }
 }
 
+impl From<Duration> for TimeSpec {
+    fn from(duration: Duration) -> Self {
+        Self {
+            sec: duration.as_secs() as usize,
+            nsec: duration.subsec_nanos() as usize,
+        }
+    }
+}
+
 /// Return the current clock time in `core::time::Duration`
-pub fn current_time() -> Duration {
+pub fn current_time_duration() -> Duration {
     let time = get_time_ms();
     Duration::from_millis(time as u64)
+}
+
+/// get current time as TimeSpec
+pub fn current_time_spec() -> TimeSpec {
+    // stack_trace!();
+    current_time_duration().into()
 }
 
 ///get current time

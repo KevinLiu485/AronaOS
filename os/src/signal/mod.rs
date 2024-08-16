@@ -278,3 +278,9 @@ pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
         Ok(0)
     }
 }
+
+pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const u8) -> SyscallRet {
+    trace!("[sys_rt_sigtimedwait] is enter");
+    warn!("[sys_rt_sigtimedwait] implemented");
+    Ok(0)
+}

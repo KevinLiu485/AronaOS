@@ -19,12 +19,13 @@ use crate::fs::tty::TTY;
 use crate::fs::{
     create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
 };
+use crate::mm::user_check::UserCheck;
 // use crate::syscall::process;
 // use crate::syscall::process;
 // use crate::task::current_task;
 use crate::task::processor::current_process;
 
-use crate::timer::TimeSpec;
+use crate::timer::{current_time_duration, current_time_spec, TimeSpec};
 use crate::utils::{c_str_to_string, SyscallErr};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -568,17 +569,66 @@ pub fn sys_faccessat(fd: i32, path: *const u8, amode: u32, flag: u32) -> Syscall
     Ok(0)
 }
 
+/// for utimensat
+pub const UTIME_NOW: usize = 1073741823;
+pub const UTIME_OMIT: usize = 1073741822;
+
 pub fn sys_utimensat(
     dirfd: i32,
     pathname: *const u8,
-    _times: *const TimeSpec,
+    times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
     let path = Path::from(c_str_to_string(pathname));
     trace!("[sys_utimensat] enter. pathname: {}", path);
     warn!("[sys_utimensat] not fully implemented");
-    let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
+
+    let inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
         .map_err(|_| SyscallErr::ENOENT as usize)?;
+
+    debug!(
+        "[sys_utimensat] get inode name: {}, ino: {}",
+        inode.get_name(),
+        inode.get_meta().ino
+    );
+
+    let meta_date = inode.get_meta();
+    let mut inner_lock = meta_date.inner.lock();
+    if times.is_null() {
+        debug!("[sys_utimensat] times is null");
+        // If times is null, then both timestamps are set to the current time.
+        inner_lock.st_atim = current_time_spec();
+    } else {
+        // times[0] for atime, times[1] for mtime
+        // todo: UserCheck::new().c(times as *const u8, 2 * size_of::<TimeSpec>())?;
+        let atime = unsafe { &*times };
+        let times = unsafe { times.add(1) };
+        let mtime = unsafe { &*times };
+        // change access time
+        if atime.nsec == UTIME_NOW {
+            debug!("[sys_utimensat] atime nsec is UTIME_NOW, set to now");
+            inner_lock.st_atim = current_time_spec();
+        } else if atime.nsec == UTIME_OMIT {
+            debug!("[sys_utimensat] atime nsec is UTIME_OMIT, unchanged");
+        } else {
+            debug!("[sys_utimensat] atime normal nsec");
+            inner_lock.st_atim = *atime;
+        }
+        debug!("[sys_utimensat] atime: {:?}", inner_lock.st_atim);
+        // change modify time
+        if mtime.nsec == UTIME_NOW {
+            debug!("[sys_utimensat] mtime nsec is UTIME_NOW, set to now");
+            inner_lock.st_mtim = current_time_spec();
+        } else if mtime.nsec == UTIME_OMIT {
+            debug!("[sys_utimensat] mtime nsec is UTIME_OMIT, unchanged");
+        } else {
+            debug!("[sys_utimensat] mtime normal nsec");
+            inner_lock.st_mtim = *mtime;
+        }
+        debug!("[sys_utimensat] mtime: {:?}", inner_lock.st_mtim);
+        // change state change time
+        inner_lock.st_ctim = current_time_spec();
+    }
     Ok(0)
 }
 
@@ -704,5 +754,13 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     unsafe {
         ptr::write(fdset_ptr, fdret);
     }
+    Ok(0)
+}
+
+pub async fn sys_sync() -> SyscallRet {
+    // todo: titanix fake implementation may need to do more
+    trace!("[sys_sync] start to sync...");
+    warn!("[sys_sync] not implemented.");
+    trace!("[sys_sync] sync finished");
     Ok(0)
 }

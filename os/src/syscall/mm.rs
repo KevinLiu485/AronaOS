@@ -1,9 +1,10 @@
-use crate::mm::{MapPermission, VirtAddr};
+use crate::mm::{shm::SharedMemoryManager, MapPermission, VirtAddr};
 use crate::{config::SyscallRet, utils::SyscallErr};
 
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
 // use crate::task::current_task;
+use crate::mutex::SpinNoIrqLock;
 use crate::task::processor::current_process;
 use log::{debug, info, trace};
 
@@ -203,3 +204,22 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
 pub fn sys_madvise(addr: usize, len: usize, advise: i32) -> SyscallRet {
     return Ok(0);
 }
+
+const IPC_PRIVATE: usize = 0; // 这里定义了一个常量 IPC_PRIVATE，其值为 0。这个常量通常用于表示私有共享内存键。
+pub fn sys_shmget(
+    key: usize,    // 用于标识共享内存段。
+    len: usize,    // 共享内存段的长度。
+    _shmflag: u32, // 共享内存段的标志。（未使用）
+) -> SyscallRet {
+    trace!("[sys_shmget] start to sync...");
+
+    if key != IPC_PRIVATE {
+        panic!("[sys_shmget] unsupported operation, key {:#X}", key);
+    }
+
+    trace!("[sys_shmget] finish");
+    Ok(SHARED_MEMORY_MANAGER.lock().alloc(key, len))
+}
+
+pub static SHARED_MEMORY_MANAGER: SpinNoIrqLock<SharedMemoryManager> =
+    SpinNoIrqLock::new(SharedMemoryManager::new());

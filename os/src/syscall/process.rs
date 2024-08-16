@@ -75,12 +75,22 @@ pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
 pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
     trace!("[sys_execve] enter");
 
-    let path = Path::from(c_str_to_string(path as *const u8));
+    let mut path = Path::from(c_str_to_string(path as *const u8));
     let mut args = args as *const usize;
     let mut envs = envs as *const usize;
 
     // 下面是手动处理输入的arg
     let mut args_vec: Vec<String> = Vec::new();
+
+    if path.to_string().ends_with(".sh") {
+        path = Path::from("/busybox".to_string());
+        args_vec.push("busybox".to_string());
+        args_vec.push("sh".to_string());
+    } else if path.to_string().ends_with("sleep") || path.to_string().ends_with("ls") {
+        path = Path::from("/busybox".to_string());
+        args_vec.push("busybox".to_string());
+    }
+
     if args != null() {
         loop {
             if unsafe { *args == 0 } {
@@ -112,18 +122,6 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
 
     if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs
-        // debug!("[sys_execve] file size: {}", {
-        //     let app_file: Arc<dyn File> = app_inode.clone();
-        //     let inner = app_file.get_meta().inner.lock();
-        //     inner
-        //         .inode
-        //         .as_ref()
-        //         .unwrap()
-        //         .get_meta()
-        //         .inner
-        //         .lock()
-        //         .data_size
-        // });
         let all_data = app_inode.read_all().await;
         debug!(
             "[sys_exec] app data len: {}, checksum: {}",

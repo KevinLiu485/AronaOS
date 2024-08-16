@@ -1,5 +1,6 @@
 use alloc::{sync::Arc, vec::Vec};
 
+use crate::syscall::resource::{RLimit, RLIM_INFINITY};
 use crate::{SysResult, SyscallRet};
 
 use super::{File, OpenFlags};
@@ -22,6 +23,19 @@ impl FdInfo {
 
 pub struct FdTable {
     pub table: Vec<Option<FdInfo>>,
+
+    rlimit: RLimit,
+}
+/// max num file descriptors
+pub const MAX_FD_NUM: usize = 1024;
+impl FdTable {
+    pub fn set_rlimit(&mut self, rlimit: RLimit) {
+        self.rlimit = rlimit;
+    }
+
+    pub fn rlimit(&self) -> RLimit {
+        self.rlimit
+    }
 }
 
 impl FdTable {
@@ -59,11 +73,23 @@ impl FdTable {
 
 impl FdTable {
     pub fn new_bare() -> Self {
-        Self { table: Vec::new() }
+        Self {
+            table: Vec::new(),
+            rlimit: RLimit {
+                rlim_cur: MAX_FD_NUM,
+                rlim_max: RLIM_INFINITY,
+            },
+        }
     }
 
     pub fn new(table: Vec<Option<FdInfo>>) -> Self {
-        Self { table }
+        Self {
+            table,
+            rlimit: RLimit {
+                rlim_cur: MAX_FD_NUM,
+                rlim_max: RLIM_INFINITY,
+            },
+        }
     }
 
     /// clone fdtable and set all fdinfo with `CLOEXEC` flag to `None`  
@@ -81,6 +107,7 @@ impl FdTable {
                     }
                 })
                 .collect(),
+            rlimit: self.rlimit,
         }
     }
 

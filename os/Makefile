@@ -89,7 +89,8 @@ $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 # Pack FS_IMG_ROOT into fs.img
-fs-img: build-muslc
+#fs-img: build-muslc
+fs-img:
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
