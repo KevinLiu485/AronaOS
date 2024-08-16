@@ -128,6 +128,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         }
         loader::list_apps();
         task::add_initproc();
+        println!("hello world");
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
         // #[cfg(not(feature = "submit"))]
