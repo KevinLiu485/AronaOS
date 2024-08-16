@@ -12,14 +12,19 @@ use crate::SyscallRet;
 use crate::{MMAP_MIN_ADDR, USER_MAX_VA};
 // use crate::MMAP_MIN_ADDR;
 use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::fmt::Debug;
 use lazy_static::lazy_static;
 use log::{debug, info, trace, warn};
 // use log::{debug, info, warn};
+use crate::fs::inode::{Inode, InodeMode};
+use crate::fs::{path, OpenFlags, AT_FDCWD};
 use riscv::register::satp;
+use xmas_elf::ElfFile;
 
 #[allow(unused)]
 extern "C" {
@@ -39,6 +44,9 @@ lazy_static! {
     pub static ref KERNEL_SPACE: Arc<SpinNoIrqLock<MemorySet>> =
         Arc::new(SpinNoIrqLock::new(MemorySet::new_kernel()) );
 }
+
+/// Dynamic linked interpreter address range in user space
+pub const DL_INTERP_OFFSET: usize = 0x20_0000_0000;
 
 // /// kernel_space
 // pub static mut KERNEL_SPACE: Option<MemorySet> = None;
@@ -366,14 +374,15 @@ impl MemorySet {
     /// returns (memory_set, user_sp, entry_point, aux_vec).
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
         let mut memory_set = Self::new_from_global();
-        // map program headers of elf, with U flagtrace!();
+
+        // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
-        let ph_count = elf_header.pt2.ph_count();
         let magic = elf_header.pt1.magic;
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
 
-        // build auxv
+        let ph_count = elf_header.pt2.ph_count();
+        let mut entry_point = elf_header.pt2.entry_point() as usize;
         let mut aux_vec: Vec<AuxHeader> = Vec::with_capacity(64);
 
         aux_vec.push(AuxHeader {
@@ -388,10 +397,20 @@ impl MemorySet {
             aux_type: AT_PAGESZ,
             value: PAGE_SIZE as usize,
         });
+        // todo:
+        // if let Some(interp_entry_point) = memory_set.load_dl_interp_if_needed(&elf) {
+        //     aux_vec.push(AuxHeader {
+        //         aux_type: AT_BASE,
+        //         value: DL_INTERP_OFFSET,
+        //     });
+        //     entry_point = interp_entry_point;
+        // } else {
         aux_vec.push(AuxHeader {
             aux_type: AT_BASE,
             value: 0,
         });
+        // }
+
         aux_vec.push(AuxHeader {
             aux_type: AT_FLAGS,
             value: 0 as usize,
@@ -436,10 +455,12 @@ impl MemorySet {
             aux_type: AT_NOTELF,
             value: 0x112d as usize,
         });
-
         // map program headers
+
+        // todo:
         let mut header_va: Option<usize> = None; // used to build auxv
         let mut max_end_vpn = VirtPageNum(0);
+
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -464,18 +485,7 @@ impl MemorySet {
 
                 // BUGGY: map_offset is not considered. Elf section is NOT aligned to PAGE_SIZE
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
-                // debug!(
-                //     "[MemorySet::from_elf] map [{:?}, {:?}) with offset {:#x}",
-                //     {
-                //         let start_va: VirtAddr = map_area.vpn_range.get_start().into();
-                //         start_va
-                //     },
-                //     {
-                //         let end_va: VirtAddr = map_area.vpn_range.get_end().into();
-                //         end_va
-                //     },
-                //     map_offset,
-                // );
+
                 memory_set.push(
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
@@ -484,6 +494,7 @@ impl MemorySet {
             }
         }
 
+        // ph_head_addr
         let ph_head_addr = header_va.unwrap() + elf.header.pt2.ph_offset() as usize;
         info!(
             "[MemorySet::from_elf] AT_PHDR ph_head_addr is {:#x} ",
@@ -543,6 +554,7 @@ impl MemorySet {
             aux_vec,
         )
     }
+
     pub fn from_existed_user_lazily(user_space: &MemorySet) -> MemorySet {
         let page_table = PageTable::from_existed_user(&user_space.page_table);
         let areas = user_space.areas.clone();
@@ -610,7 +622,106 @@ impl MemorySet {
         self.areas.clear();
         self.heap = None;
     }
+    // fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> Option<usize> {
+    //     return None;
+    //     trace!("[load_dl_interp_if_needed] enter");
+    //     let elf_header = elf.header;
+    //     let ph_count = elf_header.pt2.ph_count();
+    //
+    //     let mut is_dynamic_link = false;
+    //
+    //     // - 检查ELF文件是否为动态链接。
+    //     for i in 0..ph_count {
+    //         let ph = elf.program_header(i).unwrap();
+    //         if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
+    //             // Interp：表示解释器路径，通常是一个动态链接器的路径。
+    //             // 如果找到了，就跳出去
+    //             is_dynamic_link = true;
+    //             break;
+    //         }
+    //     }
+    //
+    //     if is_dynamic_link {
+    //         info!("[load_dl] encounter a dl elf");
+    //         // - 查找并读取 .interp 节，获取动态链接器路径。
+    //         let section = elf.find_section_by_name(".interp").unwrap();
+    //         // 把对应动态链接加载器
+    //         let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+    //         interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
+    //
+    //         info!("[load_dl] interp {}", interp);
+    //         let mut interps: Vec<String> = vec![interp.clone()];
+    //         info!("interp {}", interp);
+    //
+    //         // - 处理特定动态链接器路径。
+    //         if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
+    //             interps.push("/libc.so".to_string());
+    //             interps.push("/lib/libc.so".to_string());
+    //         }
+    //
+    //         // - 解析动态链接器路径，找到对应的inode。
+    //         let mut interp_inode = None;
+    //         for interp in interps {
+    //             if let Some(inode) = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY).ok() {
+    //                 interp_inode = Some(inode);
+    //                 break;
+    //             }
+    //         }
+    //         let interp_inode = interp_inode.unwrap();
+    //
+    //         // - 打开并读取动态链接器文件内容。
+    //         let interp_file = interp_inode.open(interp_inode.clone()).ok().unwrap();
+    //         let mut interp_elf_data = Vec::new();
+    //         interp_file
+    //             .read_all_from_start(&mut interp_elf_data)
+    //             .ok()
+    //             .unwrap();
+    //         let interp_elf = ElfFile::new(&interp_elf_data).unwrap();
+    //         // - 将动态链接器的ELF文件映射到内存中。
+    //         self.map_elf(&interp_elf, Some(&interp_file), DL_INTERP_OFFSET.into());
+    //
+    //         // - 返回动态链接器的入口点地址。
+    //         Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET)
+    //     } else {
+    //         debug!("[load_dl] encounter a static elf");
+    //         None
+    //     }
+    // }
 }
+
+// pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> Arc<dyn Inode> {
+//     let (inode, path, parent) = path::path_to_inode(dirfd, Some(path))?;
+//     if inode.is_some() {
+//         return Ok(inode.unwrap());
+//     }
+//     if flags.contains(OpenFlags::CREATE) {
+//         let parent = match parent {
+//             Some(parent) => parent,
+//             None => {
+//                 let parent_path = path::get_parent_dir(&path).unwrap();
+//                 <dyn Inode>::lookup_from_root(&parent_path)
+//                     .ok()
+//                     .unwrap()
+//                     .0
+//                     .unwrap()
+//             }
+//         };
+//         let child_name = path::get_name(&path);
+//         debug!("create file {}", path);
+//         let res = {
+//             if flags.contains(OpenFlags::DIRECTORY) {
+//                 parent.mkdir_v(child_name, InodeMode::FileDIR).unwrap()
+//             } else {
+//                 // TODO dev id
+//                 parent.mknod_v(child_name, InodeMode::FileREG).unwrap()
+//             }
+//         };
+//         Ok(res)
+//     } else {
+//         warn!("parent dir {} doesn't exist", path);
+//         return Err(SyscallErr::ENOENT);
+//     }
+// }
 /// map area structure, controls a contiguous piece of virtual memory
 #[derive(Clone)]
 pub struct MapArea {
