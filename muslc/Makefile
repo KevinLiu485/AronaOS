@@ -2,6 +2,7 @@ NPROC = 8
 MUSL_PREFIX = riscv64-linux-musl
 MUSL_GCC = $(MUSL_PREFIX)-gcc
 MUSL_STRIP = $(MUSL_PREFIX)-strip
+
 SRCS = $(wildcard src/*.c)
 BINS = $(patsubst src/%.c,bin/%,$(SRCS))
 

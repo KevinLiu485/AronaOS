@@ -79,6 +79,8 @@ const SYS_CLOCK_GETRES: usize = 114;
 const SYS_FUTEX: usize = 202;
 const SYS_MADVISE: usize = 233;
 
+const SCHED_SETAFFINITY: usize = 122;
+
 mod fs;
 mod mm;
 pub(crate) mod process;
@@ -212,6 +214,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+
+        SCHED_SETAFFINITY => Ok(0),
         _ => unknown(syscall_id),
     }
 }
