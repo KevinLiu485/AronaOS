@@ -66,7 +66,7 @@ pub fn sys_clock_gettime(clock_id: usize, tp: *mut TimeSpec) -> SyscallRet {
     );
     warn!("[sys_clock_gettime] not fully implemented");
     match clock_id {
-        CLOCK_REALTIME => {
+        CLOCK_REALTIME | 1 => {
             let time_ms = get_time_ms();
             // debug!("[sys_clock_gettime] get_time_ms: {}", time_ms);
             let time_spec = TimeSpec {

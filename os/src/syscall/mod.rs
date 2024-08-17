@@ -76,7 +76,7 @@ const SYS_SCHED_GETPARAM: usize = 121;
 const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
-const SYS_FUTEX: usize = 202;
+const SYS_FUTEX: usize = 98;
 const SYS_MADVISE: usize = 233;
 
 // 我干的
