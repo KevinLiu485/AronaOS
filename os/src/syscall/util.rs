@@ -177,61 +177,58 @@ pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
 /// * remain: *mut TimeSecs存储剩余睡眠时间。当任务提前醒来时,如果flags不为绝对时间,且remain不为空,则将剩余存储时间存进remain所指向地址。
 ///
 /// 若睡眠被信号处理打断或者遇到未知错误，则返回对应错误码
-pub fn syscall_clock_nanosleep(
+pub async fn syscall_clock_nanosleep(
     _id: usize,
-    flags: usize,
-    request: *const TimeSpec,
-    remain: *mut TimeSpec,
+    _flags: usize,
+    request: usize,
+    _remain: usize,
 ) -> SyscallRet {
+    trace!("[sys_nanosleep] enter");
+    let sleep_ms = {
+        let request = request as *const TimeSpec;
+        let time_val = unsafe { &(*request) };
+        time_val.sec * 1000 + time_val.nsec / 1000000
+    };
+    crate::timer::TimeoutFuture::new(core::time::Duration::from_millis(sleep_ms as u64)).await
+
     // // let id = args[0];
     // // let flags = args[1];
     // let request = args[2] as *const TimeSecs;
     // let remain = args[3] as *mut TimeSecs;
-    const TIMER_ABSTIME: usize = 1;
-    // let id = if let Ok(opt) = ClockId::try_from(id) {
-    //     opt
+    // const TIMER_ABSTIME: usize = 1;
+
+    // let process = current_process();
+    // // REVIEW: 这里的request没有实现sized但出问题再说
+    // let vpn = VirtAddr::from(request as usize).floor();
+
+    // // REVIEW: manual_alloc_for_lazy本来应该存在错误情况,但你没写之后可能出事
+    // process.inner_lock().memory_set.manual_alloc_for_lazy(vpn);
+    // let request_time = unsafe { *request };
+    // let request_time = core::time::Duration::new(request_time.sec as u64, request_time.nsec as u32);
+    // let deadline = if flags != TIMER_ABSTIME {
+    //     crate::timer::current_time() + request_time
     // } else {
-    //     return Err(SyscallErr::EINVAL as usize);
+    //     if request_time < crate::timer::current_time() {
+    //         return Ok(0);
+    //     }
+    //     request_time
     // };
 
-    // if id != ClockId::CLOCK_MONOTONIC {
-    //     // 暂时不支持其他类型
-    //     axlog::warn!("Unsupported clock id: {:?}", id);
+    // // REVIEW: 这里的类型转换从u128到usize可能会有问题
+    // // crate::timer::TimeoutFuture::new(deadline).await?;
+
+    // let current_time = crate::timer::current_time();
+    // if current_time < deadline && !remain.is_null() {
+    //     let vpn = VirtAddr::from(remain as usize).floor();
+    //     process.inner.lock().memory_set.manual_alloc_for_lazy(vpn);
+    //     let delta = (deadline - current_time).as_nanos() as usize;
+    //     unsafe {
+    //         *remain = TimeSpec {
+    //             sec: delta / 1_000_000_000,
+    //             nsec: delta % 1_000_000_000,
+    //         }
+    //     };
+    //     return Err(SyscallErr::EINTR as usize);
     // }
-
-    let process = current_process();
-    // REVIEW: 这里的request没有实现sized但出问题再说
-    let vpn = VirtAddr::from(request as usize).floor();
-
-    // REVIEW: manual_alloc_for_lazy本来应该存在错误情况,但你没写之后可能出事
-    process.inner.lock().memory_set.manual_alloc_for_lazy(vpn);
-    let request_time = unsafe { *request };
-    let request_time = core::time::Duration::new(request_time.sec as u64, request_time.nsec as u32);
-    let deadline = if flags != TIMER_ABSTIME {
-        crate::timer::current_time() + request_time
-    } else {
-        if request_time < crate::timer::current_time() {
-            return Ok(0);
-        }
-        request_time
-    };
-
-    //REVIEW: 这里的类型转换从u128到usize可能会有问题
-
-    // crate::timer::TimeoutFuture::new(deadline).await?;
-
-    let current_time = crate::timer::current_time();
-    if current_time < deadline && !remain.is_null() {
-        let vpn = VirtAddr::from(remain as usize).floor();
-        process.inner.lock().memory_set.manual_alloc_for_lazy(vpn);
-        let delta = (deadline - current_time).as_nanos() as usize;
-        unsafe {
-            *remain = TimeSpec {
-                sec: delta / 1_000_000_000,
-                nsec: delta % 1_000_000_000,
-            }
-        };
-        return Err(SyscallErr::EINTR as usize);
-    }
-    Ok(0)
+    // Ok(0)
 }

@@ -215,9 +215,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
-        CLOCK_NANOSLEEP => {
-            util::syscall_clock_nanosleep(args[0], args[1], args[2] as *const _, args[3] as *mut _)
-        }
+        CLOCK_NANOSLEEP => util::syscall_clock_nanosleep(args[0], args[1], args[2], args[3]).await,
 
         SCHED_SETAFFINITY => Ok(0),
 
