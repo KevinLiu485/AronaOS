@@ -11,8 +11,8 @@
 #  		By default, AronaOS will run in release mode.
 # - `IMG`: Run with `IMG=fs.img` to specify the filesystem image, without packing img.
 #		By default, AronaOS will first pack then run with `$(FS_DIR)/fs.img`.
-# - `FS`: Run with `FS=ext4` to specify the filesystem type.
-# 		By default, AronaOS will run with fat32.
+# - `FS`: Run with `FS=fat32` to specify the filesystem type.
+# 		By default, AronaOS will run with ext4.
 
 # Building
 TARGET := riscv64gc-unknown-none-elf
@@ -39,7 +39,7 @@ KTEST :=
 SMP := 2
 IMG := 
 MEM_SIZE = 128M
-FS := fat32
+FS := ext4
 
 # BOARD
 BOARD := qemu

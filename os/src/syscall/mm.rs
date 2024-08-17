@@ -5,7 +5,7 @@ use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
 // use crate::task::current_task;
 use crate::task::processor::current_process;
-use log::{debug, info, trace};
+use log::{info, trace};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -101,7 +101,7 @@ pub async fn sys_mmap(
     permission |= MapPermission::U;
     // 匿名映射
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        debug!("[sys_mmap] anonymous mmap");
+        log::info!("[sys_mmap] anonymous mmap");
         //需要fd为-1, offset为0
         if fd != -1 || offset != 0 {
             return Err(SyscallErr::EINVAL.into());
@@ -122,10 +122,10 @@ pub async fn sys_mmap(
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
         proc.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
-        debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
+        // debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
         return Ok(start);
     } else {
-        debug!("[sys_mmap] file mmap");
+        log::info!("[sys_mmap] file mmap");
         // 文件映射
         // 需要offset为page aligned
         if offset % PAGE_SIZE != 0 {
@@ -160,10 +160,9 @@ pub async fn sys_mmap(
             // file is seekable, then seek back
             file.seek(origin_offset);
         }
-        debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
+        // debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
         return Ok(start);
     }
-    // todo!()
 }
 
 pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
@@ -173,7 +172,6 @@ pub fn sys_munmap(start: usize, len: usize) -> SyscallRet {
         return Err(SyscallErr::EINVAL.into());
     }
     current_process().inner_handler(|inner| inner.memory_set.do_unmap(start, len));
-    debug!("[sys_munmap] success");
     Ok(0)
 }
 
@@ -187,7 +185,6 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> SyscallRet {
         prot
     );
     if addr % PAGE_SIZE != 0 || len == 0 {
-        debug!("[sys_mprotect] EINVAL");
         return Err(SyscallErr::EINVAL.into());
     }
     // 先要检查是否有权限

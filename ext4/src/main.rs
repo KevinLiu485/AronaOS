@@ -181,10 +181,10 @@ pub fn main() {
     //file remove
     log::info!("----file remove----");
     let path = "test_files/file_to_remove";
-    let r = ext4.ext4_file_remove(&path);
+    let _r = ext4.ext4_file_remove(&path);
 
     //dir remove
     log::info!("----dir remove----");
     let path = "dir_to_remove";
-    let r = ext4.ext4_dir_remove(2, &path);
+    let _r = ext4.ext4_dir_remove(2, &path);
 }

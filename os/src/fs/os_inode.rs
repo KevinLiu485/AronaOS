@@ -1,14 +1,7 @@
-//! `Arc<Inode>` -> `OSInodeInner`: In order to open files concurrently
-//! we need to wrap `Inode` into `Arc`,but `Mutex` in `Inode` prevents
-//! file systems from being accessed simultaneously
-//!
-//! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
-//! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::inode::Inode;
+use super::inode::{Inode, InodeMode};
 use super::path::Path;
 use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
-// use crate::drivers::block::EXT4_BLOCK_DEVICE;
 #[allow(unused)]
 use crate::drivers::BLOCK_DEVICE;
 #[allow(unused)]
@@ -18,7 +11,6 @@ use crate::fs::ext4::fs::Ext4FileSystem;
 #[allow(unused)]
 use crate::fs::fat32::fs::FAT32FileSystem;
 use crate::fs::AT_FDCWD;
-// use crate::task::current_task;
 use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use crate::SyscallRet;
@@ -56,28 +48,24 @@ impl OSInode {
 
 impl OSInode {
     /// Construct an OS inode from a inode
-    pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Self {
-        Self {
-            meta: FileMeta::new(Some(inode), 0, 0, readable, writable),
+    pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Option<Self> {
+        // recursively follow symlink
+        let inode_meta = inode.get_meta();
+        if inode_meta.mode == InodeMode::FileLNK {
+            let rel_target_path = inode_meta.link_target.as_ref().unwrap();
+            let abs_target_path = inode_meta.path.append_to_dir(rel_target_path);
+            log::debug!(
+                "[OSInode::new] symlink: {} -> {}",
+                inode.get_name(),
+                abs_target_path
+            );
+            let target_inode = open_inode(AT_FDCWD, &abs_target_path, OpenFlags::empty()).ok()?;
+            return Self::new(readable, writable, target_inode);
         }
+        Some(Self {
+            meta: FileMeta::new(Some(inode), 0, 0, readable, writable),
+        })
     }
-    /// Read all data inside a inode into vector
-    // pub async fn read_all(&self) -> Vec<u8> {
-    //     let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
-    //     let mut buffer = [0u8; LOAD_APP_SLICE_SIZE];
-    //     let mut v: Vec<u8> = Vec::new();
-    //     loop {
-    //         let offset = self.get_offset();
-    //         let len = inode.read(offset, &mut buffer).await;
-    //         let len = len.unwrap();
-    //         if len == 0 {
-    //             break;
-    //         }
-    //         self.set_offset(offset + len);
-    //         v.extend_from_slice(&buffer[..len]);
-    //     }
-    //     v
-    // }
     pub async fn read_all(&self) -> Vec<u8> {
         let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
         let size = inode.get_meta().inner.lock().data_size;
@@ -102,7 +90,6 @@ impl File for OSInode {
     }
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            // debug!("[OSInode::write] buf: {:?}", buf);
             if !self.meta.writable {
                 return Err(SyscallErr::EBADF.into());
             }
@@ -255,13 +242,10 @@ pub fn open_inode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<
 pub fn open_osinode(dirfd: isize, path: &Path, flags: OpenFlags) -> SysResult<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     match open_inode(dirfd, path, flags) {
-        Ok(inode) => {
-            // debug!(
-            //     "[open_osinode] inode size: {}",
-            //     inode.get_meta().inner.lock().data_size
-            // );
-            Ok(Arc::new(OSInode::new(readable, writable, inode)))
-        }
+        Ok(inode) => match OSInode::new(readable, writable, inode) {
+            Some(osinode) => Ok(Arc::new(osinode)),
+            None => Err(SyscallErr::ENOENT.into()),
+        },
         Err(e) => Err(e),
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     SyscallRet,
 };
 use core::time::Duration;
-use log::{debug, error};
+use log::error;
 
 use flags::*;
 use futex::{futex_requeue, futex_wait, futex_wake, futex_wake_bitset};
@@ -48,8 +48,8 @@ pub async fn sys_futex(
     // TODO: shared futex and real time clock
     // It's Ok for ananonymous mmap to use private futex
     if (flags & FLAGS_SHARED) != 0 {
-        debug!(
-            "shared futex is not supported, but it's ok for anonymous mmap to use private futex"
+        log::info!(
+            "[sys_futex] shared futex is not supported, but it's ok for anonymous mmap to use private futex"
         );
     }
     if (flags & FLAGS_CLOCKRT) != 0 {

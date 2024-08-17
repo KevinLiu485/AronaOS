@@ -6,7 +6,6 @@ use crate::config::SyscallRet;
 use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
 use crate::fs::tty::TtyFile;
-// use crate::fs::FileMeta;
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::signal::{SigBitmap, SigHandlers, SigSet};
@@ -19,13 +18,12 @@ use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-// use async_task::Task;
 use core::cell::UnsafeCell;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::info;
 
 lazy_static! {
     /// 包括PROCESS，以及thread的
@@ -330,7 +328,10 @@ pub fn new_initproc(elf_data: &[u8]) -> Arc<Thread> {
         .insert(process.getpid(), Arc::downgrade(&process));
     // todo: group manager
 
-    debug!("create a new process, pid {}", process.getpid());
+    log::info!(
+        "[new_initproc] create a new process, pid {}",
+        process.getpid()
+    );
     thread
 }
 
