@@ -1,12 +1,13 @@
-use log::{error, trace, warn};
-
+use crate::mm::VirtAddr;
 use crate::{
     ctypes::*,
+    task::processor::current_process,
     timer::{get_time_ms, TimeSpec},
     utils::SyscallErr,
     SyscallRet,
 };
 use core::{mem::size_of, ptr};
+use log::{error, trace, warn};
 
 /// fake uname  
 /// Todo?:
@@ -65,7 +66,7 @@ pub fn sys_clock_gettime(clock_id: usize, tp: *mut TimeSpec) -> SyscallRet {
     );
     warn!("[sys_clock_gettime] not fully implemented");
     match clock_id {
-        CLOCK_REALTIME => {
+        CLOCK_REALTIME | 1 => {
             let time_ms = get_time_ms();
             // debug!("[sys_clock_gettime] get_time_ms: {}", time_ms);
             let time_spec = TimeSpec {
@@ -160,6 +161,74 @@ pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
     warn!("[sys_clock_getres] not fully implemented");
     unsafe {
         res.write_volatile(TimeSpec { sec: 0, nsec: 1 });
+    }
+    Ok(0)
+}
+
+/// # 指定任务进行睡眠
+///
+/// # Arguments
+/// * id: usize,指定使用的时钟ID,对应结构体为ClockId
+///
+/// * flags: usize,指定是使用相对时间还是绝对时间
+///
+/// * request: *const TimeSecs指定睡眠的时间,根据flags划分为相对时间或者绝对时间
+///
+/// * remain: *mut TimeSecs存储剩余睡眠时间。当任务提前醒来时,如果flags不为绝对时间,且remain不为空,则将剩余存储时间存进remain所指向地址。
+///
+/// 若睡眠被信号处理打断或者遇到未知错误，则返回对应错误码
+pub async fn syscall_clock_nanosleep(
+    _id: usize,
+    flags: usize,
+    request: usize,
+    remain: usize,
+) -> SyscallRet {
+    trace!("[syscall_clock_nanosleep] enter");
+    // let sleep_ms = {
+    //     let request = request as *const TimeSpec;
+    //     let time_val = unsafe { &(*request) };
+    //     time_val.sec * 1000 + time_val.nsec / 1000000
+    // };
+    // crate::timer::TimeoutFuture::new(core::time::Duration::from_millis(sleep_ms as u64)).await
+
+    // // let id = args[0];
+    // // let flags = args[1];
+    // let request = args[2] as *const TimeSecs;
+    // let remain = args[3] as *mut TimeSecs;
+    const TIMER_ABSTIME: usize = 1;
+
+    let process = current_process();
+    // REVIEW: 这里的request没有实现sized但出问题再说
+    let vpn = VirtAddr::from(request as usize).floor();
+
+    // REVIEW: manual_alloc_for_lazy本来应该存在错误情况,但你没写之后可能出事
+    process.inner_lock().memory_set.manual_alloc_for_lazy(vpn);
+    let request_time = unsafe { *(request as *const TimeSpec) };
+    let request_time = core::time::Duration::new(request_time.sec as u64, request_time.nsec as u32);
+    let deadline = if flags != TIMER_ABSTIME {
+        crate::timer::current_time() + request_time
+    } else {
+        if request_time < crate::timer::current_time() {
+            return Ok(0);
+        }
+        request_time
+    };
+
+    // REVIEW: 这里的类型转换从u128到usize可能会有问题
+    crate::timer::TimeoutFuture::new(deadline).await?;
+
+    let current_time = crate::timer::current_time();
+    if current_time < deadline && !(remain as *mut TimeSpec).is_null() {
+        let vpn = VirtAddr::from(remain as usize).floor();
+        process.inner.lock().memory_set.manual_alloc_for_lazy(vpn);
+        let delta = (deadline - current_time).as_nanos() as usize;
+        unsafe {
+            *(remain as *mut TimeSpec) = TimeSpec {
+                sec: delta / 1_000_000_000,
+                nsec: delta % 1_000_000_000,
+            }
+        };
+        return Err(SyscallErr::EINTR as usize);
     }
     Ok(0)
 }

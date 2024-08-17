@@ -76,6 +76,17 @@ const SYS_SCHED_GETPARAM: usize = 121;
 const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
+const SYS_FUTEX: usize = 98;
+const SYS_MADVISE: usize = 233;
+const SYS_PRLIMIT: usize = 261;
+const SYS_SIGTIMEDWAIT: usize = 137;
+const SYS_TKILL: usize = 130;
+const SYS_GETAFFINITY: usize = 122;
+const SYS_CLOCK_NANOSLEEP: usize = 115;
+
+// 我干的
+const SCHED_SETAFFINITY: usize = 122;
+const CLOCK_NANOSLEEP: usize = 115;
 
 mod fs;
 mod mm;
@@ -91,6 +102,7 @@ use util::{sys_clock_getres, sys_clock_gettime, sys_get_time, sys_sysinfo, sys_t
 
 use crate::{
     config::SyscallRet,
+    futex::sys_futex,
     signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
 };
 
@@ -195,6 +207,27 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // Weird bug, you cannot enter shell with next line enabled.
         SYS_SCHED_SETSCHEDULER => dummy(SYS_SCHED_SETSCHEDULER, "sys_sched_setscheduler"),
         SYS_CLOCK_GETRES => sys_clock_getres(args[0], args[1] as *mut _),
+        SYS_MADVISE => sys_madvise(args[0], args[1], args[2] as i32),
+        SYS_PRLIMIT => dummy(SYS_PRLIMIT, "prlimit64"),
+        SYS_SIGTIMEDWAIT => dummy(SYS_SIGTIMEDWAIT, "sigtimedwait"),
+        //SYS_TKILL => sys_tkill(args[0], args[1]),
+        SYS_GETAFFINITY => dummy(SYS_GETAFFINITY, "getaffinity"),
+
+        SYS_FUTEX => {
+            sys_futex(
+                args[0],
+                args[1] as i32,
+                args[2] as u32,
+                args[3],
+                args[4],
+                args[5] as u32,
+            )
+            .await
+        }
+        CLOCK_NANOSLEEP => util::syscall_clock_nanosleep(args[0], args[1], args[2], args[3]).await,
+
+        SCHED_SETAFFINITY => Ok(0),
+
         _ => unknown(syscall_id),
     }
 }

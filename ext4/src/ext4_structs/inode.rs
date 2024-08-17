@@ -1075,7 +1075,7 @@ impl Ext4InodeRef {
         let diff_blocks_cnt = old_blocks_cnt - new_blocks_cnt;
 
         if diff_blocks_cnt > 0 {
-            let r = self.extent_remove_space(new_blocks_cnt, EXT_MAX_BLOCKS as u32);
+            let _r = self.extent_remove_space(new_blocks_cnt, EXT_MAX_BLOCKS as u32);
         }
 
         self.inner.inode.ext4_inode_set_size(new_size as u64);
@@ -1150,7 +1150,7 @@ impl Ext4InodeRef {
             if leaf_to > to {
                 leaf_to = to;
             }
-            let r = self.ext_remove_leaf(path, leaf_from, leaf_to);
+            let _r = self.ext_remove_leaf(path, leaf_from, leaf_to);
 
             // let node =  ExtentTreeNode::load_from_header(&self.inner.inode.block[..]);
         }
@@ -1158,7 +1158,7 @@ impl Ext4InodeRef {
         let header = Ext4ExtentHeader::try_from(&self.inner.inode.block[..]).unwrap();
 
         if header.entries_count == 0 {
-            let mut header = Ext4ExtentHeader::try_from_u32(&mut self.inner.inode.block[..]);
+            let _header = Ext4ExtentHeader::try_from_u32(&mut self.inner.inode.block[..]);
             self.inner.inode.block[3..].fill(0);
             self.write_back_inode();
         }
@@ -1302,8 +1302,8 @@ impl Ext4InodeRef {
     fn ext_correct_indexes(&mut self, path: &mut Vec<Ext4ExtentPath>) -> Result<usize> {
         let depth = unsafe { self.inner.inode.extent_depth() } as usize;
 
-        let mut ex = path[depth].extent;
-        let mut header = path[depth].header;
+        let ex = path[depth].extent;
+        let header = path[depth].header;
 
         if ex.is_null() || header.is_null() {
             return_errno_with_message!(Errnum::EIO, "no header");
@@ -1337,7 +1337,8 @@ impl Ext4InodeRef {
         Ok(EOK)
     }
 
-    fn ext_remove_idx(&mut self, path: &mut Vec<Ext4ExtentPath>, depth: i32) -> Result<usize> {
+    #[allow(unused)]
+    fn ext_remove_idx(&mut self, _path: &mut Vec<Ext4ExtentPath>, _depth: i32) -> Result<usize> {
         Ok(EOK)
     }
 
@@ -1431,7 +1432,7 @@ impl Ext4InodeRef {
         let ino_index = self.inode_num;
         let ino_gen = 0 as u32;
 
-        let mut csum = 0;
+        let mut csum;
 
         let uuid = s.uuid;
 

@@ -14,6 +14,13 @@ __try_write_user_u8:
     ret 
     .align 2
 
+__try_read_user_u8:
+    mv a1, a0
+    mv a0, zero
+    lb a1, 0(a1)
+    ret
+    .align 2
+
 // if pagefault, return: (a0, a1) <- (1, scause)
     .align 6
 __try_access_user_error_trap:

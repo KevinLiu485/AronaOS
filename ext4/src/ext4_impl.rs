@@ -536,7 +536,7 @@ impl Ext4 {
         let bgid = self.ext4_ialloc_get_bgid_of_inode(index);
         let block_device = self.block_device.clone();
         let raw_data = self.block_device.read_offset(BASE_OFFSET);
-        let mut super_block = Ext4Superblock::try_from(raw_data).unwrap();
+        let super_block = Ext4Superblock::try_from(raw_data).unwrap();
         let mut bg =
             Ext4BlockGroup::load(block_device.clone(), &super_block, bgid as usize).unwrap();
 
@@ -593,10 +593,10 @@ impl Ext4 {
             block_data: &mut data,
             dirty: true,
         };
-        let mut de = Ext4DirEntry::default();
+        let de = Ext4DirEntry::default();
         let mut dir_search_result = Ext4DirSearchResult::new(ext4_blk, de);
 
-        let r = self.dir_find_entry_new(
+        let _r = self.dir_find_entry_new(
             parent,
             &path[..len as usize],
             len as u32,
@@ -620,7 +620,7 @@ impl Ext4 {
         let mut pde =
             Ext4DirEntry::from_u8(&mut ext4_block.block_data[dir_search_result.last_offset..]);
 
-        let mut de_del =
+        let de_del =
             Ext4DirEntry::from_u8(&mut ext4_block.block_data[dir_search_result.offset..]);
 
         pde.entry_len += de_del.entry_len;

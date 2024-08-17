@@ -24,7 +24,9 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-# FS_IMG_ROOT := $(FS_DIR)/root
+# packing this one is quite slow, causing by /ltp
+# FS_IMG_ROOT := $(FS_DIR)/root-2024
+# deleted dynamic-link and /ltp
 FS_IMG_ROOT := $(FS_DIR)/root-2024-part
 # FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
 FS_IMG := $(FS_DIR)/fs.img
@@ -86,11 +88,12 @@ env:
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-# Pack FS_IMG_ROOT into FAT32 fs.img
+# Pack FS_IMG_ROOT into fs.img
 fs-img: build-muslc
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+#	@dd if=/dev/zero of=$(FS_IMG) count=2048 bs=1M
 ifeq ($(FS), ext4)
 	@mkfs.ext4 $(FS_IMG)
 	@mkdir -p mnt
@@ -156,7 +159,7 @@ move-cargo:
 
 submit: move-cargo build move-bin
 
-run: env build 
+run: move-cargo env build 
 	qemu-system-riscv64 $(QEMU_ARGS)
 
 last:
@@ -165,7 +168,7 @@ last:
 trace: 
 	$(MAKE) run LOG=TRACE
 
-gdbserver: env build
+gdbserver: move-cargo env build
 	qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 .PHONY: run last submit gdbserver clean trace

@@ -1,6 +1,7 @@
 //! RISC-V timer-related functionality
 
 use crate::config::{SyscallRet, CLOCK_FREQ};
+use crate::ctypes::NSEC_PER_SEC;
 use crate::sbi::set_timer;
 use core::future::Future;
 use core::pin::Pin;
@@ -27,6 +28,16 @@ impl TimeSpec {
             nsec: current_time % 1000000 * 1000000,
         }
     }
+    /// turn the TimeSecs to nano seconds
+    pub fn turn_to_nanos(&self) -> usize {
+        self.sec * NSEC_PER_SEC + self.nsec
+    }
+}
+
+/// Return the current clock time in `core::time::Duration`
+pub fn current_time() -> Duration {
+    let time = get_time_ms();
+    Duration::from_millis(time as u64)
 }
 
 ///get current time

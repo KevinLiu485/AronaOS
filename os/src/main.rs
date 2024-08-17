@@ -34,6 +34,7 @@ mod drivers;
 mod executor;
 // pub mod fat32;
 pub mod fs;
+pub mod futex;
 pub mod lang_items;
 pub mod loader;
 pub mod logging;
@@ -104,6 +105,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("#+#     #+# #+#    #+# #+#    #+# #+#   #+#+# #+#     #+#       #+#    #+# #+#    #+# ");
         println!("###     ### ###    ###  ########  ###    #### ###     ###        ########   ########  ");
         println!("");
+        println!("hello world");
         print!("\u{1B}[0m");
 
         // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
@@ -126,6 +128,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         }
         loader::list_apps();
         task::add_initproc();
+        println!("hello world");
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
         // #[cfg(not(feature = "submit"))]
