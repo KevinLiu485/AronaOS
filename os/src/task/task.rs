@@ -190,7 +190,7 @@ impl Process {
         child
             .inner_lock()
             .threads
-            .insert(child_main_thread.pid.0, Arc::downgrade(&child_main_thread));
+            .insert(child_main_thread.tid.0, Arc::downgrade(&child_main_thread));
 
         // 因为信号，加到线程统一管理
         PROCESS_MANAGER
@@ -324,7 +324,7 @@ pub fn new_initproc(elf_data: &[u8]) -> Arc<Thread> {
         .inner
         .lock()
         .threads
-        .insert(thread.getpid(), Arc::downgrade(&thread));
+        .insert(thread.get_tid(), Arc::downgrade(&thread));
     PROCESS_MANAGER
         .lock()
         .insert(process.getpid(), Arc::downgrade(&process));
@@ -362,7 +362,7 @@ pub type TaskRef = Arc<Thread>;
 /// process 自己共享的资源
 pub struct Thread {
     /// immutable
-    pid: Arc<IdHandle>,
+    tid: Arc<IdHandle>,
     /// 自己属于的进程
     pub process: Arc<Process>,
     /// mutable
@@ -388,8 +388,8 @@ impl Thread {
         self.get_inner_mut().tid_addr.clear_tid_address = Some(tidptr);
     }
 
-    pub fn getpid(&self) -> usize {
-        self.pid.0
+    pub fn get_tid(&self) -> usize {
+        self.tid.0
     }
 
     pub fn send_signal(&self, signo: usize) {
@@ -430,7 +430,7 @@ impl Thread {
         };
 
         let thread = Self {
-            pid: tid.clone(),
+            tid: tid.clone(),
             is_terminated: Default::default(),
             process: process.clone(),
             // user_specified_stack,
@@ -462,7 +462,7 @@ impl Thread {
         pid: Arc<IdHandle>,
     ) -> Self {
         Self {
-            pid: pid.clone(),
+            tid: pid.clone(),
             is_terminated: Default::default(),
             process: new_process.clone(),
             inner: UnsafeCell::new(ThreadInner {

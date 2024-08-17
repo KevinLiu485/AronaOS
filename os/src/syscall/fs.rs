@@ -80,7 +80,6 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -> SyscallRet {
     trace!("[sys_openat] enter.");
-    // let task = current_task().unwrap();
     let process = current_process();
     let path = Path::from(c_str_to_string(pathname));
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
@@ -88,6 +87,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
         "[sys_openat] dirfd: {}, pathname: {}, flags: {:?}",
         dirfd, path, flags,
     );
+
     if let Ok(osinode) = open_osinode(dirfd, &path, flags) {
         let mode = osinode.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().mode);
         if mode == InodeMode::FileDIR
@@ -106,12 +106,12 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
             process
                 .inner_lock()
                 .fd_table
-                .alloc_and_set(0, FdInfo::default_flags(TTY.clone()))
+                .alloc_and_set(0, FdInfo::default_flags(TTY.clone()))?
         } else {
             process
                 .inner_lock()
                 .fd_table
-                .alloc_and_set(0, FdInfo::default_flags(osinode))
+                .alloc_and_set(0, FdInfo::default_flags(osinode))?
         };
         info!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
@@ -215,7 +215,7 @@ pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
     trace!(
         "[sys_getdents64] enter. fd: {}, buf: {:#x}, len: {}",
         fd,
-        dirp as usize,
+        dirp,
         size
     );
     let file = open_fd(fd).ok_or(SyscallErr::EBADF)?;
@@ -242,10 +242,10 @@ pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
 }
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
-    trace!("[sys_dup] enter");
+    debug!("[sys_dup] enter, fd: {}", fd);
     let task = current_process();
-
     let ret = task.inner_lock().fd_table.alloc_and_dup(fd, 0);
+    debug!("[sys_dup] return, ret: {:?}", ret);
     ret
 }
 
@@ -278,21 +278,30 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     trace!("[sys_pipe2] enter");
     let process = current_process();
     let pipe_pair = Pipe::new_pair();
-    let fdret = process.inner_handler(|inner| {
-        // let fd1 = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
-        // let fd2 = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
-        let fd1 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()));
-        let fd2 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()));
-        (fd1, fd2)
-    });
-    /* the FUCKING user fd is `i32` type! */
-    let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    // let fdret = process.inner_handler(|inner| {
+    //     // let fd1 = inner.fd_table.allocate(0);
+    //     // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
+    //     // let fd2 = inner.fd_table.allocate(0);
+    //     // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
+    //     let fd1 = inner
+    //         .fd_table
+    //         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()))?;
+    //     let fd2 = inner
+    //         .fd_table
+    //         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()))?;
+    //     (fd1, fd2)
+    // });
+    let fd1 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()))?;
+    let fd2 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()))?; // let fdret = (fd1, fd2);
+                                                                        /* the FUCKING user fd is `i32` type! */
+    // let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    let fdret: [i32; 2] = [fd1 as i32, fd2 as i32];
     let fdset_ptr = fdset as *mut [i32; 2];
     unsafe {
         ptr::write(fdset_ptr, fdret);
@@ -579,6 +588,7 @@ pub fn sys_utimensat(
     times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
+    // return Ok(0);
     let path = Path::from(c_str_to_string(pathname));
     trace!("[sys_utimensat] enter. pathname: {}", path);
     warn!("[sys_utimensat] not fully implemented");
@@ -740,16 +750,25 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     );
     let process = current_process();
     let socket_pair = Pipe::new_socketpair();
-    let fdret = process.inner_handler(|inner| {
-        let fd1 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()));
-        let fd2 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()));
-        (fd1, fd2)
-    });
-    let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    // let fdret = process.inner_handler(|inner| {
+    //     let fd1 = inner
+    //         .fd_table
+    //         .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()))?;
+    //     let fd2 = inner
+    //         .fd_table
+    //         .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()))?;
+    //     (fd1, fd2)
+    // });
+    let fd1 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()))?;
+    let fd2 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()))?;
+    // let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    let fdret = [fd1 as i32, fd2 as i32];
     let fdset_ptr = sv as *mut [i32; 2];
     unsafe {
         ptr::write(fdset_ptr, fdret);

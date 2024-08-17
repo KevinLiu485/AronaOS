@@ -1,5 +1,6 @@
 use core::fmt::Display;
 
+use crate::config::SysResult;
 use crate::fs::inode::Inode;
 use crate::fs::AT_FDCWD;
 use crate::task::processor::current_process;
@@ -94,114 +95,6 @@ impl Path {
         ret
     }
 }
-pub type GeneralRet<T> = Result<T, SyscallErr>;
-// pub fn path_to_inode(
-//     dirfd: isize,
-//     path: Option<&str>,
-// ) -> GeneralRet<(Option<Arc<dyn Inode>>, String, Option<Arc<dyn Inode>>)> {
-//     match path {
-//         None => {
-//             match dirfd {
-//                 AT_FDCWD => {
-//                     debug!("[path_to_inode] path is null and dirfd is AT_FDCWD");
-//                     return current_process().inner_handler(|proc| {
-//                         // If it have file, it must have inode
-//                         let (target, parent) = <dyn Inode>::lookup_from_root(&proc.cwd)?;
-//                         Ok((target, proc.cwd.clone(), parent))
-//                     });
-//                 }
-//                 _ => {
-//                     debug!("[path_to_inode] path is null and dirfd is not AT_FDCWD");
-//                     return current_process().inner_handler(|proc| {
-//                         let wd_file = proc.fd_table.get_ref(dirfd as usize);
-//                         match wd_file {
-//                             Some(wd_file) => {
-//                                 let inode = wd_file.file.metadata().inner.lock().inode.clone();
-//                                 match inode {
-//                                     None => Err(SyscallErr::EBADF),
-//                                     Some(inode) => Ok((
-//                                         Some(inode.clone()),
-//                                         inode.metadata().path.clone(),
-//                                         None,
-//                                     )),
-//                                 }
-//                             }
-//                             None => {
-//                                 log::info!("[path_to_inode] no file for fd {}", dirfd);
-//                                 Err(SyscallErr::EBADF)
-//                             }
-//                         }
-//                     });
-//                 }
-//             }
-//         }
-//
-//         Some(path) => {
-//             debug!("[path_to_inode] path is not null");
-//             debug!("[path_to_inode] get path: {}", path);
-//             let mut path = format(&path);
-//             debug!("[path_to_inode] get format path: {}", path);
-//             if path.eq("/sys/kernel/debug/kcov") {
-//                 log::info!("[path_to_inode] match /sys/kernel/debug/kcov change to /sys/kcov");
-//                 // let path = "/sys/kcov".to_string();
-//                 return Ok((
-//                     Some(K_COV_INODE.get_unchecked_mut().as_ref().unwrap().clone()),
-//                     path,
-//                     None,
-//                 ));
-//             };
-//             debug!("[path_to_inode] path is: {}", path);
-//             if is_relative_path(&path) {
-//                 if dirfd != AT_FDCWD {
-//                     debug!("[path_to_inode] path is releative and dirfd isn't AT_FDCWD");
-//                     return current_process().inner_handler(|proc| {
-//                         let wd_file = proc.fd_table.get_ref(dirfd as usize);
-//                         match wd_file {
-//                             Some(wd_file) => {
-//                                 let inode = wd_file.file.metadata().inner.lock().inode.clone();
-//                                 if inode.is_none() {
-//                                     return Err(SyscallErr::ENOENT);
-//                                 }
-//                                 let inode = inode.unwrap();
-//                                 if check_double_dot(&path) {
-//                                     // path has ..
-//                                     // parent is not sure, return None
-//                                     let path = change_relative_to_absolute(&path, &proc.cwd);
-//                                     let (target, parent) = <dyn Inode>::lookup_from_root(&path)?;
-//                                     Ok((target, path, parent))
-//                                 } else {
-//                                     // the path doesn't have ..
-//                                     // inode is the parent which should be returned
-//                                     let path = remove_dot(&path);
-//                                     let absolute_path =
-//                                         change_relative_to_absolute(&path, &proc.cwd);
-//                                     let target = inode.lookup_from_current(&path)?;
-//                                     Ok((target, absolute_path, Some(inode)))
-//                                 }
-//                             }
-//                             None => Err(SyscallErr::EBADF),
-//                         }
-//                     });
-//                 } else {
-//                     debug!("[path_to_inode] path is releative and dirfd is AT_FDCWD");
-//                     return current_process().inner_handler(|proc| {
-//                         let path = change_relative_to_absolute(&path, &proc.cwd);
-//                         let (target, parent) = <dyn Inode>::lookup_from_root(&path)?;
-//                         Ok((target, path, parent))
-//                     });
-//                 }
-//             } else {
-//                 debug!("[path_to_inode] path is absolute");
-//                 if path.eq("/dev/shm/testshm") {
-//                     debug!("[path_to_inode] just for libc-test");
-//                     path = "/testshm".to_string();
-//                 }
-//                 let (target, parent) = <dyn Inode>::lookup_from_root(&path)?;
-//                 Ok((target, path, parent))
-//             }
-//         }
-//     }
-// }
 
 pub fn remove_dot(path: &str) -> String {
     let path_vec: Vec<&str> = path

@@ -106,6 +106,10 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("###     ### ###    ###  ########  ###    #### ###     ###        ########   ########  ");
         println!("");
         println!("hello world!");
+        println!("hello world!");
+        println!("hello world!");
+        println!("hello world!");
+        println!("hello world!");
         print!("\u{1B}[0m");
 
         // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启

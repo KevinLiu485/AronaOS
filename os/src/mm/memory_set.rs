@@ -3,7 +3,7 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
+use crate::config::{SysResult, KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;
 use crate::signal::sigreturn_trampoline;
 use crate::task::aux::*;
@@ -22,7 +22,8 @@ use lazy_static::lazy_static;
 use log::{debug, info, trace, warn};
 // use log::{debug, info, warn};
 use crate::fs::inode::{Inode, InodeMode};
-use crate::fs::{path, OpenFlags, AT_FDCWD};
+use crate::fs::{open_inode, path, File, OSInode, OpenFlags, AT_FDCWD};
+use crate::utils::block_on::block_on;
 use riscv::register::satp;
 use xmas_elf::ElfFile;
 
@@ -397,19 +398,19 @@ impl MemorySet {
             aux_type: AT_PAGESZ,
             value: PAGE_SIZE as usize,
         });
-        // todo:
-        // if let Some(interp_entry_point) = memory_set.load_dl_interp_if_needed(&elf) {
-        //     aux_vec.push(AuxHeader {
-        //         aux_type: AT_BASE,
-        //         value: DL_INTERP_OFFSET,
-        //     });
-        //     entry_point = interp_entry_point;
-        // } else {
-        aux_vec.push(AuxHeader {
-            aux_type: AT_BASE,
-            value: 0,
-        });
-        // }
+
+        if let Some(interp_entry_point) = memory_set.load_dl_interp_if_needed(&elf) {
+            aux_vec.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: DL_INTERP_OFFSET,
+            });
+            entry_point = interp_entry_point;
+        } else {
+            aux_vec.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: 0,
+            });
+        }
 
         aux_vec.push(AuxHeader {
             aux_type: AT_FLAGS,
@@ -622,106 +623,145 @@ impl MemorySet {
         self.areas.clear();
         self.heap = None;
     }
-    // fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> Option<usize> {
-    //     return None;
-    //     trace!("[load_dl_interp_if_needed] enter");
-    //     let elf_header = elf.header;
-    //     let ph_count = elf_header.pt2.ph_count();
-    //
-    //     let mut is_dynamic_link = false;
-    //
-    //     // - 检查ELF文件是否为动态链接。
-    //     for i in 0..ph_count {
-    //         let ph = elf.program_header(i).unwrap();
-    //         if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
-    //             // Interp：表示解释器路径，通常是一个动态链接器的路径。
-    //             // 如果找到了，就跳出去
-    //             is_dynamic_link = true;
-    //             break;
-    //         }
-    //     }
-    //
-    //     if is_dynamic_link {
-    //         info!("[load_dl] encounter a dl elf");
-    //         // - 查找并读取 .interp 节，获取动态链接器路径。
-    //         let section = elf.find_section_by_name(".interp").unwrap();
-    //         // 把对应动态链接加载器
-    //         let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
-    //         interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
-    //
-    //         info!("[load_dl] interp {}", interp);
-    //         let mut interps: Vec<String> = vec![interp.clone()];
-    //         info!("interp {}", interp);
-    //
-    //         // - 处理特定动态链接器路径。
-    //         if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
-    //             interps.push("/libc.so".to_string());
-    //             interps.push("/lib/libc.so".to_string());
-    //         }
-    //
-    //         // - 解析动态链接器路径，找到对应的inode。
-    //         let mut interp_inode = None;
-    //         for interp in interps {
-    //             if let Some(inode) = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY).ok() {
-    //                 interp_inode = Some(inode);
-    //                 break;
-    //             }
-    //         }
-    //         let interp_inode = interp_inode.unwrap();
-    //
-    //         // - 打开并读取动态链接器文件内容。
-    //         let interp_file = interp_inode.open(interp_inode.clone()).ok().unwrap();
-    //         let mut interp_elf_data = Vec::new();
-    //         interp_file
-    //             .read_all_from_start(&mut interp_elf_data)
-    //             .ok()
-    //             .unwrap();
-    //         let interp_elf = ElfFile::new(&interp_elf_data).unwrap();
-    //         // - 将动态链接器的ELF文件映射到内存中。
-    //         self.map_elf(&interp_elf, Some(&interp_file), DL_INTERP_OFFSET.into());
-    //
-    //         // - 返回动态链接器的入口点地址。
-    //         Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET)
-    //     } else {
-    //         debug!("[load_dl] encounter a static elf");
-    //         None
-    //     }
-    // }
+
+    fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> Option<usize> {
+        trace!("[load_dl_interp_if_needed] enter");
+        let elf_header = elf.header;
+        let ph_count = elf_header.pt2.ph_count();
+
+        let mut is_dynamic_link = false;
+
+        // - 检查ELF文件是否为动态链接。
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
+                // Interp：表示解释器路径，通常是一个动态链接器的路径。
+                is_dynamic_link = true;
+                break;
+            }
+        }
+
+        if is_dynamic_link {
+            info!("[load_dl] encounter a dl elf");
+            // - 查找并读取 .interp 节，获取动态链接器路径。
+            let section = elf.find_section_by_name(".interp").unwrap();
+            // 把对应动态链接加载器
+            let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+            interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
+
+            info!("[load_dl] interp {}", interp);
+            let mut interps: Vec<String> = vec![interp.clone()];
+            info!("interp {}", interp);
+
+            // - 处理特定动态链接器路径。
+            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
+                interps.push("/libc.so".to_string());
+                interps.push("/lib/libc.so".to_string());
+            }
+
+            // - 解析动态链接器路径，找到对应的inode。
+            let mut interp_inode = None;
+            for interp in interps {
+                if let Some(inode) = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY).ok() {
+                    interp_inode = Some(inode);
+                    break;
+                }
+            }
+            let interp_inode = interp_inode.unwrap();
+
+            // - 打开并读取动态链接器文件内容。
+            let interp_osinode = OSInode::new(true, false, interp_inode);
+            let interp_elf_data = block_on(interp_osinode.read_all());
+
+            // - 将动态链接器的ELF文件映射到内存中。
+            let interp_elf = ElfFile::new(&interp_elf_data).unwrap();
+
+            self.map_elf(&interp_elf, DL_INTERP_OFFSET.into());
+
+            // - 返回动态链接器的入口点地址。
+            Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET)
+        } else {
+            debug!("[load_dl] encounter a static elf");
+            None
+        }
+    }
+
+    fn map_elf(&mut self, elf: &ElfFile, offset: VirtAddr) -> (VirtPageNum, VirtAddr) {
+        // 获取ELF文件的头部信息和程序头的数量。
+        let elf_header = elf.header;
+        let ph_count = elf_header.pt2.ph_count();
+
+        // 初始化一些变量，包括最大结束虚拟页号max_end_vpn，头部虚拟地址header_va，以及一个标志has_found_header_va。
+        // 记录ELF文件的入口点
+        let mut max_end_vpn = offset.floor();
+        let mut header_va = 0;
+        let mut has_found_header_va = false;
+        info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+
+        // 遍历所有的程序头，对于类型为Load的程序头，计算起始和结束虚拟地址，并根据权限标志设置映射权限。
+        // 创建一个新的VmArea对象，并根据是否需要写权限和页面缓存的存在，决定是懒惰映射还是立即映射。
+        // 更新最大结束虚拟页号max_end_vpn。
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                let start_va: VirtAddr = (ph.virtual_addr() as usize + offset.0).into();
+                let end_va: VirtAddr =
+                    ((ph.virtual_addr() + ph.mem_size()) as usize + offset.0).into();
+
+                if !has_found_header_va {
+                    header_va = start_va.0;
+                    has_found_header_va = true;
+                }
+
+                let ph_flags = ph.flags();
+                let mut map_perm = MapPermission::U;
+                if ph_flags.is_read() {
+                    map_perm |= MapPermission::R;
+                }
+                if ph_flags.is_write() {
+                    map_perm |= MapPermission::W;
+                }
+                if ph_flags.is_execute() {
+                    map_perm |= MapPermission::X;
+                }
+
+                let vm_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+                max_end_vpn = vm_area.vpn_range.get_end();
+
+                let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
+                self.areas.push(vm_area.clone());
+
+                self.push(
+                    vm_area,
+                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                    map_offset,
+                );
+            }
+        }
+
+        // 返回最大结束虚拟页号和头部虚拟地址。
+        (max_end_vpn, header_va.into())
+    }
 }
 
-// pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> Arc<dyn Inode> {
-//     let (inode, path, parent) = path::path_to_inode(dirfd, Some(path))?;
-//     if inode.is_some() {
-//         return Ok(inode.unwrap());
-//     }
-//     if flags.contains(OpenFlags::CREATE) {
-//         let parent = match parent {
-//             Some(parent) => parent,
-//             None => {
-//                 let parent_path = path::get_parent_dir(&path).unwrap();
-//                 <dyn Inode>::lookup_from_root(&parent_path)
-//                     .ok()
-//                     .unwrap()
-//                     .0
-//                     .unwrap()
-//             }
-//         };
-//         let child_name = path::get_name(&path);
-//         debug!("create file {}", path);
-//         let res = {
-//             if flags.contains(OpenFlags::DIRECTORY) {
-//                 parent.mkdir_v(child_name, InodeMode::FileDIR).unwrap()
-//             } else {
-//                 // TODO dev id
-//                 parent.mknod_v(child_name, InodeMode::FileREG).unwrap()
-//             }
-//         };
-//         Ok(res)
-//     } else {
-//         warn!("parent dir {} doesn't exist", path);
-//         return Err(SyscallErr::ENOENT);
-//     }
-// }
+// - 将动态链接器的ELF文件映射到内存中。
+// let interp_file = interp_inode.open(interp_inode.clone()).ok().unwrap();
+// let mut interp_elf_data = Vec::new();
+// interp_file
+//     .read_all_from_start(&mut interp_elf_data)
+//     .ok()
+//     .unwrap();
+// let interp_elf = ElfFile::new(&interp_elf_data).unwrap();
+
+pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> SysResult<Arc<dyn Inode>> {
+    debug!(
+        "resolve_path: dirfd: {}, path: {}, flags: {:?},",
+        dirfd, path, flags
+    );
+    open_inode(dirfd, &path.to_string().into(), flags)
+}
+
 /// map area structure, controls a contiguous piece of virtual memory
 #[derive(Clone)]
 pub struct MapArea {

@@ -42,7 +42,7 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
 
 pub fn sys_getpid() -> SyscallRet {
     trace!("[sys_getpid] enter");
-    Ok(current_thread().unwrap().getpid())
+    Ok(current_thread().unwrap().get_tid())
 }
 
 pub fn sys_getppid() -> SyscallRet {
@@ -321,7 +321,8 @@ pub fn sys_clone(
 bitflags! {
     /// Open file flags
     pub struct CloneFlags: u32 {
-        /// SIGCHLD 是一个信号，在UNIX和类UNIX操作系统中，当一个子进程改变了它的状态时，内核会向其父进程发送这个信号。这个信号可以用来通知父进程子进程已经终止或者停止了。父进程可以采取适当的行动，比如清理资源或者等待子进程的状态。
+        /// SIGCHLD 是一个信号，在UNIX和类UNIX操作系统中，当一个子进程改变了它的状态时，内核会向其父进程发送这个信号。
+        /// 这个信号可以用来通知父进程子进程已经终止或者停止了。父进程可以采取适当的行动，比如清理资源或者等待子进程的状态。
         /// 以下是SIGCHLD信号的一些常见用途：
         /// 子进程终止：当子进程结束运行时，无论是正常退出还是因为接收到信号而终止，操作系统都会向其父进程发送SIGCHLD信号。
         /// 资源清理：父进程可以处理SIGCHLD信号来执行清理工作，例如释放子进程可能已经使用的资源。
@@ -371,7 +372,7 @@ pub fn sys_set_tid_address(tidptr: *const usize) -> SyscallRet {
 
     let thread = current_thread().unwrap();
     thread.get_inner_mut().tid_addr.clear_tid_address = Some(tidptr as usize);
-    Ok(thread.getpid())
+    Ok(thread.get_tid())
 }
 
 // pub fn sys_getuid() -> SyscallRet {
@@ -400,8 +401,7 @@ pub fn sys_getpgid(pid: i32) -> SyscallRet {
 
 pub fn sys_gettid() -> SyscallRet {
     trace!("[sys_gettid] enter");
-    warn!("[sys_gettid] not fully implemented");
-    sys_getpid()
+    Ok(current_thread().unwrap().get_tid())
 }
 
 // pub fn sys_sched_getaffinity() -> SyscallRet {

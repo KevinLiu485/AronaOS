@@ -62,9 +62,9 @@ pub fn exit_current(exit_code: i32) {
 
     let mut process_inner = process.inner_lock();
     process_inner.exit_code = exit_code; // Record exit code
-    process_inner.threads.remove(&current_thread.getpid());
+    process_inner.threads.remove(&current_thread.get_tid());
 
-    PROCESS_MANAGER.lock().remove(&current_thread.getpid());
+    PROCESS_MANAGER.lock().remove(&current_thread.get_tid());
 
     if process_inner.threads.len() <= 0 {
         process.is_zombie.store(true, Relaxed);

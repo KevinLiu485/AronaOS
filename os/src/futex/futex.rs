@@ -129,7 +129,7 @@ pub async fn futex_wait(
 ) -> SyscallRet {
     info!(
         "[futex_wait] current task: {:?}, vaddr: {:?}, flags: {:?}, val: {:?}, deadline: {:?}",
-        current_thread_uncheck().getpid(),
+        current_thread_uncheck().get_tid(),
         vaddr,
         flags,
         expected_val,
@@ -164,11 +164,11 @@ pub async fn futex_wait(
         // If we were woken (and unqueued), we succeeded, whatever.
         // We doesn't care about the reason of wakeup if we were unqueued.
         let mut hash_bucket = FUTEXQUEUES.buckets[futex_hash(&key)].lock();
-        let cur_id = current_thread_uncheck().getpid();
+        let cur_id = current_thread_uncheck().get_tid();
         //if let Some(idx) = hash_bucket.iter().position(|futex_q| futex_q.task.id().as_u64() == cur_id) {
         if let Some(idx) = hash_bucket
             .iter()
-            .position(|futex_q| futex_q.task.getpid() == cur_id)
+            .position(|futex_q| futex_q.task.get_tid() == cur_id)
         {
             hash_bucket.remove(idx);
             if is_timeout {
@@ -202,7 +202,7 @@ pub async fn futex_wake(vaddr: VirtAddr, flags: i32, nr_waken: u32) -> SyscallRe
             hash_bucket.retain(|futex_q| {
                 if ret < nr_waken && futex_q.key == key {
                     //let wake_up = WAIT_FOR_FUTEX.notify_task(&futex_q.task);
-                    info!("wake up task {:?}", futex_q.task.getpid());
+                    info!("wake up task {:?}", futex_q.task.get_tid());
                     ret += 1;
                     return false;
                 }
