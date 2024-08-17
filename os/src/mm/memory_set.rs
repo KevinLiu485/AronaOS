@@ -115,18 +115,25 @@ impl MemorySet {
     }
 
     /// allocate physical frame, update pagetable entry, insert frame into area.data_frames
-    pub fn manual_alloc_for_lazy(&mut self, vpn: VirtPageNum) {
+    /// only used for anonymous
+    pub fn manual_alloc_for_lazy(&mut self, vpn: VirtPageNum) -> Result<(), SyscallErr> {
         if let Some(pte) = self.page_table.find_pte(vpn) {
-            for area in self.areas.iter_mut().rev() {
-                if area.vpn_range.contains(vpn) {
-                    let frame = frame_alloc().unwrap();
-                    let ppn = frame.ppn;
-                    info!("[manual_alloc_for_lazy] vpn: {:?}, ppn: {:?}", vpn, ppn);
-                    *pte = PageTableEntry::new(ppn, pte.flags());
-                    area.data_frames.insert(vpn, Arc::new(frame));
+            if pte.ppn() == PhysPageNum::from(0) {
+                for area in self.areas.iter_mut().rev() {
+                    if area.vpn_range.contains(vpn) {
+                        let frame = frame_alloc().unwrap();
+                        let ppn = frame.ppn;
+                        info!("[manual_alloc_for_lazy] vpn: {:?}, ppn: {:?}", vpn, ppn);
+                        *pte = PageTableEntry::new(ppn, pte.flags());
+                        area.data_frames.insert(vpn, Arc::new(frame));
+                        return Ok(());
+                    }
                 }
+            } else {
+                return Ok(());
             }
         }
+        return Err(SyscallErr::EINVAL);
     }
 
     ///Remove `MapArea` that starts with `start_vpn`
