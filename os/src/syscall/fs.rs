@@ -574,11 +574,11 @@ pub fn sys_utimensat(
     _times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
-    let path = Path::from(c_str_to_string(pathname));
-    trace!("[sys_utimensat] enter. pathname: {}", path);
-    warn!("[sys_utimensat] not fully implemented");
-    let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
-        .map_err(|_| SyscallErr::ENOENT as usize)?;
+    // let path = Path::from(c_str_to_string(pathname));
+    // trace!("[sys_utimensat] enter. pathname: {}", path);
+    // warn!("[sys_utimensat] not fully implemented");
+    // let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
+    //     .map_err(|_| SyscallErr::ENOENT as usize)?;
     Ok(0)
 }
 

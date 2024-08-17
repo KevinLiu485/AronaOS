@@ -7,6 +7,7 @@ use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
 use crate::fs::tty::TtyFile;
 // use crate::fs::FileMeta;
+use crate::mm::VirtAddr;
 use crate::mm::{MemorySet, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
 use crate::signal::{SigBitmap, SigHandlers, SigSet};
@@ -90,6 +91,11 @@ impl Process {
                 child.print_all_task(indent.clone() + "  ")
             }
         }
+    }
+
+    pub fn manual_alloc_for_lazy(&self, addr: VirtAddr) -> Result<(), crate::utils::SyscallErr> {
+        let vpn = addr.floor();
+        self.inner.lock().memory_set.manual_alloc_for_lazy(vpn)
     }
 
     /// 目前的语义，主线程切换到另一个任务，其余的所有线程直接kill了。【注意不是当前线程，而是主线程】
