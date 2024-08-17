@@ -180,7 +180,7 @@ pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
 pub async fn syscall_clock_nanosleep(
     _id: usize,
     flags: usize,
-    request: *const TimeSpec,
+    request: usize,
     remain: usize,
 ) -> SyscallRet {
     trace!("[syscall_clock_nanosleep] enter");
