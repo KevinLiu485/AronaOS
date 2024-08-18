@@ -76,7 +76,8 @@ const SYS_SCHED_GETPARAM: usize = 121;
 const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
-const SYS_FUTEX: usize = 202;
+// const SYS_FUTEX: usize = 202;
+// const SYS_FUTEX: usize = 98;
 const SYS_MADVISE: usize = 233;
 // const SYS_PRLIMIT: usize = 261;
 // const SYS_SIGTIMEDWAIT: usize = 137;
@@ -241,17 +242,17 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_FSYNC => dummy(SYS_FSYNC, "fsync"),
         SYS_FTRUNCATE64 => dummy(SYS_FTRUNCATE64, "ftruncate64"),
 
-        SYS_FUTEX => {
-            sys_futex(
-                args[0],
-                args[1] as i32,
-                args[2] as u32,
-                args[3],
-                args[4],
-                args[5] as u32,
-            )
-            .await
-        }
+        // SYS_FUTEX => {
+        //     sys_futex(
+        //         args[0],
+        //         args[1] as i32,
+        //         args[2] as u32,
+        //         args[3],
+        //         args[4],
+        //         args[5] as u32,
+        //     )
+        //     .await
+        // }
         SYS_MEMBARRIER => dummy(SYS_MEMBARRIER, "sys_mem_barrier"),
         SYS_STATFS => dummy(SYS_STATFS, "sys_statfs"),
         SYS_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),

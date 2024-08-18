@@ -118,10 +118,10 @@ pub fn handle_recoverable_page_fault(
         // COW_handle_END
         else {
             // lazy allocation: mmap region
-            log::debug!(
-                "[handle_lazy_allocation_page_fault] lazy alloc, vpn: {:#x}",
-                vpn.0
-            );
+            // log::debug!(
+            //     "[handle_lazy_allocation_page_fault] lazy alloc, vpn: {:#x}",
+            //     vpn.0
+            // );
             if pte.ppn() == PhysPageNum::from(0) {
                 //info!("handle mmap anonamous areas");
                 let process = current_process();
