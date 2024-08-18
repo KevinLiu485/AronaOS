@@ -1,5 +1,7 @@
 use alloc::{boxed::Box, sync::Arc};
+use core::str::Utf8Error;
 use lazy_static::lazy_static;
+use log::trace;
 // use log::debug;
 
 use crate::{
@@ -75,7 +77,7 @@ impl File for TtyFile {
             if !self.meta.writable {
                 return Err(SyscallErr::EBADF.into());
             }
-            print!("{}", core::str::from_utf8(buf).unwrap());
+            print!("{}", core::str::from_utf8(buf).unwrap_or("<invalid utf8>"));
             Ok(buf.len())
         })
     }

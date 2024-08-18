@@ -76,10 +76,28 @@ const SYS_SCHED_GETPARAM: usize = 121;
 const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
+const SYS_FUTEX: usize = 202;
+const SYS_MADVISE: usize = 233;
+const SYS_PRLIMIT: usize = 261;
+const SYS_SIGTIMEDWAIT: usize = 137;
+const SYS_TKILL: usize = 130;
+const SYS_GETAFFINITY: usize = 122;
+const SYS_CLOCK_NANOSLEEP: usize = 115;
+const SYS_READLINKAT: usize = 78;
+const SYS_SYNC: usize = 81;
+const SYS_FSYNC: usize = 82;
+const SYS_FTRUNCATE64: usize = 46;
+
+const SYS_SHMGET: usize = 194;
+const SYS_RT_SIGTIMEDWAIT: usize = 137;
+const SYS_PRLIMIT64: usize = 261;
+const SYS_MEMBARRIER: usize = 283;
+const SYS_STATFS: usize = 43;
 
 mod fs;
 mod mm;
 pub(crate) mod process;
+pub(crate) mod resource;
 mod util;
 
 use fs::*;
@@ -89,8 +107,11 @@ use process::*;
 pub use process::{WaitFuture, WaitOption};
 use util::{sys_clock_getres, sys_clock_gettime, sys_get_time, sys_sysinfo, sys_times, sys_uname};
 
+use crate::signal::sys_rt_sigtimedwait;
+use crate::syscall::resource::{sys_prlimit64, RLimit};
 use crate::{
     config::SyscallRet,
+    futex::sys_futex,
     signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
 };
 
@@ -192,9 +213,47 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as u32,
             args[3] as usize,
         ),
+        SYS_SYNC => sys_sync().await,
+        SYS_SHMGET => sys_shmget(args[0], args[1], args[2] as u32),
+        SYS_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(
+            args[0] as *const u32,
+            args[1] as *const u8,
+            args[2] as *const u8,
+        ),
+        SYS_PRLIMIT64 => sys_prlimit64(
+            args[0],
+            args[1] as u32,
+            args[2] as *const RLimit,
+            args[3] as *mut RLimit,
+        ),
         // Weird bug, you cannot enter shell with next line enabled.
         SYS_SCHED_SETSCHEDULER => dummy(SYS_SCHED_SETSCHEDULER, "sys_sched_setscheduler"),
         SYS_CLOCK_GETRES => sys_clock_getres(args[0], args[1] as *mut _),
+        SYS_GETTID => sys_getpid(),
+        SYS_MADVISE => sys_madvise(args[0], args[1], args[2] as i32),
+        SYS_PRLIMIT => dummy(SYS_PRLIMIT, "prlimit64"),
+        SYS_SIGTIMEDWAIT => dummy(SYS_SIGTIMEDWAIT, "sigtimedwait"),
+        //SYS_TKILL => sys_tkill(args[0], args[1]),
+        SYS_GETAFFINITY => dummy(SYS_GETAFFINITY, "getaffinity"),
+        SYS_READLINKAT => dummy(SYS_READLINKAT, "readlinkat"),
+        SYS_SYNC => dummy(SYS_SYNC, "sync"),
+        SYS_FSYNC => dummy(SYS_FSYNC, "fsync"),
+        SYS_FTRUNCATE64 => dummy(SYS_FTRUNCATE64, "ftruncate64"),
+
+        SYS_FUTEX => {
+            sys_futex(
+                args[0],
+                args[1] as i32,
+                args[2] as u32,
+                args[3],
+                args[4],
+                args[5] as u32,
+            )
+            .await
+        }
+        SYS_MEMBARRIER => dummy(SYS_MEMBARRIER, "sys_mem_barrier"),
+        SYS_STATFS => dummy(SYS_STATFS, "sys_statfs"),
+
         _ => unknown(syscall_id),
     }
 }

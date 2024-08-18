@@ -19,7 +19,7 @@ use crate::{
         task::{current_have_signals, TaskRef},
         yield_task,
     },
-    timer::current_time,
+    timer::current_time_duration,
     utils::SyscallErr,
     SyscallRet, PAGE_SIZE_BITS,
 };
@@ -90,10 +90,20 @@ impl FutexRobustList {
     }
 }
 
+// pub fn futex_get_value_locked(vaddr: VirtAddr) -> SyscallRet {
+//     let uaddr: usize = vaddr.into();
+//     let real_futex_val: u32 = unsafe { (uaddr as *const u32).read_volatile() };
+//     Ok(real_futex_val as usize)
+// }
+
 pub fn futex_get_value_locked(vaddr: VirtAddr) -> SyscallRet {
-    let uaddr: usize = vaddr.into();
-    let real_futex_val: u32 = unsafe { (uaddr as *const u32).read_volatile() };
-    Ok(real_futex_val as usize)
+    let proc = current_process();
+    if proc.manual_alloc_for_lazy(vaddr).is_ok() {
+        let uaddr: usize = vaddr.into();
+        let real_futex_val: u32 = unsafe { (uaddr as *const u32).read_volatile() };
+        return Ok(real_futex_val as usize);
+    }
+    Err(SyscallErr::EFAULT as usize)
 }
 
 pub fn get_futex_key(uaddr: VirtAddr, flags: i32) -> FutexKey {
@@ -129,7 +139,7 @@ pub async fn futex_wait(
 ) -> SyscallRet {
     info!(
         "[futex_wait] current task: {:?}, vaddr: {:?}, flags: {:?}, val: {:?}, deadline: {:?}",
-        current_thread_uncheck().getpid(),
+        current_thread_uncheck().get_tid(),
         vaddr,
         flags,
         expected_val,
@@ -154,7 +164,7 @@ pub async fn futex_wait(
             drop(hash_bucket);
         }
         if let Some(deadline) = deadline {
-            let now = current_time();
+            let now = current_time_duration();
             is_timeout = deadline < now;
         }
         if deadline.is_none() || !is_timeout {
@@ -164,11 +174,11 @@ pub async fn futex_wait(
         // If we were woken (and unqueued), we succeeded, whatever.
         // We doesn't care about the reason of wakeup if we were unqueued.
         let mut hash_bucket = FUTEXQUEUES.buckets[futex_hash(&key)].lock();
-        let cur_id = current_thread_uncheck().getpid();
+        let cur_id = current_thread_uncheck().get_tid();
         //if let Some(idx) = hash_bucket.iter().position(|futex_q| futex_q.task.id().as_u64() == cur_id) {
         if let Some(idx) = hash_bucket
             .iter()
-            .position(|futex_q| futex_q.task.getpid() == cur_id)
+            .position(|futex_q| futex_q.task.get_tid() == cur_id)
         {
             hash_bucket.remove(idx);
             if is_timeout {
@@ -202,7 +212,7 @@ pub async fn futex_wake(vaddr: VirtAddr, flags: i32, nr_waken: u32) -> SyscallRe
             hash_bucket.retain(|futex_q| {
                 if ret < nr_waken && futex_q.key == key {
                     //let wake_up = WAIT_FOR_FUTEX.notify_task(&futex_q.task);
-                    info!("wake up task {:?}", futex_q.task.getpid());
+                    info!("wake up task {:?}", futex_q.task.get_tid());
                     ret += 1;
                     return false;
                 }

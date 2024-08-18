@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::{
-    timer::{current_time, TimeSpec},
+    timer::{current_time_duration, TimeSpec},
     utils::SyscallErr,
     SyscallRet,
 };
@@ -61,7 +61,7 @@ pub async fn sys_futex(
             let val3 = FUTEX_BITSET_MATCH_ANY;
             // convert relative timeout to absolute timeout
             let deadline: Option<Duration> = if timeout != 0 {
-                Some(Duration::from_nanos(timeout as u64) + current_time())
+                Some(Duration::from_nanos(timeout as u64) + current_time_duration())
             } else {
                 None
             };

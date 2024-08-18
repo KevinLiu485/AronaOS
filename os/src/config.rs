@@ -16,7 +16,7 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 pub const USER_MAX_VA: usize = 0x0000_003f_ffff_ffff; // 256GB
                                                       // pub const MMAP_MIN_ADDR: usize = 65536;
-pub const MMAP_MIN_ADDR: usize = 0x20_0000_0000; // mmap area: 128GB
+pub const MMAP_MIN_ADDR: usize = 0x30_0000_0000; // mmap area: 128GB
 
 pub const SIG_NUM: usize = 33;
 

@@ -11,6 +11,7 @@ mod heap_allocator;
 mod memory_set;
 mod page_fault;
 mod page_table;
+pub mod shm;
 pub mod user_check;
 
 use address::VPNRange;

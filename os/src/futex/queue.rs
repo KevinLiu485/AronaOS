@@ -31,7 +31,7 @@ pub fn display_futexqueues() {
             for futex_q in hash_bucket.iter() {
                 warn!(
                     "task {} is still wait for {:?}",
-                    futex_q.task.getpid(),
+                    futex_q.task.get_tid(),
                     futex_q.key
                 );
             }
