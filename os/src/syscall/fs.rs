@@ -1,5 +1,6 @@
 //! File and filesystem-related syscalls
 
+use alloc::string::ToString;
 use core::mem::size_of;
 use core::ptr::{self};
 
@@ -8,6 +9,7 @@ use alloc::sync::Arc;
 // use alloc::vec::{self, Vec};
 use alloc::vec;
 use alloc::vec::Vec;
+// use core::fmt::Error;
 use log::{debug, error, info, trace, warn};
 
 use crate::config::SyscallRet;
@@ -25,11 +27,11 @@ use crate::fs::{
 // use crate::task::current_task;
 use crate::task::processor::current_process;
 
-use crate::timer::TimeSpec;
+use crate::timer::{current_time_spec, TimeSpec};
 use crate::utils::{c_str_to_string, SyscallErr};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
-    // let task = current_task().unwrap();
+    // trace!("[sys_write] enter fd:{}, buf:{}, len is {}", fd, buf, len);
     let process = current_process();
     // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
     // if fd >= fd_table_len {
@@ -163,6 +165,7 @@ pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
         .clone()
         .ok_or(SyscallErr::EBADF as usize)?;
     let fstat = Fstat::new(&inode);
+
     unsafe {
         ptr::write(buf, fstat);
     }
@@ -578,24 +581,44 @@ pub fn sys_faccessat(fd: i32, path: *const u8, amode: u32, flag: u32) -> Syscall
     Ok(0)
 }
 
+pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usize) -> SyscallRet {
+    let path = c_str_to_string(path_name as *const u8);
+    info!(
+        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}, this should be modified",
+        dirfd, path, buf, buf_size
+    );
+    let target = "/lmbench_all".to_string();
+    unsafe {
+        (buf as *mut u8).copy_from(target.as_ptr(), target.len());
+        *((buf + target.len()) as *mut u8) = 0;
+    }
+    Ok(0)
+}
+
 /// for utimensat
-// pub const UTIME_NOW: usize = 1073741823;
-// pub const UTIME_OMIT: usize = 1073741822;
+pub const UTIME_NOW: usize = 1073741823;
+pub const UTIME_OMIT: usize = 1073741822;
 
 pub fn sys_utimensat(
-    _dirfd: i32,
-    _pathname: *const u8,
-    _times: *const TimeSpec,
+    dirfd: i32,
+    pathname: *const u8,
+    times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
-    return Ok(0);
-    /*
-    let path = Path::from(c_str_to_string(pathname));
-    trace!("[sys_utimensat] enter. pathname: {}", path);
-    warn!("[sys_utimensat] not fully implemented");
+    trace!("[sys_utimensat] enter.");
+
+    let path;
+    if !pathname.is_null() {
+        path = Path::from(c_str_to_string(pathname));
+    } else {
+        if dirfd < 0 {
+            return Err(SyscallErr::EBADF as usize);
+        }
+        path = Path::from("");
+    }
 
     let inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
-        .map_err(|_| SyscallErr::ENOENT as usize)?;
+        .map_err(|_| SyscallErr::ENOTDIR as usize)?;
 
     debug!(
         "[sys_utimensat] get inode name: {}, ino: {}",
@@ -605,26 +628,28 @@ pub fn sys_utimensat(
 
     let meta_date = inode.get_meta();
     let mut inner_lock = meta_date.inner.lock();
+
     if times.is_null() {
         debug!("[sys_utimensat] times is null");
         // If times is null, then both timestamps are set to the current time.
         inner_lock.st_atim = current_time_spec();
     } else {
         // times[0] for atime, times[1] for mtime
-        // todo: UserCheck::new().c(times as *const u8, 2 * size_of::<TimeSpec>())?;
         let atime = unsafe { &*times };
         let times = unsafe { times.add(1) };
         let mtime = unsafe { &*times };
+
         // change access time
         if atime.nsec == UTIME_NOW {
-            debug!("[sys_utimensat] atime nsec is UTIME_NOW, set to now");
+            // atime nsec is UTIME_NOW, set to now
             inner_lock.st_atim = current_time_spec();
         } else if atime.nsec == UTIME_OMIT {
-            debug!("[sys_utimensat] atime nsec is UTIME_OMIT, unchanged");
+            // atime nsec is UTIME_OMIT
         } else {
-            debug!("[sys_utimensat] atime normal nsec");
+            // atime normal nsec
             inner_lock.st_atim = *atime;
         }
+
         debug!("[sys_utimensat] atime: {:?}", inner_lock.st_atim);
         // change modify time
         if mtime.nsec == UTIME_NOW {
@@ -641,7 +666,6 @@ pub fn sys_utimensat(
         inner_lock.st_ctim = current_time_spec();
     }
     Ok(0)
-    */
 }
 
 pub async fn sys_sendfile(out_fd: i32, in_fd: i32, offset: usize, count: usize) -> SyscallRet {

@@ -3,6 +3,7 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
+#[allow(unused)]
 use crate::boards::vf2::{VF2_RAMFS_BASE, VF2_RAMFS_SIZE};
 use crate::config::{SysResult, KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;

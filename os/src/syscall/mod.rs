@@ -93,6 +93,7 @@ const SYS_RT_SIGTIMEDWAIT: usize = 137;
 const SYS_PRLIMIT64: usize = 261;
 const SYS_MEMBARRIER: usize = 283;
 const SYS_STATFS: usize = 43;
+// const SYS_READLINKAT: usize = 78;
 
 mod fs;
 mod mm;
@@ -235,7 +236,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // SYS_SIGTIMEDWAIT => dummy(SYS_SIGTIMEDWAIT, "sigtimedwait"),
         //SYS_TKILL => sys_tkill(args[0], args[1]),
         SYS_GETAFFINITY => dummy(SYS_GETAFFINITY, "getaffinity"),
-        SYS_READLINKAT => dummy(SYS_READLINKAT, "readlinkat"),
+        // SYS_READLINKAT => dummy(SYS_READLINKAT, "readlinkat"),
         // SYS_SYNC => dummy(SYS_SYNC, "sync"),
         SYS_FSYNC => dummy(SYS_FSYNC, "fsync"),
         SYS_FTRUNCATE64 => dummy(SYS_FTRUNCATE64, "ftruncate64"),
@@ -253,7 +254,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         }
         SYS_MEMBARRIER => dummy(SYS_MEMBARRIER, "sys_mem_barrier"),
         SYS_STATFS => dummy(SYS_STATFS, "sys_statfs"),
-
+        SYS_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
         _ => unknown(syscall_id),
     }
 }

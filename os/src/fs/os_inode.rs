@@ -2,6 +2,7 @@ use super::inode::{Inode, InodeMode};
 use super::path::Path;
 use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
+#[allow(unused)]
 use crate::drivers::ramfs::virtio_ramfs::VIRTIO_RAMFS;
 #[allow(unused)]
 use crate::drivers::BLOCK_DEVICE;

@@ -86,7 +86,7 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
         path = Path::from("/busybox".to_string());
         args_vec.push("busybox".to_string());
         args_vec.push("sh".to_string());
-    } 
+    }
     // else if path.to_string().ends_with("sleep") || path.to_string().ends_with("ls") {
     //     path = Path::from("/busybox".to_string());
     //     args_vec.push("busybox".to_string());
@@ -359,7 +359,7 @@ bitflags! {
 
 pub fn sys_set_tid_address(tidptr: *const usize) -> SyscallRet {
     trace!("[sys_set_tid_address] enter, tidptr: {:?}", tidptr);
-    warn!("[sys_set_tid_address] not fully implemented");
+    warn!("[sys_set_tid_address] might have cannot write segment error");
     // todo: 这里需要检查对应的是否是可写的，如果不可写，直接返回
 
     let thread = current_thread().unwrap();
