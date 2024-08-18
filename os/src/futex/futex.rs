@@ -90,10 +90,20 @@ impl FutexRobustList {
     }
 }
 
+// pub fn futex_get_value_locked(vaddr: VirtAddr) -> SyscallRet {
+//     let uaddr: usize = vaddr.into();
+//     let real_futex_val: u32 = unsafe { (uaddr as *const u32).read_volatile() };
+//     Ok(real_futex_val as usize)
+// }
+
 pub fn futex_get_value_locked(vaddr: VirtAddr) -> SyscallRet {
-    let uaddr: usize = vaddr.into();
-    let real_futex_val: u32 = unsafe { (uaddr as *const u32).read_volatile() };
-    Ok(real_futex_val as usize)
+    let proc = current_process();
+    if proc.manual_alloc_for_lazy(vaddr).is_ok() {
+        let uaddr: usize = vaddr.into();
+        let real_futex_val: u32 = unsafe { (uaddr as *const u32).read_volatile() };
+        return Ok(real_futex_val as usize);
+    }
+    Err(SyscallErr::EFAULT as usize)
 }
 
 pub fn get_futex_key(uaddr: VirtAddr, flags: i32) -> FutexKey {

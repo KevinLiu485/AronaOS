@@ -2,11 +2,13 @@ mod action;
 mod signo;
 
 use action::{ign_sig_handler, term_sig_handler, SignalDefault};
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 
 pub use action::SigHandlers;
 pub use signo::*;
 
+use crate::task::processor::current_process;
+use crate::task::task::PROCESS_MANAGER;
 use crate::{
     mm::user_check::UserCheck, task::processor::current_thread, utils::SyscallErr, SyscallRet,
     SIG_NUM,
@@ -259,24 +261,68 @@ pub fn sys_rt_sigprocmask(how: i32, set: usize, old_set: usize) -> SyscallRet {
 pub fn sys_kill(pid: isize, signo: usize) -> SyscallRet {
     trace!("sys_kill: pid {}, signo {}", pid, signo);
     warn!("[sys_kill] not fully implemented");
-    if pid > 0 {
-        error!("pid > 0 is not supported");
-        Ok(0)
-        // todo!();
-    } else if pid == 0 {
-        // if pid == 0, send signal to process group.
-        // as no process group now, it act the same as sending to itself
-        let thread = current_thread().unwrap();
-        thread
-            .get_inner_mut()
-            .sig_set
-            .pending_sigs
-            .insert(SigBitmap::from_bits(1 << (signo - 1)).unwrap());
-        Ok(0)
-    } else {
-        error!("pid < 0 is not supported");
-        Ok(0)
+    match pid {
+        0 => {
+            for (_, proc) in PROCESS_MANAGER.lock().iter() {
+                if let Some(proc) = proc.upgrade() {
+                    debug!(
+                        "proc {} send signal {} to proc {}",
+                        current_process().getpid(),
+                        signo,
+                        proc.getpid()
+                    );
+                    proc.send_signal(signo);
+                } else {
+                    continue;
+                }
+            }
+        }
+        /*
+        1 => {
+            for (_, proc) in PROCESS_MANAGER.lock().iter() {
+                if let Some(proc) = proc.upgrade() {
+                    if proc.getpid() == 0 {
+                        // init proc
+                        continue;
+                    }
+                    debug!(
+                        "proc {} send signal {} to proc {}",
+                        current_process().getpid(),
+                        signo,
+                        proc.getpid()
+                    );
+                    proc.send_signal(signo);
+                } else {
+                    continue;
+                }
+            }
+        }
+        */
+        _ => {
+            let mut pid = pid;
+            if pid < 0 {
+                pid = -pid;
+            }
+            if let Some(proc) = PROCESS_MANAGER.lock().get(&(pid as usize)) {
+                if let Some(proc) = proc.upgrade() {
+                    debug!(
+                        "proc {} send signal {} to proc {}",
+                        current_process().getpid(),
+                        signo,
+                        proc.getpid()
+                    );
+                    proc.send_signal(signo);
+                } else {
+                    // No such proc
+                    return Err(SyscallErr::ESRCH.into());
+                }
+            } else {
+                // No such proc
+                return Err(SyscallErr::ESRCH.into());
+            }
+        }
     }
+    Ok(0)
 }
 
 pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const u8) -> SyscallRet {

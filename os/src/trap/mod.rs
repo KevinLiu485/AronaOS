@@ -119,7 +119,7 @@ pub async fn trap_handler() {
                     stval,
                     current_trap_cx().sepc,
                 );
-                page_table.dump_all();
+                //page_table.dump_all();
                 // page fault exit code
                 exit_current(-2);
             }
