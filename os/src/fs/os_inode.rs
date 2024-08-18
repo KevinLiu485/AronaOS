@@ -2,6 +2,7 @@ use super::inode::{Inode, InodeMode};
 use super::path::Path;
 use super::{File, FileMeta, FileMetaInner};
 use crate::config::{AsyncResult, SysResult};
+use crate::drivers::ramfs::virtio_ramfs::VIRTIO_RAMFS;
 #[allow(unused)]
 use crate::drivers::BLOCK_DEVICE;
 #[allow(unused)]
@@ -118,7 +119,8 @@ impl File for OSInode {
     }
 }
 
-#[cfg(not(feature = "ext4"))]
+// #[cfg(not(feature = "ext4"))]
+#[cfg(feature = "fat32")]
 lazy_static! {
     pub static ref ROOT_INODE: Arc<dyn Inode> = {
         info!("FS type: fat32");
@@ -134,6 +136,16 @@ lazy_static! {
     pub static ref ROOT_INODE: Arc<dyn Inode> = {
         info!("FS type: ext4");
         Ext4FileSystem::open(EXT4_BLOCK_CACHE_MANAGER.clone())
+            .lock()
+            .root_inode()
+    };
+}
+
+#[cfg(feature = "ext4-ramfs")]
+lazy_static! {
+    pub static ref ROOT_INODE: Arc<dyn Inode> = {
+        info!("FS type: ext4-ramfs");
+        Ext4FileSystem::open(VIRTIO_RAMFS.clone())
             .lock()
             .root_inode()
     };

@@ -30,7 +30,7 @@ use core::{future::Future, pin::Pin};
 
 use alloc::boxed::Box;
 
-pub use crate::board::{CLOCK_FREQ, MEMORY_END, MMIO};
+pub use crate::boards::qemu::{CLOCK_FREQ, MEMORY_END, MMIO};
 
 pub type SysFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 

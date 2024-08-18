@@ -113,15 +113,23 @@ pub async fn trap_handler() {
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
             if handle_recoverable_page_fault(&page_table, vpn).is_err() {
-                //page_table.dump_all();
                 error!(
-                    "[kernel] unrecoverable page fault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    "[kernel] unrecoverable {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    scause.cause(),
                     stval,
                     current_trap_cx().sepc,
                 );
                 page_table.dump_all();
                 // page fault exit code
                 exit_current(-2);
+                // error!(
+                //     "[kernel] unrecoverable {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel mercily ignore it.",
+                //     scause.cause(),
+                //     stval,
+                //     current_trap_cx().sepc,
+                // );
+                // let cx = current_trap_cx();
+                // cx.set_entry_point(cx.sepc + 4);
             }
             // we should jump back to the faulting instruction after handling the page fault
         }
@@ -175,6 +183,10 @@ pub fn trap_return() {
 pub fn trap_from_kernel() -> ! {
     use riscv::register::sepc;
     error!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
+    // let satp = satp::read().bits();
+    // let page_table = PageTable::from_token(satp);
+    // page_table.dump();
+    // page_table.dump_all();
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 

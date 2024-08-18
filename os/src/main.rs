@@ -23,8 +23,10 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-#[path = "boards/qemu.rs"]
-mod board;
+// #[path = "boards/qemu.rs"]
+// mod board;
+
+pub mod boards;
 
 #[macro_use]
 mod console;
@@ -50,13 +52,13 @@ pub mod trap;
 pub mod utils;
 
 use core::arch::{asm, global_asm};
-use core::sync::atomic::{AtomicBool, Ordering};
+// use core::sync::atomic::{AtomicBool, Ordering};
 
 use riscv::register::sstatus;
 
 use crate::config::*;
-use crate::mm::KERNEL_SPACE;
-use crate::sbi::hart_start;
+// use crate::mm::KERNEL_SPACE;
+// use crate::sbi::hart_start;
 use crate::task::processor::new_local_hart;
 
 global_asm!(include_str!("entry.asm"));
@@ -87,88 +89,87 @@ pub fn fake_main(hart_id: usize) {
 }
 
 #[no_mangle]
+#[rustfmt::skip]
 /// the rust entry-point of os
 pub fn rust_main(hart_id: usize) -> ! {
     new_local_hart(hart_id);
 
-    if FIRST_HART
-        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-        .is_ok()
-    {
-        print!("\u{1B}[38;5;14m");
-        println!("");
-        println!("    :::     :::::::::   ::::::::  ::::    :::     :::            ::::::::   ::::::::  ");
-        println!("  :+: :+:   :+:    :+: :+:    :+: :+:+:   :+:   :+: :+:         :+:    :+: :+:    :+: ");
-        println!(" +:+   +:+  +:+    +:+ +:+    +:+ :+:+:+  +:+  +:+   +:+        +:+    +:+ +:+        ");
-        println!("+#++:++#++: +#++:++#:  +#+    +:+ +#+ +:+ +#+ +#++:++#++:       +#+    +:+ +#++:++#++ ");
-        println!("+#+     +#+ +#+    +#+ +#+    +#+ +#+  +#+#+# +#+     +#+       +#+    +#+        +#+ ");
-        println!("#+#     #+# #+#    #+# #+#    #+# #+#   #+#+# #+#     #+#       #+#    #+# #+#    #+# ");
-        println!("###     ### ###    ###  ########  ###    #### ###     ###        ########   ########  ");
-        println!("");
-        println!("~*^*~ Bug bug flying away! ~*^*~");
-        print!("\u{1B}[0m");
+    // if FIRST_HART
+    //     .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+    //     .is_ok()
+    // {
+    print!("\u{1B}[38;5;14m");
+    println!("");
+    println!("    :::     :::::::::   ::::::::  ::::    :::     :::            ::::::::   ::::::::  ");
+    println!("  :+: :+:   :+:    :+: :+:    :+: :+:+:   :+:   :+: :+:         :+:    :+: :+:    :+: ");
+    println!(" +:+   +:+  +:+    +:+ +:+    +:+ :+:+:+  +:+  +:+   +:+        +:+    +:+ +:+        ");
+    println!("+#++:++#++: +#++:++#:  +#+    +:+ +#+ +:+ +#+ +#++:++#++:       +#+    +:+ +#++:++#++ ");
+    println!("+#+     +#+ +#+    +#+ +#+    +#+ +#+  +#+#+# +#+     +#+       +#+    +#+        +#+ ");
+    println!("#+#     #+# #+#    #+# #+#    #+# #+#   #+#+# #+#     #+#       #+#    #+# #+#    #+# ");
+    println!("###     ### ###    ###  ########  ###    #### ###     ###        ########   ########  ");
+    println!("");
+    // println!("~*^*~ Bug bug flying away! ~*^*~");
+    print!("\u{1B}[0m");
 
-        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
-        unsafe {
-            sstatus::set_sum();
-        }
-        clear_bss();
-        logging::init();
-        mm::init();
-
-        executor::init();
-        trap::init();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
-        // fs::list_apps();
-        fs::init::init();
-        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
-        unsafe {
-            sstatus::set_sum();
-        }
-        loader::list_apps();
-        task::add_initproc();
-
-        INIT_FINISHED.store(true, Ordering::SeqCst);
-        // #[cfg(not(feature = "submit"))]
-        start_all_cpu(hart_id);
-    } else {
-        while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句，不过还是先留着。
-
-        // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
-        unsafe {
-            sstatus::set_sum();
-        }
-        trap::init();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
-
-        KERNEL_SPACE.lock().activate();
-        // info!("cpu: {} start!", hart_id);
+    // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+    unsafe {
+        sstatus::set_sum();
     }
-
-    // executor::run_forever();
-    if hart_id == 0 {
-        executor::run_forever();
-    } else {
-        loop {}
+    clear_bss();
+    logging::init();
+    mm::init();
+    trap::init();
+    executor::init();
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
+    fs::init::init();
+    // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+    unsafe {
+        sstatus::set_sum();
     }
+    loader::list_apps();
+    task::add_initproc();
+
+    // INIT_FINISHED.store(true, Ordering::SeqCst);
+    // start_all_cpu(hart_id);
+    // }
+    // else {
+    //     while !INIT_FINISHED.load(Ordering::SeqCst) {} // todo:实际上这里似乎并不需要这条语句，不过还是先留着。
+
+    //     // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
+    //     unsafe {
+    //         sstatus::set_sum();
+    //     }
+    //     trap::init();
+    //     trap::enable_timer_interrupt();
+    //     timer::set_next_trigger();
+
+    //     KERNEL_SPACE.lock().activate();
+    //     // info!("cpu: {} start!", hart_id);
+    // }
+
+    executor::run_forever();
+    // if hart_id == 0 {
+    //     executor::run_forever();
+    // } else {
+    //     loop {}
+    // }
 }
 
-#[allow(unused)]
-fn start_all_cpu(hart_id: usize) {
-    // info!("cpu:{} Hello, world!", hart_id);
-    for i in 0..4 {
-        if i == hart_id {
-            continue;
-        }
-        let status = hart_start(i, 0x80200000);
-        // info!(
-        //     "hart {} start to wake up hart {}... status {}",
-        //     hart_id, i, status
-        // );
-    }
-}
+// #[allow(unused)]
+// fn start_all_cpu(hart_id: usize) {
+//     // info!("cpu:{} Hello, world!", hart_id);
+//     for i in 0..4 {
+//         if i == hart_id {
+//             continue;
+//         }
+//         let status = hart_start(i, 0x80200000);
+//         // info!(
+//         //     "hart {} start to wake up hart {}... status {}",
+//         //     hart_id, i, status
+//         // );
+//     }
+// }
 
-static FIRST_HART: AtomicBool = AtomicBool::new(true);
-static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
+// static FIRST_HART: AtomicBool = AtomicBool::new(true);
+// static INIT_FINISHED: AtomicBool = AtomicBool::new(false);

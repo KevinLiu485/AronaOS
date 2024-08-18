@@ -31,7 +31,8 @@ pub fn init() {
     // heap_test();
     frame_allocator::init_frame_allocator();
     // frame_allocator_test();
-    //KERNEL_SPACE.exclusive_access().activate
 
     KERNEL_SPACE.lock().activate();
+    // let kernel_space_lock = KERNEL_SPACE.lock();
+    // kernel_space_lock.activate();
 }

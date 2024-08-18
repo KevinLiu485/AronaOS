@@ -3,6 +3,7 @@ use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
+use crate::boards::vf2::{VF2_RAMFS_BASE, VF2_RAMFS_SIZE};
 use crate::config::{KERNEL_BASE, MEMORY_END, MMIO, PAGE_SIZE, USER_STACK_SIZE};
 use crate::mutex::SpinNoIrqLock;
 use crate::signal::sigreturn_trampoline;
@@ -267,6 +268,7 @@ impl MemorySet {
                 (etext as usize).into(),
                 MapType::Linear,
                 MapPermission::R | MapPermission::X,
+                // MapPermission::R | MapPermission::X | MapPermission::A | MapPermission::D,
             ),
             None,
             0,
@@ -283,6 +285,7 @@ impl MemorySet {
                 (erodata as usize).into(),
                 MapType::Linear,
                 MapPermission::R,
+                // MapPermission::R | MapPermission::A | MapPermission::D,
             ),
             None,
             0,
@@ -294,6 +297,7 @@ impl MemorySet {
                 (edata as usize).into(),
                 MapType::Linear,
                 MapPermission::R | MapPermission::W,
+                // MapPermission::R | MapPermission::W | MapPermission::A | MapPermission::D,
             ),
             None,
             0,
@@ -305,6 +309,7 @@ impl MemorySet {
                 (ebss as usize).into(),
                 MapType::Linear,
                 MapPermission::R | MapPermission::W,
+                // MapPermission::R | MapPermission::W | MapPermission::A | MapPermission::D,
             ),
             None,
             0,
@@ -316,6 +321,7 @@ impl MemorySet {
                 MEMORY_END.into(),
                 MapType::Linear,
                 MapPermission::R | MapPermission::W,
+                // MapPermission::R | MapPermission::W | MapPermission::A | MapPermission::D,
             ),
             None,
             0,
@@ -326,6 +332,21 @@ impl MemorySet {
                 MapArea::new(
                     ((*pair).0 + KERNEL_BASE).into(),
                     ((*pair).0 + (*pair).1 + KERNEL_BASE).into(),
+                    MapType::Linear,
+                    MapPermission::R | MapPermission::W,
+                    // MapPermission::R | MapPermission::W | MapPermission::A | MapPermission::D,
+                ),
+                None,
+                0,
+            );
+        }
+        #[cfg(feature = "ext4-ramfs")]
+        {
+            info!("mapping ramfs");
+            memory_set.push(
+                MapArea::new(
+                    VF2_RAMFS_BASE.into(),
+                    (VF2_RAMFS_BASE + VF2_RAMFS_SIZE).into(),
                     MapType::Linear,
                     MapPermission::R | MapPermission::W,
                 ),
@@ -555,11 +576,17 @@ impl MemorySet {
     }
     ///Refresh TLB with `sfence.vma`
     pub fn activate(&self) {
+        // log::debug!("[MemorySet::activate] entered");
         let satp = self.page_table.token();
+        // self.page_table.dump();
+        // self.page_table.dump_all();
+        // log::debug!("[MemorySet::activate] satp: {:#x}", satp);
         unsafe {
             satp::write(satp);
+            // log::debug!("[MemorySet::activate] satp written");
             asm!("sfence.vma");
         }
+        // log::debug!("[MemorySet::activate] exited");
     }
     ///Translate throuth pagetable
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
@@ -744,6 +771,10 @@ bitflags! {
         const X = 1 << 3;
         ///Accessible in U mode
         const U = 1 << 4;
+        ///Accessed
+        const A = 1 << 6;
+        ///Dirty
+        const D = 1 << 7;
     }
 }
 

@@ -65,6 +65,10 @@ endif
 
 ifeq ($(FS), ext4)
 	FEATURE_ARGS += ext4
+else ifeq ($(FS), ext4-ramfs)
+	FEATURE_ARGS += ext4-ramfs
+else ifeq ($(FS), fat32)
+	FEATURE_ARGS += fat32
 endif
 
 # build: env $(KERNEL_BIN)
