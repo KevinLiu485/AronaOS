@@ -358,7 +358,7 @@ bitflags! {
 
 pub fn sys_set_tid_address(tidptr: *const usize) -> SyscallRet {
     trace!("[sys_set_tid_address] enter, tidptr: {:?}", tidptr);
-    warn!("[sys_set_tid_address] not fully implemented");
+    warn!("[sys_set_tid_address] might have cannot write segment error");
     // todo: 这里需要检查对应的是否是可写的，如果不可写，直接返回
 
     let thread = current_thread().unwrap();

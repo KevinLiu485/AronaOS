@@ -107,8 +107,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("");
         println!("~*^*~ Bug bug flying away! ~*^*~");
         print!("\u{1B}[0m");
-        print!("\u{1B}[0m");
-        print!("\u{1B}[0m");
 
         // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
         unsafe {
@@ -122,7 +120,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         trap::init();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-        // fs::list_apps();
         fs::init::init();
         // 允许S mode访问U mode的页面, 需要localctx的env_context进行管理, 目前就保持全局开启
         unsafe {
@@ -146,7 +143,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
 
         KERNEL_SPACE.lock().activate();
-        // info!("cpu: {} start!", hart_id);
     }
 
     // executor::run_forever();
