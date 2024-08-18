@@ -1,7 +1,8 @@
 use crate::mm::address::VirtPageNum;
 use crate::mm::frame_allocator::frame_alloc;
 use crate::mm::page_table::{PTEFlags, PageTable, PageTableEntry};
-use crate::mm::PhysPageNum;
+use crate::mm::{memory_set, PhysPageNum};
+use crate::syscall::process;
 // use crate::syscall::process;
 use crate::task::processor::current_process;
 // use crate::task::current_task;
@@ -18,6 +19,15 @@ pub fn handle_recoverable_page_fault(
     vpn: VirtPageNum,
 ) -> Result<(), SyscallErr> {
     if let Some(pte) = page_table.find_pte(vpn) {
+        if vpn == VirtPageNum::from(0) {
+            // alloc for thread local variable
+            // TODO: temp alloc physical page for vpn: ppn = 0: 0
+            let frame = frame_alloc().unwrap();
+            let ppn = frame.ppn;
+            let flags = PTEFlags::V | PTEFlags::U | PTEFlags::W | PTEFlags::R;
+            *pte = PageTableEntry::new(ppn, flags);
+            return Ok(());
+        }
         if pte.is_cow() {
             // fork COW area
             // 如果refcnt == 1, 则直接修改pte, 否则, 分配新的frame, 修改pte, 更新MemorySet
@@ -96,8 +106,10 @@ pub fn handle_recoverable_page_fault(
             }
             error!("cow page fault recover failed");
             return Err(SyscallErr::EFAULT);
-        } else {
-            // lazy allocation
+        }
+        // COW_handle_END
+        else {
+            // lazy allocation: mmap region
             if pte.ppn() == PhysPageNum::from(0) {
                 //info!("handle mmap anonamous areas");
                 let process = current_process();
@@ -113,8 +125,14 @@ pub fn handle_recoverable_page_fault(
                     }
                 }
             }
+
             error!("lazy allocation fault recover failed");
+            //page_table.dump_all();
+            // error!("vpn: {:?}, ppn: {:?}", vpn, pte.ppn());
+            // page_table.dump_all();
+
             return Err(SyscallErr::EFAULT);
+            //return Ok(());
         }
     } else {
         error!("page fault but can't find valid pte");
