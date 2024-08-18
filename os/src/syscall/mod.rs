@@ -83,14 +83,16 @@ const SYS_SIGTIMEDWAIT: usize = 137;
 const SYS_TKILL: usize = 130;
 const SYS_GETAFFINITY: usize = 122;
 const SYS_CLOCK_NANOSLEEP: usize = 115;
-
+const SYS_READLINKAT: usize = 78;
 const SYS_SYNC: usize = 81;
+const SYS_FSYNC: usize = 82;
+const SYS_FTRUNCATE64: usize = 46;
+
 const SYS_SHMGET: usize = 194;
 const SYS_RT_SIGTIMEDWAIT: usize = 137;
 const SYS_PRLIMIT64: usize = 261;
 const SYS_MEMBARRIER: usize = 283;
 const SYS_STATFS: usize = 43;
-
 
 mod fs;
 mod mm;
@@ -233,6 +235,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_SIGTIMEDWAIT => dummy(SYS_SIGTIMEDWAIT, "sigtimedwait"),
         //SYS_TKILL => sys_tkill(args[0], args[1]),
         SYS_GETAFFINITY => dummy(SYS_GETAFFINITY, "getaffinity"),
+        SYS_READLINKAT => dummy(SYS_READLINKAT, "readlinkat"),
+        SYS_SYNC => dummy(SYS_SYNC, "sync"),
+        SYS_FSYNC => dummy(SYS_FSYNC, "fsync"),
+        SYS_FTRUNCATE64 => dummy(SYS_FTRUNCATE64, "ftruncate64"),
 
         SYS_FUTEX => {
             sys_futex(
