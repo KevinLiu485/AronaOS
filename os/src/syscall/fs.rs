@@ -19,13 +19,13 @@ use crate::fs::tty::TTY;
 use crate::fs::{
     create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
 };
-use crate::mm::user_check::UserCheck;
+// use crate::mm::user_check::UserCheck;
 // use crate::syscall::process;
 // use crate::syscall::process;
 // use crate::task::current_task;
 use crate::task::processor::current_process;
 
-use crate::timer::{current_time_duration, current_time_spec, TimeSpec};
+use crate::timer::TimeSpec;
 use crate::utils::{c_str_to_string, SyscallErr};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -579,16 +579,17 @@ pub fn sys_faccessat(fd: i32, path: *const u8, amode: u32, flag: u32) -> Syscall
 }
 
 /// for utimensat
-pub const UTIME_NOW: usize = 1073741823;
-pub const UTIME_OMIT: usize = 1073741822;
+// pub const UTIME_NOW: usize = 1073741823;
+// pub const UTIME_OMIT: usize = 1073741822;
 
 pub fn sys_utimensat(
-    dirfd: i32,
-    pathname: *const u8,
-    times: *const TimeSpec,
+    _dirfd: i32,
+    _pathname: *const u8,
+    _times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
     return Ok(0);
+    /*
     let path = Path::from(c_str_to_string(pathname));
     trace!("[sys_utimensat] enter. pathname: {}", path);
     warn!("[sys_utimensat] not fully implemented");
@@ -640,6 +641,7 @@ pub fn sys_utimensat(
         inner_lock.st_ctim = current_time_spec();
     }
     Ok(0)
+    */
 }
 
 pub async fn sys_sendfile(out_fd: i32, in_fd: i32, offset: usize, count: usize) -> SyscallRet {

@@ -78,11 +78,11 @@ const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
 const SYS_FUTEX: usize = 202;
 const SYS_MADVISE: usize = 233;
-const SYS_PRLIMIT: usize = 261;
-const SYS_SIGTIMEDWAIT: usize = 137;
-const SYS_TKILL: usize = 130;
+// const SYS_PRLIMIT: usize = 261;
+// const SYS_SIGTIMEDWAIT: usize = 137;
+// const SYS_TKILL: usize = 130;
 const SYS_GETAFFINITY: usize = 122;
-const SYS_CLOCK_NANOSLEEP: usize = 115;
+// const SYS_CLOCK_NANOSLEEP: usize = 115;
 const SYS_READLINKAT: usize = 78;
 const SYS_SYNC: usize = 81;
 const SYS_FSYNC: usize = 82;
@@ -229,14 +229,14 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // Weird bug, you cannot enter shell with next line enabled.
         SYS_SCHED_SETSCHEDULER => dummy(SYS_SCHED_SETSCHEDULER, "sys_sched_setscheduler"),
         SYS_CLOCK_GETRES => sys_clock_getres(args[0], args[1] as *mut _),
-        SYS_GETTID => sys_getpid(),
+        // SYS_GETTID => sys_getpid(),
         SYS_MADVISE => sys_madvise(args[0], args[1], args[2] as i32),
-        SYS_PRLIMIT => dummy(SYS_PRLIMIT, "prlimit64"),
-        SYS_SIGTIMEDWAIT => dummy(SYS_SIGTIMEDWAIT, "sigtimedwait"),
+        // SYS_PRLIMIT => dummy(SYS_PRLIMIT, "prlimit64"),
+        // SYS_SIGTIMEDWAIT => dummy(SYS_SIGTIMEDWAIT, "sigtimedwait"),
         //SYS_TKILL => sys_tkill(args[0], args[1]),
         SYS_GETAFFINITY => dummy(SYS_GETAFFINITY, "getaffinity"),
         SYS_READLINKAT => dummy(SYS_READLINKAT, "readlinkat"),
-        SYS_SYNC => dummy(SYS_SYNC, "sync"),
+        // SYS_SYNC => dummy(SYS_SYNC, "sync"),
         SYS_FSYNC => dummy(SYS_FSYNC, "fsync"),
         SYS_FTRUNCATE64 => dummy(SYS_FTRUNCATE64, "ftruncate64"),
 

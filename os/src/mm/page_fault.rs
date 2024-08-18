@@ -1,15 +1,15 @@
 use crate::mm::address::VirtPageNum;
 use crate::mm::frame_allocator::frame_alloc;
 use crate::mm::page_table::{PTEFlags, PageTable, PageTableEntry};
-use crate::mm::{memory_set, PhysPageNum};
-use crate::syscall::process;
+use crate::mm::PhysPageNum;
+// use crate::syscall::process;
 // use crate::syscall::process;
 use crate::task::processor::current_process;
 // use crate::task::current_task;
 // use crate::task::processor::current_process;
 use crate::utils::SyscallErr;
 use alloc::sync::Arc;
-use log::{error, info};
+use log::error;
 
 /// call this function only when scause.cause() == Exception::LoadPageFault || Exception::StorePageFault
 /// 1. fork COW area

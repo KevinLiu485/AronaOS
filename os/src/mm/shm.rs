@@ -1,11 +1,11 @@
-use crate::config::{SyscallRet, PAGE_SIZE, PAGE_SIZE_BITS};
-use crate::mm::{MapPermission, PTEFlags, VirtAddr};
+use crate::config::{SyscallRet, PAGE_SIZE};
+use crate::mm::VirtAddr;
 use crate::mutex::SpinNoIrqLock;
-use crate::task::processor::current_process;
+// use crate::task::processor::current_process;
 use crate::task::RecycleAllocator;
 use crate::utils::SyscallErr;
 use alloc::collections::BTreeMap;
-use alloc::sync::{Arc, Weak};
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use riscv::addr::Page;
 
@@ -54,21 +54,21 @@ impl SharedMemoryManager {
 
 // 共享内存结构体
 pub struct SharedMemory {
-    pages: Vec<Weak<Page>>, // 页面的弱引用
-    page_cnt: usize,        // 页面数量
+    _pages: Vec<Weak<Page>>, // 页面的弱引用
+    _page_cnt: usize,        // 页面数量
 }
 
 impl SharedMemory {
     // 创建一个新的共享内存实例
     pub fn new(page_cnt: usize) -> Self {
         Self {
-            page_cnt,
-            pages: Vec::new(),
+            _page_cnt: page_cnt,
+            _pages: Vec::new(),
         }
     }
 
     /// 注意：此方法必须由当前线程调用
-    pub fn attach(&mut self, addr: Option<VirtAddr>) -> SyscallRet {
+    pub fn attach(&mut self, _addr: Option<VirtAddr>) -> SyscallRet {
         // current_process().inner_handler(|proc| {
         //     // 暂时给予用户所有权限
         //     let permission =
