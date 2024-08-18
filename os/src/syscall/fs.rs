@@ -588,7 +588,7 @@ pub fn sys_utimensat(
     times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
-    // return Ok(0);
+    return Ok(0);
     let path = Path::from(c_str_to_string(pathname));
     trace!("[sys_utimensat] enter. pathname: {}", path);
     warn!("[sys_utimensat] not fully implemented");

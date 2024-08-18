@@ -11,6 +11,10 @@ use crate::utils::SyscallErr;
 use crate::SyscallRet;
 use crate::{MMAP_MIN_ADDR, USER_MAX_VA};
 // use crate::MMAP_MIN_ADDR;
+use crate::console::print;
+use crate::fs::inode::{Inode, InodeMode};
+use crate::fs::{open_inode, path, File, OSInode, OpenFlags, AT_FDCWD};
+use crate::utils::block_on::block_on;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -20,11 +24,8 @@ use core::arch::asm;
 use core::fmt::Debug;
 use lazy_static::lazy_static;
 use log::{debug, info, trace, warn};
-// use log::{debug, info, warn};
-use crate::fs::inode::{Inode, InodeMode};
-use crate::fs::{open_inode, path, File, OSInode, OpenFlags, AT_FDCWD};
-use crate::utils::block_on::block_on;
 use riscv::register::satp;
+use xmas_elf::program::Type;
 use xmas_elf::ElfFile;
 
 #[allow(unused)]
@@ -369,7 +370,7 @@ impl MemorySet {
         });
         aux_vec.push(AuxHeader {
             aux_type: AT_PAGESZ,
-            value: PAGE_SIZE as usize,
+            value: PAGE_SIZE,
         });
 
         if let Some(interp_entry_point) = memory_set.load_dl_interp_if_needed(&elf) {
@@ -430,18 +431,19 @@ impl MemorySet {
             value: 0x112d as usize,
         });
         // map program headers
-
+        /*================================================================================*/
         let mut header_va: Option<usize> = None; // used to build auxv
         let mut max_end_vpn = VirtPageNum(0);
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
-            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+            if ph.get_type().unwrap() == Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 if header_va.is_none() {
                     header_va = Some(start_va.into());
                 }
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
+
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
                 if ph_flags.is_read() {
@@ -453,6 +455,7 @@ impl MemorySet {
                 if ph_flags.is_execute() {
                     map_perm |= MapPermission::X;
                 }
+
                 let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
                 max_end_vpn = map_area.vpn_range.get_end();
 
@@ -520,12 +523,7 @@ impl MemorySet {
         // temp: check memory set sanity
         // memory_set.page_table.dump_all();
 
-        (
-            memory_set,
-            user_stack_top,
-            elf.header.pt2.entry_point() as usize,
-            aux_vec,
-        )
+        (memory_set, user_stack_top, entry_point, aux_vec)
     }
     pub fn from_existed_user_lazily(user_space: &MemorySet) -> MemorySet {
         let page_table = PageTable::from_existed_user(&user_space.page_table);
@@ -641,7 +639,8 @@ impl MemorySet {
             let interp_inode = interp_inode.unwrap();
 
             // - 打开并读取动态链接器文件内容。
-            let interp_osinode = OSInode::new(true, false, interp_inode);
+            let interp_osinode =
+                OSInode::new(true, false, interp_inode).expect("failed to open interp");
             let interp_elf_data = block_on(interp_osinode.read_all());
 
             // - 将动态链接器的ELF文件映射到内存中。
@@ -701,6 +700,14 @@ impl MemorySet {
                 max_end_vpn = vm_area.vpn_range.get_end();
 
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
+
+                debug!(
+                    "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
+                    ph.offset(),
+                    ph.file_size(),
+                    ph.mem_size()
+                );
+                debug!("[dynamic_link_map_elf] map_offset is {:#x}", map_offset);
                 self.areas.push(vm_area.clone());
 
                 self.push(
@@ -710,7 +717,6 @@ impl MemorySet {
                 );
             }
         }
-
         // 返回最大结束虚拟页号和头部虚拟地址。
         (max_end_vpn, header_va.into())
     }

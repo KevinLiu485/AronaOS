@@ -101,7 +101,6 @@ impl Process {
         let (memory_set, user_sp, entry_point, aux_vec) = MemorySet::from_elf(elf_data);
         // activate user space
         memory_set.activate();
-        // todo: 如果未来我们在 local hart 里面快速索引了页表，我们需要改变他 (quite important)
         info!(
             "[TCB::exec] entry_point: {:x}, user_sp: {:x}, page_table: {:x}",
             entry_point,

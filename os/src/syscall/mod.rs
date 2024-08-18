@@ -77,10 +77,13 @@ const SYS_SOCKETPAIR: usize = 199;
 const SYS_SCHED_SETSCHEDULER: usize = 119;
 const SYS_CLOCK_GETRES: usize = 114;
 
-const SYSCALL_SYNC: usize = 81;
-const SYSCALL_SHMGET: usize = 194;
-const SYSCALL_RT_SIGTIMEDWAIT: usize = 137;
-const SYSCALL_PRLIMIT64: usize = 261;
+const SYS_SYNC: usize = 81;
+const SYS_SHMGET: usize = 194;
+const SYS_RT_SIGTIMEDWAIT: usize = 137;
+const SYS_PRLIMIT64: usize = 261;
+const SYS_MEMBARRIER: usize = 283;
+const SYS_STATFS: usize = 43;
+
 
 mod fs;
 mod mm;
@@ -200,14 +203,14 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as u32,
             args[3] as usize,
         ),
-        SYSCALL_SYNC => sys_sync().await,
-        SYSCALL_SHMGET => sys_shmget(args[0], args[1], args[2] as u32),
-        SYSCALL_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(
+        SYS_SYNC => sys_sync().await,
+        SYS_SHMGET => sys_shmget(args[0], args[1], args[2] as u32),
+        SYS_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(
             args[0] as *const u32,
             args[1] as *const u8,
             args[2] as *const u8,
         ),
-        SYSCALL_PRLIMIT64 => sys_prlimit64(
+        SYS_PRLIMIT64 => sys_prlimit64(
             args[0],
             args[1] as u32,
             args[2] as *const RLimit,
@@ -216,6 +219,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         // Weird bug, you cannot enter shell with next line enabled.
         SYS_SCHED_SETSCHEDULER => dummy(SYS_SCHED_SETSCHEDULER, "sys_sched_setscheduler"),
         SYS_CLOCK_GETRES => sys_clock_getres(args[0], args[1] as *mut _),
+        SYS_MEMBARRIER => dummy(SYS_MEMBARRIER, "sys_mem_barrier"),
+        SYS_STATFS => dummy(SYS_STATFS, "sys_statfs"),
         _ => unknown(syscall_id),
     }
 }
