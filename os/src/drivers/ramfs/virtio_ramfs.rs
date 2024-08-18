@@ -29,9 +29,8 @@ impl ext4_rs::BlockDevice for VirtIORamFS {
     // write all data to offset
     fn write_offset(&self, offset: usize, data: &[u8]) {
         let start_addr = self.base + offset;
-        let block_size = ext4_rs::BLOCK_SIZE;
         unsafe {
-            let slice = core::slice::from_raw_parts_mut(start_addr as *mut u8, block_size);
+            let slice = core::slice::from_raw_parts_mut(start_addr as *mut u8, data.len());
             slice.copy_from_slice(data);
         }
     }

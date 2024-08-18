@@ -23,7 +23,7 @@ ext4_rs = { path = "../ext4" }
 
 [profile.release]
 debug = true
-# opt-level = 0
+# opt-level = 1
 
 [features]
 kernel_tests = []

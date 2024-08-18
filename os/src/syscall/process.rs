@@ -86,10 +86,11 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
         path = Path::from("/busybox".to_string());
         args_vec.push("busybox".to_string());
         args_vec.push("sh".to_string());
-    } else if path.to_string().ends_with("sleep") || path.to_string().ends_with("ls") {
-        path = Path::from("/busybox".to_string());
-        args_vec.push("busybox".to_string());
-    }
+    } 
+    // else if path.to_string().ends_with("sleep") || path.to_string().ends_with("ls") {
+    //     path = Path::from("/busybox".to_string());
+    //     args_vec.push("busybox".to_string());
+    // }
 
     if args != null() {
         loop {

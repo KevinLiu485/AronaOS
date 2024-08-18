@@ -3,7 +3,6 @@ use crate::{config::SyscallRet, utils::SyscallErr};
 
 use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
-// use crate::task::current_task;
 use crate::mutex::SpinNoIrqLock;
 use crate::task::processor::current_process;
 use log::{info, trace};
@@ -61,23 +60,10 @@ pub async fn sys_mmap(
     offset: usize,
 ) -> SyscallRet {
     trace!("[sys_mmap] enter");
-    //warn!("[sys_mmap] not fully implemented");
 
     //处理参数
-    // let prot = MMAPPROT::from_bits(prot as u32);
     let prot = MMAPPROT::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
-    // let prot = match MmapProt::from_bits(prot as u32) {
-    //     Some(prot) => prot,
-    //     None => return Err(SyscallErr::EINVAL.into()),
-    // };
-    // let prot = MmapProt::all();
-    // error!("[mmap] prot ignored!");
-    // let flags = MMAPFLAGS::from_bits(flags as u32).unwrap();
     let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
-    // let flags = match MmapFlags::from_bits(flags as u32) {
-    //     Some(flags) => flags,
-    //     None => return Err(SyscallErr::EINVAL.into()),
-    // };
     let proc = current_process();
     trace!(
         "[sys_mmap] start: {:#x}, len: {:#x}, fd: {}, offset: {:#x}, flags: {:?}, prot: {:?}",
@@ -95,7 +81,6 @@ pub async fn sys_mmap(
         unimplemented!("[sys_mmap] MAP_FIXED")
     }
     // mmap区域最低地址为MMAP_MIN_ADDR
-    // let mut start: usize = start.max(MMAP_MIN_ADDR);
     let mut start = proc.inner_handler(|inner| inner.memory_set.mmap_start);
     let mut permission = prot.into();
     // 注意加上U权限
@@ -115,15 +100,11 @@ pub async fn sys_mmap(
         proc.inner_lock()
             .memory_set
             .insert_anonymous_area(vpn_range, permission);
-        /*
-        proc.inner_lock()
-            .memory_set
-            .insert_framed_area(vpn_range, permission);
-        */
+
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
         proc.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
-        // debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
+
         return Ok(start);
     } else {
         log::info!("[sys_mmap] file mmap");
@@ -142,7 +123,6 @@ pub async fn sys_mmap(
             .memory_set
             .get_unmapped_area(start, len)
             .ok_or(SyscallErr::ENOMEM)?;
-        //task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         proc.inner_lock()
             .memory_set
             .insert_framed_area(vpn_range, permission);
@@ -150,9 +130,7 @@ pub async fn sys_mmap(
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
         proc.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
         start = VirtAddr::from(vpn_range.get_start()).into();
-        // task.inner_handler(|inner| inner.memory_set.page_table.dump_all());
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
-        // let origin_offset = file.get_meta().inner.lock().offset;
         let origin_offset = file.seek(offset);
         if file.read(buf).await.is_err() {
             return Err(SyscallErr::EINVAL.into());
@@ -161,7 +139,6 @@ pub async fn sys_mmap(
             // file is seekable, then seek back
             file.seek(origin_offset);
         }
-        // debug!("[sys_mmap] success, [{:#x}, {:#x})", start, new_start);
         return Ok(start);
     }
 }

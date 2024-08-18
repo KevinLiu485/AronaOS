@@ -24,7 +24,9 @@ pub fn handle_recoverable_page_fault(
             // TODO: temp alloc physical page for vpn: ppn = 0: 0
             let frame = frame_alloc().unwrap();
             let ppn = frame.ppn;
-            let flags = PTEFlags::V | PTEFlags::U | PTEFlags::W | PTEFlags::R;
+            // let flags = PTEFlags::V | PTEFlags::U | PTEFlags::W | PTEFlags::R;
+            let flags =
+                PTEFlags::V | PTEFlags::U | PTEFlags::W | PTEFlags::R | PTEFlags::A | PTEFlags::D;
             *pte = PageTableEntry::new(ppn, flags);
             return Ok(());
         }
@@ -49,7 +51,7 @@ pub fn handle_recoverable_page_fault(
                         flags.remove(PTEFlags::COW);
                         flags.insert(PTEFlags::W);
                         *pte = PageTableEntry::new(pte.ppn(), flags);
-                        return Ok(());
+                        // return Ok(());
                     } else {
                         // 分配新的frame, 修改pte, 更新MemorySet
                         let frame = frame_alloc().unwrap();
@@ -63,17 +65,16 @@ pub fn handle_recoverable_page_fault(
                         *pte = PageTableEntry::new(frame.ppn, flags);
                         // update MemorySet -> MapArea -> data_frames
                         area.data_frames.insert(vpn, Arc::new(frame));
-                        return Ok(());
+                        // return Ok(());
                     }
                     // todo?: flush TLB
-                    /*
                     unsafe {
-                        asm!(
+                        core::arch::asm!(
                             "sfence.vma x0, x0",
                             options(nomem, nostack, preserves_flags)
                         );
                     }
-                    */
+                    return Ok(());
                 }
             }
             // 如果没有找到对应的MapArea, 则说明是堆区域的COW
@@ -87,7 +88,7 @@ pub fn handle_recoverable_page_fault(
                     flags.remove(PTEFlags::COW);
                     flags.insert(PTEFlags::W);
                     *pte = PageTableEntry::new(pte.ppn(), flags);
-                    return Ok(());
+                    // return Ok(());
                 } else {
                     // 分配新的frame, 修改pte, 更新MemorySet
                     let frame = frame_alloc().unwrap();
@@ -101,15 +102,26 @@ pub fn handle_recoverable_page_fault(
                     *pte = PageTableEntry::new(frame.ppn, flags);
                     // update MemorySet -> MapArea -> data_frames
                     heap.data_frames.insert(vpn, Arc::new(frame));
-                    return Ok(());
+                    // return Ok(());
                 }
+                unsafe {
+                    core::arch::asm!(
+                        "sfence.vma x0, x0",
+                        options(nomem, nostack, preserves_flags)
+                    );
+                }
+                return Ok(());
             }
-            error!("cow page fault recover failed");
+            log::info!("cow page fault recover failed");
             return Err(SyscallErr::EFAULT);
         }
         // COW_handle_END
         else {
             // lazy allocation: mmap region
+            log::debug!(
+                "[handle_lazy_allocation_page_fault] lazy alloc, vpn: {:#x}",
+                vpn.0
+            );
             if pte.ppn() == PhysPageNum::from(0) {
                 //info!("handle mmap anonamous areas");
                 let process = current_process();
@@ -121,18 +133,18 @@ pub fn handle_recoverable_page_fault(
                         let ppn = frame.ppn;
                         *pte = PageTableEntry::new(ppn, pte.flags());
                         area.data_frames.insert(vpn, Arc::new(frame));
+                        unsafe {
+                            core::arch::asm!(
+                                "sfence.vma x0, x0",
+                                options(nomem, nostack, preserves_flags)
+                            );
+                        }
                         return Ok(());
                     }
                 }
             }
-
-            error!("lazy allocation fault recover failed");
-            //page_table.dump_all();
-            // error!("vpn: {:?}, ppn: {:?}", vpn, pte.ppn());
-            // page_table.dump_all();
-
+            log::info!("lazy allocation fault recover failed");
             return Err(SyscallErr::EFAULT);
-            //return Ok(());
         }
     } else {
         error!("page fault but can't find valid pte");

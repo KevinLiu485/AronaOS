@@ -102,12 +102,6 @@ pub async fn trap_handler() {
             // recoverable page fault:
             // 1. fork COW area
             // 2. lazy allocation
-            // debug!(
-            //     "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
-            //     stval,
-            //     current_trap_cx().sepc,
-            //     scause.cause()
-            // );
             // stval is the faulting virtual address, current_trap_cx().sepc is the faulting instruction
             let vpn = VirtAddr::from(stval).floor();
             let satp = satp::read().bits();
@@ -119,17 +113,9 @@ pub async fn trap_handler() {
                     stval,
                     current_trap_cx().sepc,
                 );
-                //page_table.dump_all();
+                page_table.dump_all();
                 // page fault exit code
                 exit_current(-2);
-                // error!(
-                //     "[kernel] unrecoverable {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel mercily ignore it.",
-                //     scause.cause(),
-                //     stval,
-                //     current_trap_cx().sepc,
-                // );
-                // let cx = current_trap_cx();
-                // cx.set_entry_point(cx.sepc + 4);
             }
             // we should jump back to the faulting instruction after handling the page fault
         }
@@ -167,7 +153,6 @@ pub fn trap_return() {
         handle_signals();
     }
     let cx = current_trap_cx();
-    //let user_satp = current_user_token();
     extern "C" {
         #[allow(improper_ctypes)]
         fn __return_to_user(cx: *mut TrapContext);
