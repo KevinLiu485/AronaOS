@@ -9,7 +9,6 @@ use alloc::vec::Vec;
 use lazy_static::*;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 
-#[allow(unused)]
 const VIRTIO0: usize = 0x10001000 + KERNEL_BASE;
 
 pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<'static, VirtioHal>>);
@@ -32,64 +31,6 @@ impl BlockDevice for VirtIOBlock {
             .expect("Error when writing VirtIOBlk");
     }
 }
-
-// impl ext4_rs::BlockDevice for VirtIOBlock {
-//     // read data from offset in byte, return a Vec<u8> with length of ext4_rs::BLOCK_SIZE(4096 B)
-//     fn read_offset(&self, offset: usize) -> Vec<u8> {
-//         let mut block_id = offset / VIRTIO_BLOCK_SIZE;
-//         let mut buf = vec![0u8; VIRTIO_BLOCK_SIZE];
-//         let mut ret = Vec::<u8>::new();
-//         let aligned = offset % VIRTIO_BLOCK_SIZE == 0;
-//         let times = if aligned {
-//             ext4_rs::BLOCK_SIZE / VIRTIO_BLOCK_SIZE
-//         } else {
-//             ext4_rs::BLOCK_SIZE / VIRTIO_BLOCK_SIZE + 1
-//         };
-//         ret.reserve(times * VIRTIO_BLOCK_SIZE);
-//         for _ in 0..times {
-//             self.0
-//                 .exclusive_access()
-//                 .read_block(block_id, &mut buf)
-//                 .expect("Error when reading VirtIOBlk");
-//             block_id += 1;
-//             ret.extend_from_slice(&buf);
-//         }
-//         if aligned {
-//             // debug!(
-//             //     "[VirtIOBlock::read_offset] aligned read, offset: {}, first char: {:02x}",
-//             //     offset, ret[0]
-//             // );
-//             ret
-//         } else {
-//             // debug!(
-//             //     "[VirtIOBlock::read_offset] unaligned read, offset: {}, first char: {:02x}",
-//             //     offset,
-//             //     ret[offset % VIRTIO_BLOCK_SIZE]
-//             // );
-//             ret[(offset % VIRTIO_BLOCK_SIZE)..(offset % VIRTIO_BLOCK_SIZE + ext4_rs::BLOCK_SIZE)]
-//                 .to_vec()
-//         }
-//     }
-
-//     // write data to offset in byte
-//     fn write_offset(&self, offset: usize, data: &[u8]) {
-//         let len = data.len();
-//         // we cannot write half blocks
-//         assert!(offset % VIRTIO_BLOCK_SIZE == 0);
-//         assert!(len % VIRTIO_BLOCK_SIZE == 0);
-//         let mut block_id = offset / VIRTIO_BLOCK_SIZE;
-//         for i in 0..len / VIRTIO_BLOCK_SIZE {
-//             self.0
-//                 .exclusive_access()
-//                 .write_block(
-//                     block_id,
-//                     &data[i * VIRTIO_BLOCK_SIZE..(i + 1) * VIRTIO_BLOCK_SIZE],
-//                 )
-//                 .expect("Error when writing VirtIOBlk");
-//             block_id += 1;
-//         }
-//     }
-// }
 
 impl VirtIOBlock {
     #[allow(unused)]

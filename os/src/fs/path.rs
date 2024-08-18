@@ -89,9 +89,22 @@ impl Path {
         &self.inner
     }
 
-    pub fn clone_and_append(&self, s: &str) -> Self {
+    /// Append a name to the current path
+    /// e.g. "/a/b".append("c") == "/a/b/c"
+    pub fn append_name(&self, s: &str) -> Self {
         let mut ret = self.clone();
         ret.push(s);
+        ret
+    }
+
+    /// Append a path to the current path's directory
+    /// e.g. "/a/b".append_to_dir("c/d") == "/a/c/d"
+    /// other must be a relative path
+    pub fn append_to_dir(&self, other: &Path) -> Self {
+        assert!(other.is_relative);
+        let mut ret = self.clone();
+        ret.pop();
+        ret.inner.extend(other.inner.iter().cloned());
         ret
     }
 }

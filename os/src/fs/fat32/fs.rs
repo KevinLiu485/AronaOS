@@ -22,20 +22,10 @@ pub struct FAT32FileSystem {
 impl FAT32FileSystem {
     /// Open a FAT32 file system, return Err() if not valid
     pub fn open(block_device: Arc<dyn BlockDevice>) -> Result<Arc<SpinNoIrqLock<Self>>, ()> {
-        // debug!("FAT32FileSystem::open()");
         let fs_meta = get_block_cache(0, block_device.clone()).lock().read(
             0,
             |boot_sector: &FAT32BootSector| {
                 info!("[FAT32FileSystem::open] boot_sector: {:?}", boot_sector);
-                // assert!(
-                //     boot_sector.is_valid(),
-                //     "[FAT32FileSystem::open] Error loading boot_sector!"
-                // );
-                // if boot_sector.is_valid() {
-                //     Ok(Arc::new(FAT32Meta::new(boot_sector)))
-                // } else {
-                //     Err(())
-                // }
                 boot_sector
                     .is_valid()
                     .then(|| Arc::new(FAT32Meta::new(boot_sector)))

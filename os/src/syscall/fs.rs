@@ -153,7 +153,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 
 pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
     trace!("[sys_fstat] enter");
-    debug!("[sys_fstat] fd: {}", fd);
+    // debug!("[sys_fstat] fd: {}", fd);
     let file = open_fd(fd).ok_or(SyscallErr::EBADF)?;
     let inode = file
         .get_meta()
@@ -528,7 +528,7 @@ pub fn sys_ppoll(
     // let _sigmask = unsafe { &*(sigmask_ptr as *const usize) };
     let mut ret = 0;
     for fd in fds {
-        debug!("[sys_ppoll] fd: {}, events: {}", fd.fd, fd.events);
+        // debug!("[sys_ppoll] fd: {}, events: {}", fd.fd, fd.events);
         fd.revents = fd.events;
         ret += 1;
     }

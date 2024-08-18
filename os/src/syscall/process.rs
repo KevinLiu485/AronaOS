@@ -7,14 +7,14 @@ use crate::task::processor::{current_process, current_thread};
 use crate::task::{exit_current, yield_task, INITPROC};
 use crate::timer::{TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
-use crate::utils::checksum::calculate_checksum;
+// use crate::utils::checksum::calculate_checksum;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
 use core::time::Duration;
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace, warn};
 
 /// exit 语义，退出当前的线程。
 /// Simply set exit_code and change status to Zombie. More exiting works will de done by its parent.
@@ -123,18 +123,11 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
     if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs
         let all_data = app_inode.read_all().await;
-        debug!(
-            "[sys_exec] app data len: {}, checksum: {}",
-            all_data.len(),
-            calculate_checksum(all_data.as_slice())
-        );
-        // print_file(&all_data);
-        // for i in 0..all_data.len() {
-        //     if i % 35 == 0 {
-        //         println!("");
-        //     }
-        //     print!("{:02x} ", all_data[i]);
-        // }
+        // debug!(
+        //     "[sys_exec] app data len: {}, checksum: {}",
+        //     all_data.len(),
+        //     calculate_checksum(all_data.as_slice())
+        // );
         let current_process = current_process();
         current_process.exec(all_data.as_slice(), args_vec, envs_vec);
         Ok(0)
@@ -246,8 +239,6 @@ impl Future for WaitFuture {
                 exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
             }
         }
-        // debug!("wait task pid is {} ", found_pid);
-        // debug!("exit code is {}", exit_code);
         return Poll::Ready(Ok(found_pid));
     }
 }
@@ -287,7 +278,7 @@ pub fn sys_clone(
         }
         Some(flag) => flag,
     };
-    debug!("[sys_clone] clone flags: {:?}", clone_flags);
+    // debug!("[sys_clone] clone flags: {:?}", clone_flags);
 
     // todo: 检查stack_ptr的是否可写
     let stack = match stack_ptr {
@@ -300,11 +291,11 @@ pub fn sys_clone(
 
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
-        debug!("[sys_clone] fork");
+        log::info!("[sys_clone] fork");
         sys_fork(stack)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone [create a new thread]
-        debug!("[sys_clone] create thread");
+        log::info!("[sys_clone] create thread");
         let new_pid = current_process().clone_thread(
             stack,
             tls_ptr,

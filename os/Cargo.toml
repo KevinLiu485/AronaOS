@@ -29,4 +29,4 @@ debug = true
 kernel_tests = []
 submit = []
 ext4 = []
-# default = ["ext4"]
+default = ["ext4"]

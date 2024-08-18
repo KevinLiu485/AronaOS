@@ -51,7 +51,7 @@ impl FAT32Inode {
         dentry: &FAT32DirEntry,
     ) -> Self {
         let parent_path = &fa_inode.get_meta().path;
-        let path = parent_path.clone_and_append(&dentry.fname());
+        let path = parent_path.append_name(&dentry.fname());
         let mode = if (dentry.attr & ATTR_DIRECTORY) == ATTR_DIRECTORY {
             InodeMode::FileDIR
         } else {
@@ -85,12 +85,12 @@ impl FAT32Inode {
         mode: InodeMode,
     ) -> Self {
         let parent_path = &fa_inode.get_meta().path;
-        let path = parent_path.clone_and_append(name);
-        log::debug!(
-            "[FAT32Inode::new] parent_path: {}, path: {}",
-            parent_path,
-            path
-        );
+        let path = parent_path.append_name(name);
+        // log::debug!(
+        //     "[FAT32Inode::new] parent_path: {}, path: {}",
+        //     parent_path,
+        //     path
+        // );
         let file = FAT32File::new(
             Arc::clone(&fat),
             0,
@@ -125,7 +125,6 @@ impl Inode for FAT32Inode {
     // dir cannot be open as Writeable
     fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            // debug!("[FAT32Inode::write] buf: {:?}, offset: {}", buf, offset);
             let data_size = self.file.lock().size.unwrap_or(0);
             if offset > data_size {
                 // fill gap with '\0'

@@ -91,7 +91,6 @@ impl File for TtyFile {
     }
 
     fn ioctl(&self, request: usize, argp: usize) -> SyscallRet {
-        // stack_trace!();
         log::info!("[TtyFile::ioctl] request {:#x}, argp {:#x}", request, argp);
         match request {
             TCGETS | TCGETA => {
@@ -119,8 +118,6 @@ impl File for TtyFile {
                 //     .check_writable_slice(value as *mut u8, core::mem::size_of::<Pid>())?;
                 unsafe {
                     *(argp as *mut u32) = self.inner.lock().fg_pgid;
-                    // debug!("[TtyFile::ioctl] fake");
-                    // *(argp as *mut u32) = 114514 as u32;
                     log::info!("[TtyFile::ioctl] get fg pgid {}", *(argp as *const u32));
                 }
                 Ok(0)
