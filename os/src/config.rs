@@ -6,7 +6,7 @@
 pub const USER_STACK_SIZE: usize = 4096 * 256; // 1MB
                                                //pub const USER_HEAP_SIZE: usize = 4096 * 2;
                                                // pub const KERNEL_HEAP_SIZE: usize = 0x2_00000;   // 2MB
-pub const KERNEL_HEAP_SIZE: usize = 0x300_0000; // 48MB
+pub const KERNEL_HEAP_SIZE: usize = 0x600_0000; // 48MB
                                                 // const BLOCK_CACHE_SIZE: usize = 16; // 16 * 512 = 8KB
 pub const BLOCK_CACHE_SIZE: usize = 2048 * 24; // 24 * 2048 * 512 = 24MB
 

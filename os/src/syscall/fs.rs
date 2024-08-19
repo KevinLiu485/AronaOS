@@ -281,19 +281,7 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     trace!("[sys_pipe2] enter");
     let process = current_process();
     let pipe_pair = Pipe::new_pair();
-    // let fdret = process.inner_handler(|inner| {
-    //     // let fd1 = inner.fd_table.allocate(0);
-    //     // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
-    //     // let fd2 = inner.fd_table.allocate(0);
-    //     // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
-    //     let fd1 = inner
-    //         .fd_table
-    //         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()))?;
-    //     let fd2 = inner
-    //         .fd_table
-    //         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()))?;
-    //     (fd1, fd2)
-    // });
+
     let fd1 = process
         .inner_lock()
         .fd_table

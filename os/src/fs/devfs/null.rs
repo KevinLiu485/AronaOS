@@ -46,6 +46,6 @@ impl Inode for NullInode {
         panic!("[NullInode::load_children_from_disk] invalid");
     }
     fn clear(&self) {
-        panic!("[NullInode::clear] invalid");
+        // panic!("[NullInode::clear] invalid");
     }
 }

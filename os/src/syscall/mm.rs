@@ -5,7 +5,7 @@ use crate::config::{MMAP_MIN_ADDR, PAGE_SIZE};
 use crate::ctypes::{MmapFlags, MMAPPROT};
 use crate::mutex::SpinNoIrqLock;
 use crate::task::processor::current_process;
-use log::{info, trace};
+use log::{debug, info, trace};
 
 // Todo?: 根据测例实际要实现的是sbrk?
 // brk可以不对齐
@@ -82,12 +82,16 @@ pub async fn sys_mmap(
     }
     // mmap区域最低地址为MMAP_MIN_ADDR
     let mut start = proc.inner_handler(|inner| inner.memory_set.mmap_start);
-    let mut permission = prot.into();
+    let mut permission: MapPermission = prot.into();
+
     // 注意加上U权限
     permission |= MapPermission::U;
+    if (permission.contains(MapPermission::X)) && (permission.contains(MapPermission::R)) {
+        permission |= MapPermission::W;
+    }
     // 匿名映射
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        log::info!("[sys_mmap] anonymous mmap");
+        info!("[sys_mmap] anonymous mmap");
         //需要fd为-1, offset为0
         if fd != -1 || offset != 0 {
             return Err(SyscallErr::EINVAL.into());
@@ -97,6 +101,7 @@ pub async fn sys_mmap(
             .memory_set
             .get_unmapped_area(start, len)
             .ok_or(SyscallErr::ENOMEM)?;
+
         proc.inner_lock()
             .memory_set
             .insert_anonymous_area(vpn_range, permission);
@@ -132,6 +137,7 @@ pub async fn sys_mmap(
         start = VirtAddr::from(vpn_range.get_start()).into();
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
         let origin_offset = file.seek(offset);
+        debug!("buf num is:{:p}", buf);
         if file.read(buf).await.is_err() {
             return Err(SyscallErr::EINVAL.into());
         }

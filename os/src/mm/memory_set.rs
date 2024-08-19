@@ -661,6 +661,7 @@ impl MemorySet {
             if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
                 interps.push("/libc.so".to_string());
                 interps.push("/lib/libc.so".to_string());
+                interps.push("/lib/glibc/libc.so".to_string());
             }
 
             // - 解析动态链接器路径，找到对应的inode。
@@ -709,7 +710,7 @@ impl MemorySet {
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
 
-            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+            if ph.get_type().unwrap() == Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize + offset.0).into();
                 let end_va: VirtAddr =
                     ((ph.virtual_addr() + ph.mem_size()) as usize + offset.0).into();

@@ -87,10 +87,6 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
         args_vec.push("busybox".to_string());
         args_vec.push("sh".to_string());
     }
-    // else if path.to_string().ends_with("sleep") || path.to_string().ends_with("ls") {
-    //     path = Path::from("/busybox".to_string());
-    //     args_vec.push("busybox".to_string());
-    // }
 
     if args != null() {
         loop {
@@ -120,6 +116,9 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
             }
         }
     }
+
+    envs_vec.push("PATH=/:/bin:/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin:".to_string());
+    envs_vec.push("LD_LIBRARY_PATH=/:/lib:/lib64/lp64d:/usr/lib:/usr/local/lib:".to_string());
 
     if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs

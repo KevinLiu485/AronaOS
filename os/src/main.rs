@@ -109,6 +109,7 @@ pub fn rust_main(hart_id: usize) -> ! {
     println!("#+#     #+# #+#    #+# #+#    #+# #+#   #+#+# #+#     #+#       #+#    #+# #+#    #+# ");
     println!("###     ### ###    ###  ########  ###    #### ###     ###        ########   ########  ");
     println!("");
+    // println!("plana os");
     // println!("~*^*~ Bug bug flying away! ~*^*~");
     print!("\u{1B}[0m");
 
