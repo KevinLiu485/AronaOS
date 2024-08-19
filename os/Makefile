@@ -97,8 +97,9 @@ $(KERNEL_BIN): kernel
 fs-img:
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
-	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+#	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
 #	@dd if=/dev/zero of=$(FS_IMG) count=2048 bs=1M
+	@dd if=/dev/zero of=$(FS_IMG) count=512 bs=1M
 ifeq ($(FS), ext4)
 	@mkfs.ext4 $(FS_IMG)
 	@mkdir -p mnt
