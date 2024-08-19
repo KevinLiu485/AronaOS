@@ -138,7 +138,8 @@ ifeq ($(SUBMIT), true)
 else ifeq ($(FEATURE_ARGS), )
 	LOG=$(LOG) cargo build $(MODE_ARG)
 else 
-	LOG=$(LOG) cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
+#	LOG=$(LOG) cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
+	cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
 endif
 	@rm src/linker.ld
 
