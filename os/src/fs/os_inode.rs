@@ -65,7 +65,14 @@ impl OSInode {
             return Self::new(readable, writable, target_inode);
         }
         Some(Self {
-            meta: FileMeta::new(Some(inode), 0, 0, readable, writable),
+            meta: FileMeta::new(
+                Some(inode),
+                0,
+                0,
+                readable,
+                writable,
+                super::OSFileType::OSInode,
+            ),
         })
     }
     pub async fn read_all(&self) -> Vec<u8> {
@@ -85,7 +92,9 @@ impl File for OSInode {
             }
             let inode = self.inner_handler(|inner| inner.inode.clone()).unwrap();
             let offset = self.get_offset();
+            log::debug!("[OSInode::read] offset = {}", offset);
             let read_size = inode.read(offset, buf).await?;
+            log::debug!("[OSInode::read] read_size = {}", read_size);
             self.set_offset(offset + read_size);
             Ok(read_size)
         })

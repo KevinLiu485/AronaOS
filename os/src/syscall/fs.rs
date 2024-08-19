@@ -16,11 +16,13 @@ use crate::config::SyscallRet;
 use crate::fs::fd_table::FdInfo;
 use crate::fs::inode::{Inode, InodeMode};
 use crate::fs::path::Path;
-use crate::fs::pipe::Pipe;
+use crate::fs::pipe::{Pipe, PIPE_BUFFER_SIZE};
 use crate::fs::tty::TTY;
 use crate::fs::{
-    create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
+    create_dir, open_fd, open_inode, open_osinode, Fstat, OSFileType, OpenFlags, AT_FDCWD,
+    AT_REMOVEDIR,
 };
+// use crate::syscall::process;
 // use crate::mm::user_check::UserCheck;
 // use crate::syscall::process;
 // use crate::syscall::process;
@@ -155,6 +157,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 
 pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
     trace!("[sys_fstat] enter");
+    warn!("[sys_fstat] not fully implemented");
     // debug!("[sys_fstat] fd: {}", fd);
     let file = open_fd(fd).ok_or(SyscallErr::EBADF)?;
     let inode = file
@@ -808,4 +811,94 @@ pub async fn sys_sync() -> SyscallRet {
     warn!("[sys_sync] not implemented.");
     trace!("[sys_sync] sync finished");
     Ok(0)
+}
+
+pub async fn sys_splice(
+    fd_in: i32,
+    offset_in: usize,
+    fd_out: i32,
+    offset_out: usize,
+    len: usize,
+    _flags: u32,
+) -> SyscallRet {
+    trace!("[sys_splice] enter. fd_in: {}, offset_in: {:#x}, fd_out: {}, offset_out: {:#x}, len: {}, flags: {}", fd_in, offset_in, fd_out, offset_out, len, _flags);
+    // warn!("[sys_splice] not implemented.");
+    // let mut len = len;
+    if len == 0 {
+        return Ok(0);
+        // len = PIPE_BUFFER_SIZE;
+    }
+    let process = current_process();
+    let fd_in = process
+        .inner_lock()
+        .fd_table
+        .get(fd_in as usize)
+        .ok_or(SyscallErr::EBADF)?;
+    let fd_out = process
+        .inner_lock()
+        .fd_table
+        .get(fd_out as usize)
+        .ok_or(SyscallErr::EBADF)?;
+
+    if fd_in.file.get_meta().filetype == OSFileType::Pipe {
+        log::debug!("[sys_splice] fd_in is pipe");
+        // read
+        let mut buffer = vec![0u8; len];
+        let read_size = fd_in.file.read(&mut buffer).await?;
+        log::debug!(
+            "[sys_splice] read_size: {}, buffer: {:?}",
+            read_size,
+            buffer
+        );
+
+        // write
+        let offset_out_val = unsafe { *(offset_out as *const usize) };
+        log::debug!("[sys_splice] offset_out_val: {}", offset_out_val);
+        // let original_offset = fd_out.file.seek(offset_out).ok_or(SyscallErr::EINVAL)?;
+        let original_offset = match fd_out.file.seek(offset_out_val) {
+            Some(offset) => offset,
+            None => {
+                log::debug!("fd_out not seekable");
+                return Err(SyscallErr::EINVAL as usize);
+            }
+        };
+        let write_size = fd_out.file.write(&buffer[..read_size]).await?;
+
+        assert!(read_size == write_size);
+        // reset offset
+        fd_out.file.seek(original_offset);
+        // update offset_out
+        unsafe {
+            *(offset_out as *mut usize) += write_size;
+        }
+        return Ok(write_size);
+    } else if fd_out.file.get_meta().filetype == OSFileType::Pipe {
+        log::debug!("[sys_splice] fd_out is pipe");
+        // read
+        let offset_in_val = unsafe { *(offset_in as *const usize) };
+        // let original_offset = fd_in.file.seek(offset_in).ok_or(SyscallErr::EINVAL)?;
+        let original_offset = match fd_in.file.seek(offset_in_val) {
+            Some(offset) => offset,
+            None => {
+                log::debug!("fd_in not seekable");
+                return Err(SyscallErr::EINVAL as usize);
+            }
+        };
+        let mut buffer = vec![0u8; len];
+        let read_size = fd_in.file.read(&mut buffer).await?;
+
+        // write
+        let write_size = fd_out.file.write(&buffer[..read_size]).await?;
+
+        assert!(read_size == write_size);
+        // reset offset
+        fd_in.file.seek(original_offset);
+        // update offset_in
+        unsafe {
+            *(offset_in as *mut usize) = original_offset + read_size;
+        }
+        return Ok(write_size);
+    } else {
+        return Err(SyscallErr::EINVAL as usize);
+    }
 }

@@ -803,6 +803,7 @@ impl Ext4InodeRef {
         current_block = current_fsblk;
         *fblock = current_block;
 
+        log::debug!("[Ext4InodeRef::append_inode_dblk] inode size: {} -> {}", inode_size, inode_size + BLOCK_SIZE as u64);
         self.inner
             .inode
             .ext4_inode_set_size(inode_size + BLOCK_SIZE as u64);

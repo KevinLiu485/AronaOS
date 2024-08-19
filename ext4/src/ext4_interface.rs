@@ -632,25 +632,15 @@ impl Ext4 {
         return Ok(EOK);
     }
 
-    pub fn ext4_follow_symlink(&self, ext4_file: &Ext4File) -> String {
-        let inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
-        let ext4_inode = inode_ref.inner.inode;
-
-        let size = ext4_inode.inode_get_size();
-        // log::debug!("[Ext4::ext4_follow_symlink] size: {}", size);
-        if size > core::mem::size_of::<[u32; 15]>() as u64 {
-            core::panic!("[Ext4::ext4_follow_symlink] long symlink");
-        }
-
-        let inline_data = ext4_inode.block;
-        let inline_data_bytes = unsafe {
-            slice::from_raw_parts(
-                inline_data.as_ptr() as *const u8,
-                inline_data.len() * core::mem::size_of::<u32>(),
-            )
-        };
-        str::from_utf8(inline_data_bytes).unwrap().trim_end_matches('\0').to_string()
-    }
+    // pub fn ext4_file_write(&self, ext4_file: &mut Ext4File, data: &[u8], size: usize) {
+    //     let super_block_data = self.block_device.read_offset(BASE_OFFSET);
+    //     let super_block = Ext4Superblock::try_from(super_block_data).unwrap();
+    //     let mut inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
+    //     let block_size = super_block.block_size() as usize;
+    //     let iblock_last = ext4_file.fpos as usize + size / block_size;
+    //     let mut iblk_idx = ext4_file.fpos as usize / block_size;
+    //     let ifile_blocks = ext4_file.fsize as usize + block_size - 1 / block_size;
+    // }
 
     pub fn ext4_file_write(&self, ext4_file: &mut Ext4File, data: &[u8], size: usize) {
         let super_block_data = self.block_device.read_offset(BASE_OFFSET);
@@ -684,6 +674,7 @@ impl Ext4 {
         }
 
         for i in 0..fblock_count {
+            log::debug!("[Ext4::ext4_file_write] write data. fblock_count: {}", fblock_count);
             let idx = i * BLOCK_SIZE as usize;
             let offset = (fblock_start as usize + i as usize) * BLOCK_SIZE;
             self.block_device
@@ -694,6 +685,29 @@ impl Ext4 {
         // let mut inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
         let mut root_inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), 2);
         root_inode_ref.write_back_inode();
+    }
+
+    pub fn ext4_follow_symlink(&self, ext4_file: &Ext4File) -> String {
+        let inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
+        let ext4_inode = inode_ref.inner.inode;
+
+        let size = ext4_inode.inode_get_size();
+        // log::debug!("[Ext4::ext4_follow_symlink] size: {}", size);
+        if size > core::mem::size_of::<[u32; 15]>() as u64 {
+            core::panic!("[Ext4::ext4_follow_symlink] long symlink");
+        }
+
+        let inline_data = ext4_inode.block;
+        let inline_data_bytes = unsafe {
+            slice::from_raw_parts(
+                inline_data.as_ptr() as *const u8,
+                inline_data.len() * core::mem::size_of::<u32>(),
+            )
+        };
+        str::from_utf8(inline_data_bytes)
+            .unwrap()
+            .trim_end_matches('\0')
+            .to_string()
     }
 
     pub fn read_dir_entry(&self, inode: u64) -> Vec<Ext4DirEntry> {

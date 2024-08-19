@@ -164,6 +164,11 @@ impl ext4_rs::BlockDevice for BlockCacheManager {
 
     // write all data to offset
     fn write_offset(&self, offset: usize, data: &[u8]) {
+        // log::debug!(
+        //     "[BlockCacheManager::write_offset] offset = {}, data.len() = {}",
+        //     offset,
+        //     data.len()
+        // );
         let mut block_id = offset / VIRTIO_BLOCK_SIZE;
         let mut write_cnt = 0;
         let total_len = data.len();

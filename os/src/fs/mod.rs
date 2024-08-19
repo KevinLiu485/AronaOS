@@ -28,12 +28,14 @@ use crate::{
 pub struct FileMetaInner {
     pub inode: Option<Arc<dyn Inode>>,
     pub offset: usize,
+    /// used for sys_getdents, recording the next index of dentry to output
     pub dentry_index: usize,
 }
 
 pub struct FileMeta {
     pub readable: bool,
     pub writable: bool,
+    pub filetype: OSFileType,
     pub inner: SpinNoIrqLock<FileMetaInner>,
 }
 
@@ -44,10 +46,12 @@ impl FileMeta {
         dentry_index: usize,
         readable: bool,
         writable: bool,
+        filetype: OSFileType,
     ) -> Self {
         Self {
             readable,
             writable,
+            filetype,
             inner: SpinNoIrqLock::new(FileMetaInner {
                 inode,
                 offset,
@@ -56,8 +60,8 @@ impl FileMeta {
         }
     }
 
-    pub fn new_bare(readable: bool, writable: bool) -> Self {
-        FileMeta::new(None, 0, 0, readable, writable)
+    pub fn new_bare(readable: bool, writable: bool, filetype: OSFileType) -> Self {
+        FileMeta::new(None, 0, 0, readable, writable, filetype)
     }
 }
 
@@ -79,6 +83,14 @@ pub trait File: Send + Sync {
     //     error!("ioctl not implemented");
     //     Err(SyscallErr::ENOTTY as usize)
     // }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum OSFileType {
+    OSInode,
+    Pipe,
+    SocketPair,
+    TTY,
 }
 
 #[derive(Debug)]
@@ -107,6 +119,7 @@ impl Fstat {
         // only for FileREG and FileLNK
         let data_lock = metadata.inner.lock();
         let data_size = data_lock.data_size;
+        // log::debug!("[Fstat::new] data_size = {}", data_size);
         Self {
             st_dev: 0,
             st_ino: metadata.ino as u64,

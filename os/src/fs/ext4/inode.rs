@@ -28,9 +28,17 @@ impl Ext4Inode {
     }
 
     /// update the `data_size` of the inode from disk
-    fn update_size(&self) {
-        let size = self.get_size();
-        self.meta.inner.lock().data_size = size;
+    fn update_size(&self, size_delta: usize) {
+        // let size = self.get_size();
+        // self.meta.inner.lock().data_size = size;
+
+        // log::debug!(
+        //     "[Ext4Inode::update_size] update size: {} -> {}",
+        //     self.meta.inner.lock().data_size,
+        //     size
+        // );
+        // let old_size = self.meta.inner.lock().data_size;
+        self.meta.inner.lock().data_size += size_delta;
     }
 
     fn get_size(&self) -> usize {
@@ -69,6 +77,7 @@ impl Inode for Ext4Inode {
     fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
             let mut read_cnt = 0usize;
+            log::debug!("[Ext4Inode::read] file size on disk: {}", self.get_size());
             let _ = self
                 .fs
                 .ext4_file_read(
@@ -81,6 +90,7 @@ impl Inode for Ext4Inode {
                     error!("[Ext4Inode::read] {:?}", ext4_err);
                     ext4_err.error() as usize
                 })?;
+            log::debug!("[Ext4Inode::read] read {} bytes", read_cnt);
             Ok(read_cnt)
         })
     }
@@ -90,7 +100,8 @@ impl Inode for Ext4Inode {
             let _ = self
                 .fs
                 .ext4_file_write(&mut self.create_ext4_file(offset), buf, buf.len());
-            self.update_size();
+            self.update_size(buf.len());
+            log::debug!("[Ext4Inode::write] write {} bytes", buf.len());
             Ok(buf.len())
         })
     }

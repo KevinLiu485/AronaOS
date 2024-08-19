@@ -33,7 +33,7 @@ impl TtyFile {
     pub fn new(readable: bool, writable: bool) -> Self {
         Self {
             // tty_inode,
-            meta: FileMeta::new_bare(readable, writable),
+            meta: FileMeta::new_bare(readable, writable, super::OSFileType::TTY),
             inner: SpinNoIrqLock::new(TtyInner {
                 fg_pgid: 0,
                 win_size: WinSize::new(),

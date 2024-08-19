@@ -29,6 +29,7 @@ pub struct FdTable {
 }
 /// max num file descriptors
 pub const MAX_FD_NUM: usize = 1024;
+
 impl FdTable {
     pub fn set_rlimit(&mut self, rlimit: RLimit) {
         self.rlimit = rlimit;

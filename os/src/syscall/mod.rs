@@ -96,6 +96,8 @@ const SYS_MEMBARRIER: usize = 283;
 const SYS_STATFS: usize = 43;
 // const SYS_READLINKAT: usize = 78;
 
+const SYS_SPLICE: usize = 76;
+
 mod fs;
 mod mm;
 pub(crate) mod process;
@@ -113,7 +115,7 @@ use crate::signal::sys_rt_sigtimedwait;
 use crate::syscall::resource::{sys_prlimit64, RLimit};
 use crate::{
     config::SyscallRet,
-    futex::sys_futex,
+    // futex::sys_futex,
     signal::{sys_kill, sys_rt_sigaction, sys_rt_sigerturn, sys_rt_sigprocmask},
 };
 
@@ -256,6 +258,18 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_MEMBARRIER => dummy(SYS_MEMBARRIER, "sys_mem_barrier"),
         SYS_STATFS => dummy(SYS_STATFS, "sys_statfs"),
         SYS_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
+
+        SYS_SPLICE => {
+            sys_splice(
+                args[0] as i32,
+                args[1],
+                args[2] as i32,
+                args[3],
+                args[4],
+                args[5] as u32,
+            )
+            .await
+        }
         _ => unknown(syscall_id),
     }
 }
