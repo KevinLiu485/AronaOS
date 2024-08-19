@@ -138,7 +138,7 @@ pub async fn sys_mmap(
         let buf = unsafe { core::slice::from_raw_parts_mut(start as *mut u8, len) };
         let origin_offset = file.seek(offset);
         debug!("buf num is:{:p}", buf);
-        if file.read(buf).await.is_err() {
+        if file.read(buf).await.is_err() {/**/
             return Err(SyscallErr::EINVAL.into());
         }
         if let Some(origin_offset) = origin_offset {
