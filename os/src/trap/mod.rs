@@ -168,10 +168,10 @@ pub fn trap_return() {
 pub fn trap_from_kernel() -> ! {
     use riscv::register::sepc;
     error!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
-    // let satp = satp::read().bits();
-    // let page_table = PageTable::from_token(satp);
+    let satp = satp::read().bits();
+    let page_table = PageTable::from_token(satp);
     // page_table.dump();
-    // page_table.dump_all();
+    page_table.dump_all();
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 

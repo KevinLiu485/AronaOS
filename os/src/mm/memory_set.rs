@@ -564,7 +564,8 @@ impl MemorySet {
             areas,
             heap,
             brk,
-            mmap_start: MMAP_MIN_ADDR,
+            // mmap_start: MMAP_MIN_ADDR,
+            mmap_start: user_space.mmap_start,
         }
     }
     ///Clone a same `MemorySet`

@@ -16,7 +16,7 @@ use crate::config::SyscallRet;
 use crate::fs::fd_table::FdInfo;
 use crate::fs::inode::{Inode, InodeMode};
 use crate::fs::path::Path;
-use crate::fs::pipe::{Pipe, PIPE_BUFFER_SIZE};
+use crate::fs::pipe::Pipe;
 use crate::fs::tty::TTY;
 use crate::fs::{
     create_dir, open_fd, open_inode, open_osinode, Fstat, OSFileType, OpenFlags, AT_FDCWD,
@@ -35,10 +35,6 @@ use crate::utils::{c_str_to_string, SyscallErr};
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     // trace!("[sys_write] enter fd:{}, buf:{}, len is {}", fd, buf, len);
     let process = current_process();
-    // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
-    // if fd >= fd_table_len {
-    //     return Err(1);
-    // }
     let fdinfo = process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         let ret = fdinfo
@@ -58,11 +54,6 @@ pub async fn sys_read(
 ) -> SyscallRet {
     let process = current_process();
     /* cannot use `inner` as MutexGuard will cross `await` that way */
-    // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
-    // if fd >= fd_table_len {
-    //     return Err(1);
-    // }
-    // let fdinfo = task.inner_handler(|inner| inner.fd_table.table[fd].clone());
     let fdinfo = process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         let ret = fdinfo
@@ -104,9 +95,6 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
             return Err(SyscallErr::EISDIR as usize);
         }
         let fd = if mode == InodeMode::FileCHR {
-            // let tty_file =
-            //     TtyFile::new(osinode.inner_handler(|inner| inner.inode.clone().unwrap()));
-            // let tty_file = Arc::new(tty_file);
             process
                 .inner_lock()
                 .fd_table
@@ -280,23 +268,10 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet
     }
 }
 
-pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
-    trace!("[sys_pipe2] enter");
+pub fn sys_pipe2(fdset: *const u8, flags: u32) -> SyscallRet {
+    trace!("[sys_pipe2] enter, flags: {}", flags);
     let process = current_process();
     let pipe_pair = Pipe::new_pair();
-    // let fdret = process.inner_handler(|inner| {
-    //     // let fd1 = inner.fd_table.allocate(0);
-    //     // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
-    //     // let fd2 = inner.fd_table.allocate(0);
-    //     // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
-    //     let fd1 = inner
-    //         .fd_table
-    //         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()))?;
-    //     let fd2 = inner
-    //         .fd_table
-    //         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()))?;
-    //     (fd1, fd2)
-    // });
     let fd1 = process
         .inner_lock()
         .fd_table
@@ -306,7 +281,6 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
         .fd_table
         .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()))?; // let fdret = (fd1, fd2);
                                                                         /* the FUCKING user fd is `i32` type! */
-    // let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
     let fdret: [i32; 2] = [fd1 as i32, fd2 as i32];
     let fdset_ptr = fdset as *mut [i32; 2];
     unsafe {
@@ -314,18 +288,6 @@ pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
     }
     Ok(0)
 }
-
-// pub fn sys_mount() -> SyscallRet {
-//     trace!("[sys_mount] enter");
-//     warn!("[sys_mount] not implemented");
-//     Ok(0)
-// }
-
-// pub fn sys_umount2() -> SyscallRet {
-//     trace!("[sys_umount2] enter");
-//     warn!("[sys_umount2] not implemented");
-//     Ok(0)
-// }
 
 pub fn sys_ioctl(fd: i32, request: usize, argp: usize) -> SyscallRet {
     trace!("[sys_ioctl] enter. fd: {}, request: {}", fd, request);
@@ -822,11 +784,8 @@ pub async fn sys_splice(
     _flags: u32,
 ) -> SyscallRet {
     trace!("[sys_splice] enter. fd_in: {}, offset_in: {:#x}, fd_out: {}, offset_out: {:#x}, len: {}, flags: {}", fd_in, offset_in, fd_out, offset_out, len, _flags);
-    // warn!("[sys_splice] not implemented.");
-    // let mut len = len;
     if len == 0 {
         return Ok(0);
-        // len = PIPE_BUFFER_SIZE;
     }
     let process = current_process();
     let fd_in = process
@@ -845,11 +804,6 @@ pub async fn sys_splice(
         // read
         let mut buffer = vec![0u8; len];
         let read_size = fd_in.file.read(&mut buffer).await?;
-        log::debug!(
-            "[sys_splice] read_size: {}, buffer: {:?}",
-            read_size,
-            buffer
-        );
 
         // write
         let offset_out_val = unsafe { *(offset_out as *const usize) };
@@ -864,7 +818,7 @@ pub async fn sys_splice(
         };
         let write_size = fd_out.file.write(&buffer[..read_size]).await?;
 
-        assert!(read_size == write_size);
+        assert!(read_size >= write_size);
         // reset offset
         fd_out.file.seek(original_offset);
         // update offset_out
@@ -890,12 +844,13 @@ pub async fn sys_splice(
         // write
         let write_size = fd_out.file.write(&buffer[..read_size]).await?;
 
-        assert!(read_size == write_size);
+        // let ret = core::cmp::min(read_size, write_size);
+        assert!(read_size >= write_size);
         // reset offset
         fd_in.file.seek(original_offset);
         // update offset_in
         unsafe {
-            *(offset_in as *mut usize) = original_offset + read_size;
+            *(offset_in as *mut usize) += write_size;
         }
         return Ok(write_size);
     } else {

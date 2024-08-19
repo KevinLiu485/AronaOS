@@ -151,7 +151,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYS_DUP => sys_dup(args[0]),
         SYS_DUP3 => sys_dup3(args[0], args[1]),
         SYS_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
-        SYS_PIPE2 => sys_pipe2(args[0] as *const u8),
+        SYS_PIPE2 => sys_pipe2(args[0] as *const u8, args[1] as u32),
         SYS_LINKAT => dummy(SYS_LINKAT, "sys_linkat"),
         SYS_MOUNT => dummy(SYS_MOUNT, "sys_mount"),
         SYS_UMOUNT2 => dummy(SYS_UMOUNT2, "sys_umount2"),

@@ -17,6 +17,8 @@ use alloc::{
 use ext4_rs::{Ext4, Ext4File, Ext4InodeRef, Ext4MountPoint, OpenFlag};
 use log::{debug, error, warn};
 
+use super::ram_inode::Ext4RamInode;
+
 pub struct Ext4Inode {
     fs: Arc<Ext4>,
     meta: Arc<InodeMeta>,
@@ -115,30 +117,44 @@ impl Inode for Ext4Inode {
         if self.meta.mode != InodeMode::FileDIR {
             return Err(1);
         }
-        let new_path = self.get_meta().path.to_string() + "/" + name;
-        let new_ino = if mode == InodeMode::FileDIR {
+        if mode == InodeMode::FileDIR {
+            let new_path = self.meta.path.append_name(name);
+            // let new_path = self.get_meta().path.to_string() + "/" + name;
             let mut file_out = Ext4File::new();
-            let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", false);
-            file_out.inode
+            let _ = self
+                .fs
+                .ext4_open(&mut file_out, &new_path.to_string(), "a+", false);
+            let new_ino = file_out.inode;
+            // let new_ino = if mode == InodeMode::FileDIR {
+            //     let mut file_out = Ext4File::new();
+            //     let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", false);
+            //     file_out.inode
+            // } else if mode == InodeMode::FileREG {
+            //     let mut file_out = Ext4File::new();
+            //     let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", true);
+            //     file_out.inode
+            // } else {
+            //     return Err(1);
+            // };
+            // let path = self.meta.path.append_name(name);
+            let meta = Arc::new(InodeMeta::new(
+                Some(this.clone()),
+                new_path,
+                mode,
+                0,
+                new_ino as usize,
+            ));
+            Ok(Arc::new(Ext4Inode {
+                fs: self.fs.clone(),
+                meta,
+            }))
         } else if mode == InodeMode::FileREG {
-            let mut file_out = Ext4File::new();
-            let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", true);
-            file_out.inode
+            let new_path = self.meta.path.append_name(name);
+            let meta = Arc::new(InodeMeta::new(Some(this.clone()), new_path, mode, 0, 0));
+            Ok(Arc::new(Ext4RamInode::new(meta)))
         } else {
-            return Err(1);
-        };
-        let name = self.meta.path.append_name(name);
-        let meta = Arc::new(InodeMeta::new(
-            Some(this.clone()),
-            name,
-            mode,
-            0,
-            new_ino as usize,
-        ));
-        Ok(Arc::new(Ext4Inode {
-            fs: self.fs.clone(),
-            meta,
-        }))
+            Err(1)
+        }
     }
 
     fn get_meta(&self) -> Arc<InodeMeta> {

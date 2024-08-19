@@ -83,19 +83,19 @@ pub fn exit_current(exit_code: i32) {
     }
 }
 
-#[cfg(feature = "submit")]
+// #[cfg(feature = "submit")]
 lazy_static! {
     pub static ref INIT_THREAD: Arc<Thread> =
         new_initproc(get_app_data_by_name("submit_script").unwrap());
     pub static ref INITPROC: Arc<Process> = INIT_THREAD.process.clone();
 }
 
-#[cfg(not(feature = "submit"))]
-lazy_static! {
-    ///Globle process that init user shell
-    pub static ref INIT_THREAD: Arc<Thread> = new_initproc(get_app_data_by_name("initproc").unwrap());
-    pub static ref INITPROC: Arc<Process> = INIT_THREAD.process.clone();
-}
+// #[cfg(not(feature = "submit"))]
+// lazy_static! {
+//     ///Globle process that init user shell
+//     pub static ref INIT_THREAD: Arc<Thread> = new_initproc(get_app_data_by_name("initproc").unwrap());
+//     pub static ref INITPROC: Arc<Process> = INIT_THREAD.process.clone();
+// }
 ///Add init process to the manager
 pub fn add_initproc() {
     schedule::spawn_thread(INIT_THREAD.clone());

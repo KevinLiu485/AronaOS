@@ -97,9 +97,11 @@ pub async fn sys_mmap(
             .memory_set
             .get_unmapped_area(start, len)
             .ok_or(SyscallErr::ENOMEM)?;
+        log::debug!("[sys_mmap] vpn_range: {}", vpn_range);
         proc.inner_lock()
             .memory_set
-            .insert_anonymous_area(vpn_range, permission);
+            .insert_framed_area(vpn_range, permission);
+        // .insert_anonymous_area(vpn_range, permission);
 
         let new_start: usize = VirtAddr::from(vpn_range.get_end()).into();
         proc.inner_handler(|inner| inner.memory_set.mmap_start = new_start);
