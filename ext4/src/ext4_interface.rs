@@ -54,7 +54,7 @@ impl Ext4 {
         let raw_data = block_device.read_offset(BASE_OFFSET);
         let super_block = Ext4Superblock::try_from(raw_data).unwrap();
 
-        // log::info!("super_block: {:x?}", super_block);
+        log::info!("super_block: {:x?}", super_block);
         let inodes_per_group = super_block.inodes_per_group();
         let blocks_per_group = super_block.blocks_per_group();
         let inode_size = super_block.inode_size();

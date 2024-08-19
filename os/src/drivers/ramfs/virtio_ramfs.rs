@@ -16,7 +16,7 @@ impl VirtIORamFS {
 impl ext4_rs::BlockDevice for VirtIORamFS {
     // read data from offset in byte, return a Vec<u8> with length of ext4_rs::BLOCK_SIZE(4096 B)
     fn read_offset(&self, offset: usize) -> Vec<u8> {
-        // log::debug!("[VirtIORamFS::read_offset] offset: {:#x}", offset);
+        log::debug!("[VirtIORamFS::read_offset] offset: {:#x}", offset);
         let start_addr = self.base + offset;
         let block_size = ext4_rs::BLOCK_SIZE;
         unsafe {

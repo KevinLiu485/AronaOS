@@ -39,7 +39,7 @@ KTEST :=
 SMP := 2
 IMG := 
 MEM_SIZE = 128M
-FS := ext4
+FS := 
 
 # BOARD
 BOARD := qemu
