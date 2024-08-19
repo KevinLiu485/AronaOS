@@ -27,7 +27,8 @@ FS_DIR := ../fs-img-src
 # packing this one is quite slow, causing by /ltp
 # FS_IMG_ROOT := $(FS_DIR)/root-2024
 # deleted dynamic-link and /ltp
-FS_IMG_ROOT := $(FS_DIR)/root-2024-part
+# FS_IMG_ROOT := $(FS_DIR)/root-2024-part
+FS_IMG_ROOT := $(FS_DIR)/splice
 # FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
 FS_IMG := $(FS_DIR)/fs.img
 # FS_IMG := ../sdcard.img
