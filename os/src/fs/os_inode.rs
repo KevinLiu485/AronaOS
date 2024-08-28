@@ -141,7 +141,8 @@ lazy_static! {
     };
 }
 
-#[cfg(feature = "ext4")]
+// #[cfg(feature = "ext4")]
+#[cfg(all(not(feature = "fat32"), not(feature = "ext4-ramfs")))]
 lazy_static! {
     pub static ref ROOT_INODE: Arc<dyn Inode> = {
         info!("FS type: ext4");

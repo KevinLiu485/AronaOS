@@ -24,14 +24,8 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-# packing this one is quite slow, causing by /ltp
-# FS_IMG_ROOT := $(FS_DIR)/root-2024
-# deleted dynamic-link and /ltp
-# FS_IMG_ROOT := $(FS_DIR)/root-2024-part
 FS_IMG_ROOT := $(FS_DIR)/splice
-# FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
 FS_IMG := $(FS_DIR)/fs.img
-# FS_IMG := ../sdcard.img
 
 # Configs
 LOG := ERROR
@@ -40,7 +34,7 @@ KTEST :=
 SMP := 2
 IMG := 
 MEM_SIZE = 128M
-FS := 
+FS := ext4
 
 # BOARD
 BOARD := qemu
@@ -116,12 +110,6 @@ endif
 
 build-user: 
 	@cd ../user && make build SUBMIT=$(SUBMIT)
-
-# ifeq ($(SUBMIT), true)
-# 	@cd ../user && make build SUBMIT=true
-# else 
-# 	@cd ../user && make build
-# endif
 
 build-muslc:
 	@cd ../muslc && make build

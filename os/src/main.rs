@@ -1,4 +1,3 @@
-//! main函数，以及程序的进入点，先跑entry.S之后就是rust_main.rs
 //! 之后调用 [`executor::run_forever()`] 这也是第一次进入userspace
 //! 各类功能在以下的子模块被实现
 //! - [`trap`] :解决用户空间和内核空间的切换
