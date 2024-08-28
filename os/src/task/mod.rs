@@ -1,7 +1,7 @@
 //! 这里基本是关于和切换任务
 //! [`TaskManager`] （单例）控制着所有的系统task （目前还没有对应的线程进程抽象）
 //! [`U7Hart`] （单例）监听着核上面运行的任务。
-//! [`PidAllocator`]（单例）分配所有的 pid
+//! [`RecycleAllocator`]（单例）分配所有的 pid
 //! 用了异步无栈协程进行对应的相关调度
 
 pub mod aux;
@@ -10,7 +10,7 @@ pub(crate) mod processor;
 pub mod schedule;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
-mod task;
+pub mod task;
 
 use crate::loader::get_app_data_by_name;
 use crate::sbi::shutdown;
@@ -26,7 +26,7 @@ use processor::current_thread;
 // use task::{TaskControlBlock, TaskStatus};
 
 use log::info;
-pub use pid::{pid_alloc, PidAllocator, PidHandle};
+pub use pid::{id_alloc, IdHandle, RecycleAllocator};
 pub use processor::{current_trap_cx, current_user_token, take_current_thread};
 pub use schedule::yield_task;
 use task::Thread;
@@ -62,9 +62,9 @@ pub fn exit_current(exit_code: i32) {
 
     let mut process_inner = process.inner_lock();
     process_inner.exit_code = exit_code; // Record exit code
-    process_inner.threads.remove(&current_thread.getpid());
+    process_inner.threads.remove(&current_thread.get_tid());
 
-    PROCESS_MANAGER.lock().remove(&current_thread.getpid());
+    PROCESS_MANAGER.lock().remove(&current_thread.get_tid());
 
     if process_inner.threads.len() <= 0 {
         process.is_zombie.store(true, Relaxed);

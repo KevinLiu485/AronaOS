@@ -11,8 +11,8 @@
 #  		By default, AronaOS will run in release mode.
 # - `IMG`: Run with `IMG=fs.img` to specify the filesystem image, without packing img.
 #		By default, AronaOS will first pack then run with `$(FS_DIR)/fs.img`.
-# - `FS`: Run with `FS=ext4` to specify the filesystem type.
-# 		By default, AronaOS will run with fat32.
+# - `FS`: Run with `FS=fat32` to specify the filesystem type.
+# 		By default, AronaOS will run with ext4.
 
 # Building
 TARGET := riscv64gc-unknown-none-elf
@@ -24,11 +24,8 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-# FS_IMG_ROOT := $(FS_DIR)/root
-FS_IMG_ROOT := $(FS_DIR)/root-2024-part
-# FS_IMG_ROOT := $(FS_DIR)/rCore-usertests
+FS_IMG_ROOT := $(FS_DIR)/splice
 FS_IMG := $(FS_DIR)/fs.img
-# FS_IMG := ../sdcard.img
 
 # Configs
 LOG := ERROR
@@ -37,7 +34,7 @@ KTEST :=
 SMP := 2
 IMG := 
 MEM_SIZE = 128M
-FS := fat32
+FS := ext4
 
 # BOARD
 BOARD := qemu
@@ -63,6 +60,10 @@ endif
 
 ifeq ($(FS), ext4)
 	FEATURE_ARGS += ext4
+else ifeq ($(FS), ext4-ramfs)
+	FEATURE_ARGS += ext4-ramfs
+else ifeq ($(FS), fat32)
+	FEATURE_ARGS += fat32
 endif
 
 # build: env $(KERNEL_BIN)
@@ -86,11 +87,13 @@ env:
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-# Pack FS_IMG_ROOT into FAT32 fs.img
-fs-img: build-muslc
+# Pack FS_IMG_ROOT into fs.img
+#fs-img: build-muslc
+fs-img:
 	@mkdir -p $(FS_IMG_ROOT)
 	@rm -rf $(FS_IMG)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+#	@dd if=/dev/zero of=$(FS_IMG) count=2048 bs=1M
 ifeq ($(FS), ext4)
 	@mkfs.ext4 $(FS_IMG)
 	@mkdir -p mnt
@@ -108,12 +111,6 @@ endif
 build-user: 
 	@cd ../user && make build SUBMIT=$(SUBMIT)
 
-# ifeq ($(SUBMIT), true)
-# 	@cd ../user && make build SUBMIT=true
-# else 
-# 	@cd ../user && make build
-# endif
-
 build-muslc:
 	@cd ../muslc && make build
 	@rm -rf $(FS_IMG_ROOT)/muslc
@@ -130,6 +127,7 @@ else ifeq ($(FEATURE_ARGS), )
 	LOG=$(LOG) cargo build $(MODE_ARG)
 else 
 	LOG=$(LOG) cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
+#	cargo build $(MODE_ARG) --features "$(FEATURE_ARGS)"
 endif
 	@rm src/linker.ld
 
@@ -156,7 +154,7 @@ move-cargo:
 
 submit: move-cargo build move-bin
 
-run: env build 
+run: move-cargo env build 
 	qemu-system-riscv64 $(QEMU_ARGS)
 
 last:
@@ -165,7 +163,7 @@ last:
 trace: 
 	$(MAKE) run LOG=TRACE
 
-gdbserver: env build
+gdbserver: move-cargo env build
 	qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 .PHONY: run last submit gdbserver clean trace

@@ -73,7 +73,6 @@ impl dyn Inode {
             })
     }
 
-    // pub fn list(&self, this: Arc<dyn Inode>) -> SysResult<Vec<Arc<dyn Inode>>> {
     pub fn list(self: &Arc<Self>) -> SysResult<Vec<Arc<dyn Inode>>> {
         if self.get_meta().mode != InodeMode::FileDIR {
             return Err(1);
@@ -82,25 +81,10 @@ impl dyn Inode {
             children.values().cloned().collect()
         }))
     }
-    // pub fn insert_child(&self, name: String, inode: Arc<dyn Inode>) {
-    //     self.get_meta().inner.lock().children.insert(name, inode);
-    // }
-
-    // pub fn sync(&self) {
-    //     todo!();
-    // }
 
     pub fn get_name(&self) -> String {
         self.get_meta().name.clone()
     }
-
-    // pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
-    //     let child = self.mknod(self.clone(), name, mode)?;
-    //     self.get_meta().children_handler(self.clone(), |chidren| {
-    //         chidren.insert(name.to_string(), child.clone());
-    //     });
-    //     Ok(child)
-    // }
 
     pub fn mknod_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> SysResult<Arc<dyn Inode>> {
         let child = self.mknod(self.clone(), name, mode)?;
@@ -168,6 +152,9 @@ pub struct InodeMeta {
     pub name: String,
     /// path
     pub path: Path,
+    /// if mode == FileLNK, then link_target is none-empty.
+    /// link_target is the RELATIVE path that the symlink pargets to.
+    pub link_target: Option<Path>,
     pub inner: SpinNoIrqLock<InodeMetaInner>,
 }
 
@@ -176,6 +163,17 @@ impl InodeMeta {
         parent: Option<Arc<dyn Inode>>,
         path: Path,
         mode: InodeMode,
+        data_size: usize,
+        ino: usize,
+    ) -> Self {
+        Self::new_symlink(parent, path, mode, None, data_size, ino)
+    }
+
+    pub fn new_symlink(
+        parent: Option<Arc<dyn Inode>>,
+        path: Path,
+        mode: InodeMode,
+        link_target: Option<Path>,
         data_size: usize,
         ino: usize,
     ) -> Self {
@@ -189,6 +187,7 @@ impl InodeMeta {
             mode,
             name: path.get_name(),
             path,
+            link_target,
             inner: SpinNoIrqLock::new(InodeMetaInner {
                 st_atim: TimeSpec::new(),
                 st_mtim: TimeSpec::new(),

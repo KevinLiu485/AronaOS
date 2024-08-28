@@ -1,5 +1,7 @@
 use alloc::{sync::Arc, vec::Vec};
 
+use crate::syscall::resource::{RLimit, RLIM_INFINITY};
+use crate::utils::SyscallErr;
 use crate::{SysResult, SyscallRet};
 
 use super::{File, OpenFlags};
@@ -22,48 +24,81 @@ impl FdInfo {
 
 pub struct FdTable {
     pub table: Vec<Option<FdInfo>>,
+
+    rlimit: RLimit,
+}
+/// max num file descriptors
+pub const MAX_FD_NUM: usize = 1024;
+
+impl FdTable {
+    pub fn set_rlimit(&mut self, rlimit: RLimit) {
+        self.rlimit = rlimit;
+    }
+
+    pub fn rlimit(&self) -> RLimit {
+        self.rlimit
+    }
 }
 
 impl FdTable {
     /// alloc lowest-numbered available fd greater than or equal to least_fd
-    fn allocate(&mut self, least_fd: usize) -> usize {
+    /// return allocated fd number
+    fn allocate(&mut self, least_fd: usize) -> SysResult<usize> {
         if least_fd < self.table.len() {
             if let Some(fd) = (0..self.table.len()).find(|fd| self.table[*fd].is_none()) {
-                fd
+                Ok(fd)
             } else {
-                self.table.push(None);
-                self.table.len() - 1
+                // self.table.push(None);
+                self.reserve(self.table.len() + 1)?;
+                Ok(self.table.len() - 1)
             }
         } else {
-            self.reserve(least_fd);
+            self.reserve(least_fd)?;
             self.table[least_fd] = None;
-            least_fd
+            Ok(least_fd)
         }
     }
 
     /// resize fdtable to reserve fd
-    fn reserve(&mut self, fd: usize) {
+    fn reserve(&mut self, fd: usize) -> SysResult<()> {
+        if fd > self.rlimit.rlim_cur - 1 {
+            return Err(SyscallErr::EBADF as usize);
+        }
         // len is at least (fd + 1)
         if fd + 1 > self.table.len() {
             self.table.resize(fd + 1, None);
         }
+        Ok(())
     }
 
     /// set none-empty fdinfo by fd, resize table if fd out of range
     /// force overwrite existing fd
-    fn set(&mut self, fd: usize, fdinfo: FdInfo) {
-        self.reserve(fd);
+    fn set(&mut self, fd: usize, fdinfo: FdInfo) -> SysResult<()> {
+        self.reserve(fd)?;
         self.table[fd] = Some(fdinfo);
+        Ok(())
     }
 }
 
 impl FdTable {
     pub fn new_bare() -> Self {
-        Self { table: Vec::new() }
+        Self {
+            table: Vec::new(),
+            rlimit: RLimit {
+                rlim_cur: MAX_FD_NUM,
+                rlim_max: RLIM_INFINITY,
+            },
+        }
     }
 
     pub fn new(table: Vec<Option<FdInfo>>) -> Self {
-        Self { table }
+        Self {
+            table,
+            rlimit: RLimit {
+                rlim_cur: MAX_FD_NUM,
+                rlim_max: RLIM_INFINITY,
+            },
+        }
     }
 
     /// clone fdtable and set all fdinfo with `CLOEXEC` flag to `None`  
@@ -81,6 +116,7 @@ impl FdTable {
                     }
                 })
                 .collect(),
+            rlimit: self.rlimit,
         }
     }
 
@@ -116,21 +152,22 @@ impl FdTable {
     }
 
     /// allocate with `least_fd` and set none-empty `fdinfo`
-    pub fn alloc_and_set(&mut self, least_fd: usize, fdinfo: FdInfo) -> usize {
-        let fd = self.allocate(least_fd);
-        self.set(fd, fdinfo);
-        fd
+    pub fn alloc_and_set(&mut self, least_fd: usize, fdinfo: FdInfo) -> SysResult<usize> {
+        // pub fn alloc_and_set(&mut self, least_fd: usize, fdinfo: FdInfo) -> SyscallRet {
+        let fd = self.allocate(least_fd)?;
+        self.set(fd, fdinfo)?;
+        Ok(fd)
     }
 
     /// alloc a new fd with `least_fd` and dup `oldfd`
     /// return `Ok(newfd)` on success, return Err if `oldfd` does not exist
     pub fn alloc_and_dup(&mut self, oldfd: usize, least_fd: usize) -> SysResult<usize> {
         if let Some(fdinfo) = self.get(oldfd) {
-            let newfd = self.allocate(least_fd);
-            self.set(newfd, fdinfo.clone());
+            let newfd = self.allocate(least_fd)?;
+            self.set(newfd, fdinfo.clone())?;
             Ok(newfd)
         } else {
-            Err(1)
+            Err(SyscallErr::EBADF as usize)
         }
     }
 
@@ -138,10 +175,10 @@ impl FdTable {
     /// return `Ok(newfd)` on success, return Err if `oldfd` does not exist
     pub fn dup_to(&mut self, oldfd: usize, newfd: usize) -> SysResult<usize> {
         if let Some(fdinfo) = self.get(oldfd) {
-            self.set(newfd, fdinfo.clone());
+            self.set(newfd, fdinfo.clone())?;
             Ok(newfd)
         } else {
-            Err(1)
+            Err(SyscallErr::EBADF as usize)
         }
     }
 }

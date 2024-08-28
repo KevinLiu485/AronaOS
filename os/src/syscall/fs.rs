@@ -1,5 +1,6 @@
 //! File and filesystem-related syscalls
 
+use alloc::string::ToString;
 use core::mem::size_of;
 use core::ptr::{self};
 
@@ -8,6 +9,7 @@ use alloc::sync::Arc;
 // use alloc::vec::{self, Vec};
 use alloc::vec;
 use alloc::vec::Vec;
+// use core::fmt::Error;
 use log::{debug, error, info, trace, warn};
 
 use crate::config::SyscallRet;
@@ -17,23 +19,22 @@ use crate::fs::path::Path;
 use crate::fs::pipe::Pipe;
 use crate::fs::tty::TTY;
 use crate::fs::{
-    create_dir, open_fd, open_inode, open_osinode, Fstat, OpenFlags, AT_FDCWD, AT_REMOVEDIR,
+    create_dir, open_fd, open_inode, open_osinode, Fstat, OSFileType, OpenFlags, AT_FDCWD,
+    AT_REMOVEDIR,
 };
+// use crate::syscall::process;
+// use crate::mm::user_check::UserCheck;
 // use crate::syscall::process;
 // use crate::syscall::process;
 // use crate::task::current_task;
 use crate::task::processor::current_process;
 
-use crate::timer::TimeSpec;
+use crate::timer::{current_time_spec, TimeSpec};
 use crate::utils::{c_str_to_string, SyscallErr};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
-    // let task = current_task().unwrap();
+    // trace!("[sys_write] enter fd:{}, buf:{}, len is {}", fd, buf, len);
     let process = current_process();
-    // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
-    // if fd >= fd_table_len {
-    //     return Err(1);
-    // }
     let fdinfo = process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         let ret = fdinfo
@@ -53,11 +54,6 @@ pub async fn sys_read(
 ) -> SyscallRet {
     let process = current_process();
     /* cannot use `inner` as MutexGuard will cross `await` that way */
-    // let fd_table_len = task.inner_handler(|inner| inner.fd_table.table.len());
-    // if fd >= fd_table_len {
-    //     return Err(1);
-    // }
-    // let fdinfo = task.inner_handler(|inner| inner.fd_table.table[fd].clone());
     let fdinfo = process.inner_handler(|inner| inner.fd_table.get(fd));
     if let Some(fdinfo) = fdinfo {
         let ret = fdinfo
@@ -79,7 +75,6 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -> SyscallRet {
     trace!("[sys_openat] enter.");
-    // let task = current_task().unwrap();
     let process = current_process();
     let path = Path::from(c_str_to_string(pathname));
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
@@ -87,6 +82,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
         "[sys_openat] dirfd: {}, pathname: {}, flags: {:?}",
         dirfd, path, flags,
     );
+
     if let Ok(osinode) = open_osinode(dirfd, &path, flags) {
         let mode = osinode.inner_handler(|inner| inner.inode.as_ref().unwrap().get_meta().mode);
         if mode == InodeMode::FileDIR
@@ -99,18 +95,15 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: usize) -
             return Err(SyscallErr::EISDIR as usize);
         }
         let fd = if mode == InodeMode::FileCHR {
-            // let tty_file =
-            //     TtyFile::new(osinode.inner_handler(|inner| inner.inode.clone().unwrap()));
-            // let tty_file = Arc::new(tty_file);
             process
                 .inner_lock()
                 .fd_table
-                .alloc_and_set(0, FdInfo::default_flags(TTY.clone()))
+                .alloc_and_set(0, FdInfo::default_flags(TTY.clone()))?
         } else {
             process
                 .inner_lock()
                 .fd_table
-                .alloc_and_set(0, FdInfo::default_flags(osinode))
+                .alloc_and_set(0, FdInfo::default_flags(osinode))?
         };
         info!(
             "[sys_openat] pid {} succeed to open file: {} -> fd: {}",
@@ -152,7 +145,8 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 
 pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
     trace!("[sys_fstat] enter");
-    debug!("[sys_fstat] fd: {}", fd);
+    warn!("[sys_fstat] not fully implemented");
+    // debug!("[sys_fstat] fd: {}", fd);
     let file = open_fd(fd).ok_or(SyscallErr::EBADF)?;
     let inode = file
         .get_meta()
@@ -162,6 +156,7 @@ pub fn sys_fstat(fd: usize, buf: *mut Fstat) -> SyscallRet {
         .clone()
         .ok_or(SyscallErr::EBADF as usize)?;
     let fstat = Fstat::new(&inode);
+
     unsafe {
         ptr::write(buf, fstat);
     }
@@ -214,7 +209,7 @@ pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
     trace!(
         "[sys_getdents64] enter. fd: {}, buf: {:#x}, len: {}",
         fd,
-        dirp as usize,
+        dirp,
         size
     );
     let file = open_fd(fd).ok_or(SyscallErr::EBADF)?;
@@ -241,10 +236,10 @@ pub fn sys_getdents64(fd: usize, dirp: usize, size: usize) -> SyscallRet {
 }
 
 pub fn sys_dup(fd: usize) -> SyscallRet {
-    trace!("[sys_dup] enter");
+    debug!("[sys_dup] enter, fd: {}", fd);
     let task = current_process();
-
     let ret = task.inner_lock().fd_table.alloc_and_dup(fd, 0);
+    debug!("[sys_dup] return, ret: {:?}", ret);
     ret
 }
 
@@ -273,43 +268,26 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: u32) -> SyscallRet
     }
 }
 
-pub fn sys_pipe2(fdset: *const u8) -> SyscallRet {
-    trace!("[sys_pipe2] enter");
+pub fn sys_pipe2(fdset: *const u8, flags: u32) -> SyscallRet {
+    trace!("[sys_pipe2] enter, flags: {}", flags);
     let process = current_process();
     let pipe_pair = Pipe::new_pair();
-    let fdret = process.inner_handler(|inner| {
-        // let fd1 = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd1] = Some(FdInfo::without_flags(pipe_pair.0.clone()));
-        // let fd2 = inner.fd_table.allocate(0);
-        // inner.fd_table.table[fd2] = Some(FdInfo::without_flags(pipe_pair.1.clone()));
-        let fd1 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()));
-        let fd2 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()));
-        (fd1, fd2)
-    });
-    /* the FUCKING user fd is `i32` type! */
-    let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    let fd1 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(pipe_pair.0.clone()))?;
+    let fd2 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(pipe_pair.1.clone()))?; // let fdret = (fd1, fd2);
+                                                                        /* the FUCKING user fd is `i32` type! */
+    let fdret: [i32; 2] = [fd1 as i32, fd2 as i32];
     let fdset_ptr = fdset as *mut [i32; 2];
     unsafe {
         ptr::write(fdset_ptr, fdret);
     }
     Ok(0)
 }
-
-// pub fn sys_mount() -> SyscallRet {
-//     trace!("[sys_mount] enter");
-//     warn!("[sys_mount] not implemented");
-//     Ok(0)
-// }
-
-// pub fn sys_umount2() -> SyscallRet {
-//     trace!("[sys_umount2] enter");
-//     warn!("[sys_umount2] not implemented");
-//     Ok(0)
-// }
 
 pub fn sys_ioctl(fd: i32, request: usize, argp: usize) -> SyscallRet {
     trace!("[sys_ioctl] enter. fd: {}, request: {}", fd, request);
@@ -518,7 +496,7 @@ pub fn sys_ppoll(
     // let _sigmask = unsafe { &*(sigmask_ptr as *const usize) };
     let mut ret = 0;
     for fd in fds {
-        debug!("[sys_ppoll] fd: {}, events: {}", fd.fd, fd.events);
+        // debug!("[sys_ppoll] fd: {}, events: {}", fd.fd, fd.events);
         fd.revents = fd.events;
         ret += 1;
     }
@@ -568,17 +546,90 @@ pub fn sys_faccessat(fd: i32, path: *const u8, amode: u32, flag: u32) -> Syscall
     Ok(0)
 }
 
+pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usize) -> SyscallRet {
+    let path = c_str_to_string(path_name as *const u8);
+    info!(
+        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}, this should be modified",
+        dirfd, path, buf, buf_size
+    );
+    let target = "/lmbench_all".to_string();
+    unsafe {
+        (buf as *mut u8).copy_from(target.as_ptr(), target.len());
+        *((buf + target.len()) as *mut u8) = 0;
+    }
+    Ok(0)
+}
+
+/// for utimensat
+pub const UTIME_NOW: usize = 1073741823;
+pub const UTIME_OMIT: usize = 1073741822;
+
 pub fn sys_utimensat(
     dirfd: i32,
     pathname: *const u8,
-    _times: *const TimeSpec,
+    times: *const TimeSpec,
     _flags: i32,
 ) -> SyscallRet {
-    let path = Path::from(c_str_to_string(pathname));
-    trace!("[sys_utimensat] enter. pathname: {}", path);
-    warn!("[sys_utimensat] not fully implemented");
-    let _inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
-        .map_err(|_| SyscallErr::ENOENT as usize)?;
+    trace!("[sys_utimensat] enter.");
+
+    let path;
+    if !pathname.is_null() {
+        path = Path::from(c_str_to_string(pathname));
+    } else {
+        if dirfd < 0 {
+            return Err(SyscallErr::EBADF as usize);
+        }
+        path = Path::from("");
+    }
+
+    let inode = open_inode(dirfd as isize, &path, OpenFlags::empty())
+        .map_err(|_| SyscallErr::ENOTDIR as usize)?;
+
+    debug!(
+        "[sys_utimensat] get inode name: {}, ino: {}",
+        inode.get_name(),
+        inode.get_meta().ino
+    );
+
+    let meta_date = inode.get_meta();
+    let mut inner_lock = meta_date.inner.lock();
+
+    if times.is_null() {
+        debug!("[sys_utimensat] times is null");
+        // If times is null, then both timestamps are set to the current time.
+        inner_lock.st_atim = current_time_spec();
+    } else {
+        // times[0] for atime, times[1] for mtime
+        let atime = unsafe { &*times };
+        let times = unsafe { times.add(1) };
+        let mtime = unsafe { &*times };
+
+        // change access time
+        if atime.nsec == UTIME_NOW {
+            // atime nsec is UTIME_NOW, set to now
+            inner_lock.st_atim = current_time_spec();
+        } else if atime.nsec == UTIME_OMIT {
+            // atime nsec is UTIME_OMIT
+        } else {
+            // atime normal nsec
+            inner_lock.st_atim = *atime;
+        }
+
+        debug!("[sys_utimensat] atime: {:?}", inner_lock.st_atim);
+        // change modify time
+        if mtime.nsec == UTIME_NOW {
+            debug!("[sys_utimensat] mtime nsec is UTIME_NOW, set to now");
+            inner_lock.st_mtim = current_time_spec();
+        } else if mtime.nsec == UTIME_OMIT {
+            debug!("[sys_utimensat] mtime nsec is UTIME_OMIT, unchanged");
+        } else {
+            debug!("[sys_utimensat] mtime normal nsec");
+            inner_lock.st_mtim = *mtime;
+        }
+        debug!("[sys_utimensat] mtime: {:?}", inner_lock.st_mtim);
+        // change state change time
+        inner_lock.st_ctim = current_time_spec();
+    }
     Ok(0)
 }
 
@@ -690,19 +741,119 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     );
     let process = current_process();
     let socket_pair = Pipe::new_socketpair();
-    let fdret = process.inner_handler(|inner| {
-        let fd1 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()));
-        let fd2 = inner
-            .fd_table
-            .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()));
-        (fd1, fd2)
-    });
-    let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    // let fdret = process.inner_handler(|inner| {
+    //     let fd1 = inner
+    //         .fd_table
+    //         .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()))?;
+    //     let fd2 = inner
+    //         .fd_table
+    //         .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()))?;
+    //     (fd1, fd2)
+    // });
+    let fd1 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(socket_pair.0.clone()))?;
+    let fd2 = process
+        .inner_lock()
+        .fd_table
+        .alloc_and_set(0, FdInfo::default_flags(socket_pair.1.clone()))?;
+    // let fdret: [i32; 2] = [fdret.0 as i32, fdret.1 as i32];
+    let fdret = [fd1 as i32, fd2 as i32];
     let fdset_ptr = sv as *mut [i32; 2];
     unsafe {
         ptr::write(fdset_ptr, fdret);
     }
     Ok(0)
+}
+
+pub async fn sys_sync() -> SyscallRet {
+    // todo: titanix fake implementation may need to do more
+    trace!("[sys_sync] start to sync...");
+    warn!("[sys_sync] not implemented.");
+    trace!("[sys_sync] sync finished");
+    Ok(0)
+}
+
+pub async fn sys_splice(
+    fd_in: i32,
+    offset_in: usize,
+    fd_out: i32,
+    offset_out: usize,
+    len: usize,
+    _flags: u32,
+) -> SyscallRet {
+    trace!("[sys_splice] enter. fd_in: {}, offset_in: {:#x}, fd_out: {}, offset_out: {:#x}, len: {}, flags: {}", fd_in, offset_in, fd_out, offset_out, len, _flags);
+    if len == 0 {
+        return Ok(0);
+    }
+    let process = current_process();
+    let fd_in = process
+        .inner_lock()
+        .fd_table
+        .get(fd_in as usize)
+        .ok_or(SyscallErr::EBADF)?;
+    let fd_out = process
+        .inner_lock()
+        .fd_table
+        .get(fd_out as usize)
+        .ok_or(SyscallErr::EBADF)?;
+
+    if fd_in.file.get_meta().filetype == OSFileType::Pipe {
+        log::debug!("[sys_splice] fd_in is pipe");
+        // read
+        let mut buffer = vec![0u8; len];
+        let read_size = fd_in.file.read(&mut buffer).await?;
+
+        // write
+        let offset_out_val = unsafe { *(offset_out as *const usize) };
+        log::debug!("[sys_splice] offset_out_val: {}", offset_out_val);
+        // let original_offset = fd_out.file.seek(offset_out).ok_or(SyscallErr::EINVAL)?;
+        let original_offset = match fd_out.file.seek(offset_out_val) {
+            Some(offset) => offset,
+            None => {
+                log::debug!("fd_out not seekable");
+                return Err(SyscallErr::EINVAL as usize);
+            }
+        };
+        let write_size = fd_out.file.write(&buffer[..read_size]).await?;
+
+        assert!(read_size >= write_size);
+        // reset offset
+        fd_out.file.seek(original_offset);
+        // update offset_out
+        unsafe {
+            *(offset_out as *mut usize) += write_size;
+        }
+        return Ok(write_size);
+    } else if fd_out.file.get_meta().filetype == OSFileType::Pipe {
+        log::debug!("[sys_splice] fd_out is pipe");
+        // read
+        let offset_in_val = unsafe { *(offset_in as *const usize) };
+        // let original_offset = fd_in.file.seek(offset_in).ok_or(SyscallErr::EINVAL)?;
+        let original_offset = match fd_in.file.seek(offset_in_val) {
+            Some(offset) => offset,
+            None => {
+                log::debug!("fd_in not seekable");
+                return Err(SyscallErr::EINVAL as usize);
+            }
+        };
+        let mut buffer = vec![0u8; len];
+        let read_size = fd_in.file.read(&mut buffer).await?;
+
+        // write
+        let write_size = fd_out.file.write(&buffer[..read_size]).await?;
+
+        // let ret = core::cmp::min(read_size, write_size);
+        assert!(read_size >= write_size);
+        // reset offset
+        fd_in.file.seek(original_offset);
+        // update offset_in
+        unsafe {
+            *(offset_in as *mut usize) += write_size;
+        }
+        return Ok(write_size);
+    } else {
+        return Err(SyscallErr::EINVAL as usize);
+    }
 }

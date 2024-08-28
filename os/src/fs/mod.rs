@@ -28,12 +28,14 @@ use crate::{
 pub struct FileMetaInner {
     pub inode: Option<Arc<dyn Inode>>,
     pub offset: usize,
+    /// used for sys_getdents, recording the next index of dentry to output
     pub dentry_index: usize,
 }
 
 pub struct FileMeta {
     pub readable: bool,
     pub writable: bool,
+    pub filetype: OSFileType,
     pub inner: SpinNoIrqLock<FileMetaInner>,
 }
 
@@ -44,10 +46,12 @@ impl FileMeta {
         dentry_index: usize,
         readable: bool,
         writable: bool,
+        filetype: OSFileType,
     ) -> Self {
         Self {
             readable,
             writable,
+            filetype,
             inner: SpinNoIrqLock::new(FileMetaInner {
                 inode,
                 offset,
@@ -56,8 +60,8 @@ impl FileMeta {
         }
     }
 
-    pub fn new_bare(readable: bool, writable: bool) -> Self {
-        FileMeta::new(None, 0, 0, readable, writable)
+    pub fn new_bare(readable: bool, writable: bool, filetype: OSFileType) -> Self {
+        FileMeta::new(None, 0, 0, readable, writable, filetype)
     }
 }
 
@@ -81,6 +85,14 @@ pub trait File: Send + Sync {
     // }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum OSFileType {
+    OSInode,
+    Pipe,
+    SocketPair,
+    TTY,
+}
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct Fstat {
@@ -102,30 +114,12 @@ pub struct Fstat {
 }
 
 impl Fstat {
-    // pub fn new_bare() -> Self {
-    //     Self {
-    //         st_dev: 0,
-    //         st_ino: 0,
-    //         st_mode: 0,
-    //         st_nlink: 1,
-    //         st_uid: 0,
-    //         st_gid: 0,
-    //         st_rdev: 0,
-    //         __pad1: 0,
-    //         st_size: 28,
-    //         st_blksize: 0,
-    //         __pad2: 0,
-    //         st_blocks: 0,
-    //         st_atim: TimeSpec::new(),
-    //         st_mtim: TimeSpec::new(),
-    //         st_ctim: TimeSpec::new(),
-    //     }
-    // }
-
     pub fn new(inode: &Arc<dyn Inode>) -> Self {
         let metadata = inode.get_meta();
         // only for FileREG and FileLNK
-        let data_size = metadata.inner.lock().data_size;
+        let data_lock = metadata.inner.lock();
+        let data_size = data_lock.data_size;
+        // log::debug!("[Fstat::new] data_size = {}", data_size);
         Self {
             st_dev: 0,
             st_ino: metadata.ino as u64,
@@ -139,9 +133,9 @@ impl Fstat {
             st_blksize: BLOCK_SIZE as u32,
             __pad2: 0,
             st_blocks: (data_size / BLOCK_SIZE) as u64,
-            st_atim: TimeSpec::new(),
-            st_mtim: TimeSpec::new(),
-            st_ctim: TimeSpec::new(),
+            st_atim: data_lock.st_atim,
+            st_mtim: data_lock.st_mtim,
+            st_ctim: data_lock.st_ctim,
         }
     }
 }

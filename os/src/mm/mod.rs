@@ -6,19 +6,20 @@
 //!
 //! Every task or process has a memory_set to control its virtual memory.
 mod address;
-mod cow;
 mod frame_allocator;
 mod heap_allocator;
 mod memory_set;
+mod page_fault;
 mod page_table;
+pub mod shm;
 pub mod user_check;
 
 use address::VPNRange;
 pub use address::{KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
-pub use cow::handle_recoverable_page_fault;
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::{dump_test, from_global_test, remap_test};
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
+pub use page_fault::handle_recoverable_page_fault;
 pub use page_table::PTEFlags;
 pub use page_table::{
     current_satp, /* translated_byte_buffer,  */ PageTable,
@@ -31,7 +32,8 @@ pub fn init() {
     // heap_test();
     frame_allocator::init_frame_allocator();
     // frame_allocator_test();
-    //KERNEL_SPACE.exclusive_access().activate
 
     KERNEL_SPACE.lock().activate();
+    // let kernel_space_lock = KERNEL_SPACE.lock();
+    // kernel_space_lock.activate();
 }

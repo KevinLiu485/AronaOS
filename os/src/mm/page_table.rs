@@ -309,7 +309,8 @@ impl PageTable {
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        // *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V | PTEFlags::A | PTEFlags::D);
     }
     /// remap a page with new PTEFlags, keep the old ppn
     pub fn update_flags(&mut self, vpn: VirtPageNum, flags: PTEFlags) {
@@ -394,103 +395,6 @@ impl PageTable {
         }
     }
 }
-
-/// Translate a pointer to a mutable u8 Vec through page table
-// pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
-//     let page_table = PageTable::from_token(token);
-//     let mut start = ptr as usize;
-//     let end = start + len;
-//     let mut v = Vec::new();
-//     while start < end {
-//         let start_va = VirtAddr::from(start);
-//         let mut vpn = start_va.floor();
-//         let ppn = page_table.translate(vpn).unwrap().ppn();
-//         vpn.step();
-//         let mut end_va: VirtAddr = vpn.into();
-//         end_va = end_va.min(VirtAddr::from(end));
-//         if end_va.page_offset() == 0 {
-//             v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
-//         } else {
-//             v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
-//         }
-//         start = end_va.into();
-//     }
-//     v
-// }
-
-///Array of u8 slice that user communicate with os
-// pub struct UserBuffer {
-//     ///U8 vec
-//     pub buffers: Vec<&'static mut [u8]>,
-// }
-
-// impl UserBuffer {
-//     ///Create a `UserBuffer` by parameter
-//     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
-//         Self { buffers }
-//     }
-//     ///Length of `UserBuffer`
-//     pub fn len(&self) -> usize {
-//         let mut total: usize = 0;
-//         for b in self.buffers.iter() {
-//             total += b.len();
-//         }
-//         total
-//     }
-//     /// Write a string to `UserBuffer`, consuming itself
-//     /// Return the length of the string written
-//     pub fn into_write(self, buf: &str) -> usize {
-//         let mut i: usize = 0;
-//         let buf = buf.as_bytes();
-//         let buf_len = buf.len();
-//         for ptr in self.into_iter() {
-//             if i >= buf_len {
-//                 return i;
-//             }
-//             unsafe {
-//                 *ptr = buf[i];
-//             }
-//             i += 1;
-//         }
-//         i
-//     }
-// }
-
-// impl IntoIterator for UserBuffer {
-//     type Item = *mut u8;
-//     type IntoIter = UserBufferIterator;
-//     fn into_iter(self) -> Self::IntoIter {
-//         UserBufferIterator {
-//             buffers: self.buffers,
-//             current_buffer: 0,
-//             current_idx: 0,
-//         }
-//     }
-// }
-// /// Iterator of `UserBuffer`
-// pub struct UserBufferIterator {
-//     buffers: Vec<&'static mut [u8]>,
-//     current_buffer: usize,
-//     current_idx: usize,
-// }
-
-// impl Iterator for UserBufferIterator {
-//     type Item = *mut u8;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.current_buffer >= self.buffers.len() {
-//             None
-//         } else {
-//             let r = &mut self.buffers[self.current_buffer][self.current_idx] as *mut _;
-//             if self.current_idx + 1 == self.buffers[self.current_buffer].len() {
-//                 self.current_idx = 0;
-//                 self.current_buffer += 1;
-//             } else {
-//                 self.current_idx += 1;
-//             }
-//             Some(r)
-//         }
-//     }
-// }
 
 #[allow(unused)]
 /// read current pagetable's root_ppn in satp

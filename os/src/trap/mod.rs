@@ -79,13 +79,11 @@ pub async fn trap_handler() {
             cx = current_trap_cx();
             cx.x[10] = result.unwrap_or_else(|err_code| (-(err_code as isize)) as usize);
         }
-        Trap::Exception(Exception::StoreFault)
-        | Trap::Exception(Exception::InstructionFault)
-        | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadFault) => {
+        Trap::Exception(Exception::InstructionFault)
+        | Trap::Exception(Exception::InstructionPageFault) => {
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
-            page_table.dump_all();
+            //page_table.dump_all();
             error!(
                 "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 scause.cause(),
@@ -97,23 +95,21 @@ pub async fn trap_handler() {
             // page fault exit code
             exit_current(-2);
         }
-        Trap::Exception(Exception::LoadPageFault) | Trap::Exception(Exception::StorePageFault) => {
+        Trap::Exception(Exception::LoadPageFault)
+        | Trap::Exception(Exception::LoadFault)
+        | Trap::Exception(Exception::StorePageFault)
+        | Trap::Exception(Exception::StoreFault) => {
             // recoverable page fault:
             // 1. fork COW area
             // 2. lazy allocation
-            // debug!(
-            //     "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
-            //     stval,
-            //     current_trap_cx().sepc,
-            //     scause.cause()
-            // );
             // stval is the faulting virtual address, current_trap_cx().sepc is the faulting instruction
             let vpn = VirtAddr::from(stval).floor();
             let satp = satp::read().bits();
             let page_table = PageTable::from_token(satp);
             if handle_recoverable_page_fault(&page_table, vpn).is_err() {
                 error!(
-                    "[kernel] unrecoverable page fault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    "[kernel] unrecoverable {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                    scause.cause(),
                     stval,
                     current_trap_cx().sepc,
                 );
@@ -157,7 +153,6 @@ pub fn trap_return() {
         handle_signals();
     }
     let cx = current_trap_cx();
-    //let user_satp = current_user_token();
     extern "C" {
         #[allow(improper_ctypes)]
         fn __return_to_user(cx: *mut TrapContext);
@@ -173,6 +168,10 @@ pub fn trap_return() {
 pub fn trap_from_kernel() -> ! {
     use riscv::register::sepc;
     error!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
+    let satp = satp::read().bits();
+    let page_table = PageTable::from_token(satp);
+    // page_table.dump();
+    page_table.dump_all();
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
 

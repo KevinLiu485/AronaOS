@@ -11,8 +11,6 @@ use crate::{
 
 pub struct TtyInode {
     meta: Arc<InodeMeta>,
-    // stdin: Arc<dyn File>,
-    // stdout: Arc<dyn File>,
 }
 
 impl TtyInode {
@@ -24,25 +22,15 @@ impl TtyInode {
             0,
             0,
         ));
-        Self {
-            meta,
-            // stdin: Arc::new(Stdin {
-            //     meta: FileMeta::new_bare(),
-            // }),
-            // stdout: Arc::new(Stdout {
-            //     meta: FileMeta::new_bare(),
-            // }),
-        }
+        Self { meta }
     }
 }
 
 impl Inode for TtyInode {
     fn read<'a>(&'a self, _offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize> {
-        // self.stdin.read(buf)
         TTY.read(buf)
     }
     fn write<'a>(&'a self, _offset: usize, buf: &'a [u8]) -> AsyncResult<usize> {
-        // self.stdout.write(buf)
         TTY.write(buf)
     }
     fn mknod(

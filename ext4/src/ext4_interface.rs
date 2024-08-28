@@ -54,7 +54,7 @@ impl Ext4 {
         let raw_data = block_device.read_offset(BASE_OFFSET);
         let super_block = Ext4Superblock::try_from(raw_data).unwrap();
 
-        // log::info!("super_block: {:x?}", super_block);
+        log::info!("super_block: {:x?}", super_block);
         let inodes_per_group = super_block.inodes_per_group();
         let blocks_per_group = super_block.blocks_per_group();
         let inode_size = super_block.inode_size();
@@ -348,7 +348,7 @@ impl Ext4 {
         // Load the root inode reference
         let mut current_inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), 2);
 
-        let mount_name = self
+        let _mount_name = self
             .mount_point
             .mount_name
             .to_str()
@@ -549,7 +549,7 @@ impl Ext4 {
             == EXT4_INODE_MODE_SOFTLINK as u32;
 
         if is_softlink {
-            log::debug!("ext4_read unsupported softlink");
+            log::error!("[Ext4::ext4_file_read] should not be softlink");
         }
 
         let block_size = BLOCK_SIZE;
@@ -632,6 +632,16 @@ impl Ext4 {
         return Ok(EOK);
     }
 
+    // pub fn ext4_file_write(&self, ext4_file: &mut Ext4File, data: &[u8], size: usize) {
+    //     let super_block_data = self.block_device.read_offset(BASE_OFFSET);
+    //     let super_block = Ext4Superblock::try_from(super_block_data).unwrap();
+    //     let mut inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
+    //     let block_size = super_block.block_size() as usize;
+    //     let iblock_last = ext4_file.fpos as usize + size / block_size;
+    //     let mut iblk_idx = ext4_file.fpos as usize / block_size;
+    //     let ifile_blocks = ext4_file.fsize as usize + block_size - 1 / block_size;
+    // }
+
     pub fn ext4_file_write(&self, ext4_file: &mut Ext4File, data: &[u8], size: usize) {
         let super_block_data = self.block_device.read_offset(BASE_OFFSET);
         let super_block = Ext4Superblock::try_from(super_block_data).unwrap();
@@ -664,6 +674,7 @@ impl Ext4 {
         }
 
         for i in 0..fblock_count {
+            log::debug!("[Ext4::ext4_file_write] write data. fblock_count: {}", fblock_count);
             let idx = i * BLOCK_SIZE as usize;
             let offset = (fblock_start as usize + i as usize) * BLOCK_SIZE;
             self.block_device
@@ -674,6 +685,29 @@ impl Ext4 {
         // let mut inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
         let mut root_inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), 2);
         root_inode_ref.write_back_inode();
+    }
+
+    pub fn ext4_follow_symlink(&self, ext4_file: &Ext4File) -> String {
+        let inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), ext4_file.inode);
+        let ext4_inode = inode_ref.inner.inode;
+
+        let size = ext4_inode.inode_get_size();
+        // log::debug!("[Ext4::ext4_follow_symlink] size: {}", size);
+        if size > core::mem::size_of::<[u32; 15]>() as u64 {
+            core::panic!("[Ext4::ext4_follow_symlink] long symlink");
+        }
+
+        let inline_data = ext4_inode.block;
+        let inline_data_bytes = unsafe {
+            slice::from_raw_parts(
+                inline_data.as_ptr() as *const u8,
+                inline_data.len() * core::mem::size_of::<u32>(),
+            )
+        };
+        str::from_utf8(inline_data_bytes)
+            .unwrap()
+            .trim_end_matches('\0')
+            .to_string()
     }
 
     pub fn read_dir_entry(&self, inode: u64) -> Vec<Ext4DirEntry> {
@@ -716,15 +750,11 @@ impl Ext4 {
         entries
     }
 
-    pub fn ext4_trunc_inode(
-        &self,
-        inode_ref: &mut Ext4InodeRef,
-        new_size: u64,
-    ) -> Result<usize> {
+    pub fn ext4_trunc_inode(&self, inode_ref: &mut Ext4InodeRef, new_size: u64) -> Result<usize> {
         let inode_size = inode_ref.inner.inode.inode_get_size();
 
         if inode_size > new_size {
-            let r = inode_ref.truncate_inode(new_size);
+            let _r = inode_ref.truncate_inode(new_size);
         }
 
         return_errno_with_message!(Errnum::ENOTSUP, "not support");
@@ -805,19 +835,23 @@ impl Ext4 {
 
         let mut child_inode_ref = Ext4InodeRef::get_inode_ref(self.self_ref.clone(), r.inode);
 
-        if child_inode_ref.has_children(){
+        if child_inode_ref.has_children() {
             return_errno_with_message!(Errnum::ENOTSUP, "rm dir with children not supported");
         }
 
         /* Truncate */
         self.ext4_trunc_inode(&mut child_inode_ref, 0);
 
-        self.ext4_unlink(&mut parent_inode_ref, &mut child_inode_ref, path, path.len() as u32);
+        self.ext4_unlink(
+            &mut parent_inode_ref,
+            &mut child_inode_ref,
+            path,
+            path.len() as u32,
+        );
 
         self.ext4_fs_put_inode_ref_csum(&mut parent_inode_ref);
 
-
-        // to do 
+        // to do
 
         // ext4_inode_set_del_time
         // ext4_inode_set_links_cnt
@@ -895,7 +929,7 @@ impl Ext4 {
         let mut current_inode_ref =
             Ext4InodeRef::get_inode_ref(self.self_ref.clone(), parent_inode);
 
-        let mount_name = self
+        let _mount_name = self
             .mount_point
             .mount_name
             .to_str()

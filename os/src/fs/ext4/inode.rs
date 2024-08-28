@@ -1,12 +1,23 @@
 use core::borrow::BorrowMut;
 
 use crate::{
-    fs::inode::{Inode, InodeMeta, InodeMode},
+    fs::{
+        inode::{Inode, InodeMeta, InodeMode},
+        path::Path,
+    },
+    utils::SyscallErr,
     AsyncResult, SysResult,
 };
-use alloc::{boxed::Box, string::ToString, sync::Arc};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    sync::Arc,
+};
 use ext4_rs::{Ext4, Ext4File, Ext4InodeRef, Ext4MountPoint, OpenFlag};
 use log::{debug, error, warn};
+
+use super::ram_inode::Ext4RamInode;
 
 pub struct Ext4Inode {
     fs: Arc<Ext4>,
@@ -19,32 +30,24 @@ impl Ext4Inode {
     }
 
     /// update the `data_size` of the inode from disk
-    fn update_size(&self) {
-        let size = self.get_size();
-        self.meta.inner.lock().data_size = size;
+    fn update_size(&self, size_delta: usize) {
+        // let size = self.get_size();
+        // self.meta.inner.lock().data_size = size;
+
+        // log::debug!(
+        //     "[Ext4Inode::update_size] update size: {} -> {}",
+        //     self.meta.inner.lock().data_size,
+        //     size
+        // );
+        // let old_size = self.meta.inner.lock().data_size;
+        self.meta.inner.lock().data_size += size_delta;
     }
 
     fn get_size(&self) -> usize {
-        // self.fs
-        //     .fuse_getattr(self.meta.ino as u64)
-        //     .map_err(|ext4_err| {
-        //         error!("[Ext4Inode::update_size] {:?}", ext4_err);
-        //         ext4_err.error() as usize
-        //     })
-        //     .unwrap()
-        //     .size as usize
         Ext4Inode::get_size_from_ino(&self.fs, self.meta.ino as u64)
     }
 
     fn get_size_from_ino(fs: &Arc<Ext4>, ino: u64) -> usize {
-        // debug!("[get_size_from_ino]");
-        // fs.fuse_getattr(ino as u64)
-        //     .map_err(|ext4_err| {
-        //         error!("[Ext4Inode::update_size] {:?}", ext4_err);
-        //         ext4_err.error() as usize
-        //     })
-        //     .unwrap()
-        //     .size as usize
         let inode_ref = Ext4InodeRef::get_inode_ref(Arc::downgrade(fs), ino as u32);
         inode_ref.inner.inode.inode_get_size() as usize
     }
@@ -58,27 +61,25 @@ impl Ext4Inode {
             fpos: offset,
         }
     }
+
+    fn follow_symlink(&self, ino: u64) -> Path {
+        let ext4_file = Ext4File {
+            mp: Ext4MountPoint::new("/"),
+            inode: ino as u32,
+            flags: OpenFlag::O_RDWR.bits(),
+            fsize: 0,
+            fpos: 0,
+        };
+        let path_str = self.fs.ext4_follow_symlink(&ext4_file);
+        path_str.into()
+    }
 }
 
 impl Inode for Ext4Inode {
     fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AsyncResult<usize> {
         Box::pin(async move {
-            // let _ = self.fs.fuse_open(self.meta.ino as u64, 0);
-            // let data = self
-            //     .fs
-            // .fuse_read(
-            //     self.meta.ino as u64,
-            //     0,
-            //     offset as i64,
-            //     buf.len() as u32,
-            //     0,
-            //     None,
-            // )
-            // .map_err(|ext4_err| {
-            //     error!("[Ext4Inode::read] {:?}", ext4_err);
-            //     ext4_err.error() as usize
-            // })?;
             let mut read_cnt = 0usize;
+            log::debug!("[Ext4Inode::read] file size on disk: {}", self.get_size());
             let _ = self
                 .fs
                 .ext4_file_read(
@@ -91,125 +92,117 @@ impl Inode for Ext4Inode {
                     error!("[Ext4Inode::read] {:?}", ext4_err);
                     ext4_err.error() as usize
                 })?;
+            log::debug!("[Ext4Inode::read] read {} bytes", read_cnt);
             Ok(read_cnt)
         })
     }
+
     fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AsyncResult<usize> {
-        // todo!();
-        // Box::pin(async move {
-        //     let data = self
-        //         .fs
-        //         .fuse_write(self.meta.ino as u64, 0, offset as i64, buf, 0, 0, None)
-        //         .map_err(|ext4_err| {
-        //             error!("[Ext4Inode::write] {:?}", ext4_err);
-        //             ext4_err.error() as usize
-        //         })?;
-        //     self.update_size();
-        //     Ok(data as usize)
-        // })
         Box::pin(async move {
             let _ = self
                 .fs
                 .ext4_file_write(&mut self.create_ext4_file(offset), buf, buf.len());
-            self.update_size();
+            self.update_size(buf.len());
+            log::debug!("[Ext4Inode::write] write {} bytes", buf.len());
             Ok(buf.len())
         })
     }
+
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
         name: &str,
         mode: InodeMode,
     ) -> SysResult<Arc<dyn Inode>> {
-        // todo!();
         if self.meta.mode != InodeMode::FileDIR {
             return Err(1);
         }
-        let new_path = self.get_meta().path.to_string() + "/" + name;
-        let new_ino = if mode == InodeMode::FileDIR {
-            // self.fs
-            //     .fuse_mkdir(self.meta.ino as u64, name, mode as u32, 0)
-            //     .map_err(|ext4_err| {
-            //         error!("[Ext4Inode::mknod] {:?}", ext4_err);
-            //         ext4_err.error() as usize
-            //     })
-            // let dir_name =
-            // let _ = self.fs.ext4_dir_mk(&new_path);
+        if mode == InodeMode::FileDIR {
+            let new_path = self.meta.path.append_name(name);
+            // let new_path = self.get_meta().path.to_string() + "/" + name;
             let mut file_out = Ext4File::new();
-            let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", false);
-            file_out.inode
+            let _ = self
+                .fs
+                .ext4_open(&mut file_out, &new_path.to_string(), "a+", false);
+            let new_ino = file_out.inode;
+            // let new_ino = if mode == InodeMode::FileDIR {
+            //     let mut file_out = Ext4File::new();
+            //     let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", false);
+            //     file_out.inode
+            // } else if mode == InodeMode::FileREG {
+            //     let mut file_out = Ext4File::new();
+            //     let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", true);
+            //     file_out.inode
+            // } else {
+            //     return Err(1);
+            // };
+            // let path = self.meta.path.append_name(name);
+            let meta = Arc::new(InodeMeta::new(
+                Some(this.clone()),
+                new_path,
+                mode,
+                0,
+                new_ino as usize,
+            ));
+            Ok(Arc::new(Ext4Inode {
+                fs: self.fs.clone(),
+                meta,
+            }))
         } else if mode == InodeMode::FileREG {
-            // self.fs
-            //     .fuse_mknod(self.meta.ino as u64, name, mode as u32, 0, 0)
-            //     .map_err(|ext4_err| {
-            //         error!("[Ext4Inode::mknod] {:?}", ext4_err);
-            //         ext4_err.error() as usize
-            //     })
-            let mut file_out = Ext4File::new();
-            let _ = self.fs.ext4_open(&mut file_out, &new_path, "a+", true);
-            file_out.inode
+            let new_path = self.meta.path.append_name(name);
+            let meta = Arc::new(InodeMeta::new(Some(this.clone()), new_path, mode, 0, 0));
+            Ok(Arc::new(Ext4RamInode::new(meta)))
         } else {
-            // Err(1)
-            return Err(1);
-        };
-        let name = self.meta.path.clone_and_append(name);
-        // let ino = new_ino as usize;
-        let meta = Arc::new(InodeMeta::new(
-            Some(this.clone()),
-            name,
-            mode,
-            0,
-            new_ino as usize,
-        ));
-        Ok(Arc::new(Ext4Inode {
-            fs: self.fs.clone(),
-            meta,
-        }))
+            Err(1)
+        }
     }
+
     fn get_meta(&self) -> Arc<InodeMeta> {
         self.meta.clone()
     }
+
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
-        // debug!("[Ext4Inode::load_children_from_disk] enter.");
+        // log::debug!(
+        //     "[Ext4Inode::load_children_from_disk] dir path: \"{}\"",
+        //     self.meta.path
+        // );
         assert_eq!(self.meta.mode, InodeMode::FileDIR);
         let mut meta_inner = self.meta.inner.lock();
-        let dir_entries = self
-            .fs
-            // .fuse_readdir(self.meta.ino as u64, 0, 0)
-            .read_dir_entry(self.meta.ino as u64);
-        // .map_err(|ext4_err| {
-        //     error!("[Ext4Inode::load_children_from_disk] {:?}", ext4_err);
-        //     ext4_err.error() as usize
-        // })
-        // .unwrap();
+        let dir_entries = self.fs.read_dir_entry(self.meta.ino as u64);
+
         dir_entries.iter().for_each(|entry| {
             let ino = entry.inode as usize;
-            // let name = String::from_utf8(Vec::from(entry.name)).unwrap();
-            // let name = name.trim().to_string();
             let name = entry.get_name();
-            // debug!("[Ext4Inode::load_children_from_disk] name: {}", name);
             if name == "." || name == ".." {
-                // debug!("[Ext4Inode::load_children_from_disk] skip");
                 return;
             }
-            let path = self.meta.path.clone_and_append(&name);
+            let path = self.meta.path.append_name(&name);
             let mode = dirent_inodetype_2_inodemode(unsafe { entry.inner.inode_type });
             let data_size = Self::get_size_from_ino(&self.fs, ino as u64);
 
-            let inode_meta = InodeMeta::new(Some(this.clone()), path, mode, data_size, ino);
+            // handle symlink
+            let link_target = if mode == InodeMode::FileLNK {
+                // log::debug!(
+                //     "[Ext4Inode::load_children_from_disk] load symlink: {}",
+                //     path
+                // );
+                Some(self.follow_symlink(ino as u64))
+            } else {
+                None
+            };
+
+            let inode_meta =
+                InodeMeta::new_symlink(Some(this.clone()), path, mode, link_target, data_size, ino);
             let inode = Arc::new(Ext4Inode {
                 fs: self.fs.clone(),
                 meta: Arc::new(inode_meta),
             });
+            // debug!("[Ext4Inode::load_children_from_disk] insert: {}", name);
             meta_inner.children.insert(name, inode);
         });
-        // debug!("[Ext4Inode::load_children_from_disk] exit.");
     }
 
-    fn clear(&self) {
-        // warn!("[Ext4Inode::clear] not implemented");
-        // unimplemented!()
-    }
+    fn clear(&self) {}
 }
 
 fn dirent_inodetype_2_inodemode(inode_type: u8) -> InodeMode {

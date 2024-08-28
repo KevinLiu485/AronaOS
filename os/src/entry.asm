@@ -4,6 +4,27 @@ _start:
     # a0 = hart id
     # pc = 0x80200000
 
+    # csrw pmpcfg0, zero
+    # csrw pmpcfg1, zero
+    # csrw pmpcfg2, zero
+    # csrw pmpcfg3, zero
+    # csrw pmpaddr0, zero
+    # csrw pmpaddr1, zero
+    # csrw pmpaddr2, zero
+    # csrw pmpaddr3, zero
+    # csrw pmpaddr4, zero
+    # csrw pmpaddr5, zero
+    # csrw pmpaddr6, zero
+    # csrw pmpaddr7, zero
+    # csrw pmpaddr8, zero
+    # csrw pmpaddr9, zero
+    # csrw pmpaddr10, zero
+    # csrw pmpaddr11, zero
+    # csrw pmpaddr12, zero
+    # csrw pmpaddr13, zero
+    # csrw pmpaddr14, zero
+    # csrw pmpaddr15, zero
+
     # set sp(each hart has one kstack)
     slli t0, a0, 16  # t0 = hart_id << 16(4096 * 16)
     la sp, boot_stack_top

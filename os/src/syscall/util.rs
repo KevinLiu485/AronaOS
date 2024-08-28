@@ -44,7 +44,6 @@ pub fn sys_get_time(time_val_ptr: usize) -> SyscallRet {
         sec: current_time_ms / 1000,
         usec: current_time_ms % 1000 * 1000,
     };
-    // debug!("get time of day, time(ms): {}", current_time_ms);
     unsafe {
         time_val_ptr.write_volatile(time_val);
     }
@@ -67,7 +66,6 @@ pub fn sys_clock_gettime(clock_id: usize, tp: *mut TimeSpec) -> SyscallRet {
     match clock_id {
         CLOCK_REALTIME => {
             let time_ms = get_time_ms();
-            // debug!("[sys_clock_gettime] get_time_ms: {}", time_ms);
             let time_spec = TimeSpec {
                 sec: time_ms / 1000,
                 nsec: time_ms % 1000 * 1000000,

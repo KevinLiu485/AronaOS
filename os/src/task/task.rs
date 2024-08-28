@@ -1,14 +1,15 @@
 //!Implementation of [`Thread`]
 use super::aux::*;
-use super::{current_trap_cx, pid_alloc, PidHandle};
+use super::processor::current_thread_uncheck;
+use super::{current_trap_cx, id_alloc, IdHandle};
 use crate::config::SyscallRet;
 use crate::fs::fd_table::{FdInfo, FdTable};
 use crate::fs::path::Path;
 use crate::fs::tty::TtyFile;
 // use crate::fs::FileMeta;
-use crate::mm::{MemorySet, KERNEL_SPACE};
+use crate::mm::{MemorySet, VirtAddr, KERNEL_SPACE};
 use crate::mutex::SpinNoIrqLock;
-use crate::signal::{SigHandlers, SigSet};
+use crate::signal::{SigBitmap, SigHandlers, SigSet};
 use crate::syscall::process::CloneFlags;
 use crate::task::processor::current_thread;
 use crate::task::schedule::spawn_thread;
@@ -18,13 +19,12 @@ use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-// use async_task::Task;
 use core::cell::UnsafeCell;
 use core::ops::DerefMut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::info;
 
 lazy_static! {
     /// 包括PROCESS，以及thread的
@@ -35,7 +35,7 @@ lazy_static! {
 /// ['Process'] 负责管理进程资源的单位，有着自己的Thread都共享的资源，本身并不参与调度
 /// 记录了主线程，以保持以前现有进程的一致性
 pub struct Process {
-    pub pid: Arc<PidHandle>,   // 自己的main thread的pid也是这个 id（加arc的原因）
+    pub pid: Arc<IdHandle>,    // 自己的main thread的pid也是这个 id（加arc的原因）
     pub is_zombie: AtomicBool, // 这个放到inner外面主要是为了防止死锁
     pub inner: SpinNoIrqLock<ProcessInner>,
 }
@@ -71,6 +71,13 @@ impl Process {
         self.inner.lock().pgid
     }
 
+    pub fn send_signal(&self, signo: usize) {
+        for (_, thread) in self.inner.lock().threads.iter_mut() {
+            let task = thread.upgrade().unwrap();
+            task.send_signal(signo)
+        }
+    }
+
     pub fn print_all_task(&self, indent: String) {
         println!("{}process:{}", indent, self.pid.0);
 
@@ -84,6 +91,11 @@ impl Process {
         }
     }
 
+    pub fn manual_alloc_for_lazy(&self, addr: VirtAddr) -> Result<(), crate::utils::SyscallErr> {
+        let vpn = addr.floor();
+        self.inner.lock().memory_set.manual_alloc_for_lazy(vpn)
+    }
+
     /// 目前的语义，主线程切换到另一个任务，其余的所有线程直接kill了。【注意不是当前线程，而是主线程】
     pub fn exec(&self, elf_data: &[u8], args_vec: Vec<String>, envs_vec: Vec<String>) {
         // exec 对原来的线程主要干三件事情
@@ -95,7 +107,6 @@ impl Process {
         let (memory_set, user_sp, entry_point, aux_vec) = MemorySet::from_elf(elf_data);
         // activate user space
         memory_set.activate();
-        // todo: 如果未来我们在 local hart 里面快速索引了页表，我们需要改变他 (quite important)
         info!(
             "[TCB::exec] entry_point: {:x}, user_sp: {:x}, page_table: {:x}",
             entry_point,
@@ -151,7 +162,7 @@ impl Process {
         parent_inner.memory_set.activate();
 
         // 分配新的pid
-        let pid_handle = Arc::new(pid_alloc());
+        let pid_handle = Arc::new(id_alloc());
         // 复制进程资源
         let child = Arc::new(Self {
             pid: pid_handle.clone(),
@@ -182,7 +193,7 @@ impl Process {
         child
             .inner_lock()
             .threads
-            .insert(child_main_thread.pid.0, Arc::downgrade(&child_main_thread));
+            .insert(child_main_thread.tid.0, Arc::downgrade(&child_main_thread));
 
         // 因为信号，加到线程统一管理
         PROCESS_MANAGER
@@ -222,7 +233,7 @@ impl Process {
         trap_context.set_global_pointer(current_trap_cx().get_global_pointer()); // Global pointer
 
         // 新建一个线程
-        let pid = Arc::new(pid_alloc());
+        let pid = Arc::new(id_alloc());
         let new_thread = Arc::new(Thread::new(
             self.clone(),
             current_thread(),
@@ -261,7 +272,7 @@ pub fn new_initproc(elf_data: &[u8]) -> Arc<Thread> {
     // println!("  entry_point: {}", entry_point);
     let kernel_satp = KERNEL_SPACE.lock().token();
     // alloc a pid and a kernel stack in kernel space
-    let pid_handle = Arc::new(pid_alloc());
+    let pid_handle = Arc::new(id_alloc());
 
     let process = Arc::new(Process {
         pid: pid_handle.clone(),
@@ -316,13 +327,16 @@ pub fn new_initproc(elf_data: &[u8]) -> Arc<Thread> {
         .inner
         .lock()
         .threads
-        .insert(thread.getpid(), Arc::downgrade(&thread));
+        .insert(thread.get_tid(), Arc::downgrade(&thread));
     PROCESS_MANAGER
         .lock()
         .insert(process.getpid(), Arc::downgrade(&process));
     // todo: group manager
 
-    debug!("create a new process, pid {}", process.getpid());
+    log::info!(
+        "[new_initproc] create a new process, pid {}",
+        process.getpid()
+    );
     thread
 }
 
@@ -347,11 +361,14 @@ impl ProcessInner {
     }
 }
 
+/// The reference type of a task
+pub type TaskRef = Arc<Thread>;
+
 /// [‘Thread’] 调度和任务执行的基本单位，有主线程（类似原本进程的语义）和普通线程的区分
 /// process 自己共享的资源
 pub struct Thread {
     /// immutable
-    pid: Arc<PidHandle>,
+    tid: Arc<IdHandle>,
     /// 自己属于的进程
     pub process: Arc<Process>,
     /// mutable
@@ -377,8 +394,19 @@ impl Thread {
         self.get_inner_mut().tid_addr.clear_tid_address = Some(tidptr);
     }
 
-    pub fn getpid(&self) -> usize {
-        self.pid.0
+    pub fn get_tid(&self) -> usize {
+        self.tid.0
+    }
+
+    pub fn send_signal(&self, signo: usize) {
+        self.get_inner_mut()
+            .sig_set
+            .pending_sigs
+            .insert(SigBitmap::from_bits(1 << (signo - 1)).unwrap())
+    }
+
+    pub fn have_signals(&self) -> bool {
+        !self.get_inner_mut().sig_set.pending_sigs.is_empty()
     }
 
     /// Get the mutable ref of trap context
@@ -391,7 +419,7 @@ impl Thread {
         main_thread: Option<Arc<Thread>>,
         trap_context: TrapContext,
         ustack_top: usize,
-        tid: Arc<PidHandle>,
+        tid: Arc<IdHandle>,
     ) -> Self {
         // todo: main thread 这里有一个信号的操作
         let sig_set;
@@ -408,7 +436,7 @@ impl Thread {
         };
 
         let thread = Self {
-            pid: tid.clone(),
+            tid: tid.clone(),
             is_terminated: Default::default(),
             process: process.clone(),
             // user_specified_stack,
@@ -437,10 +465,10 @@ impl Thread {
         another: &Arc<Thread>,
         new_process: Arc<Process>,
         stack: Option<usize>,
-        pid: Arc<PidHandle>,
+        pid: Arc<IdHandle>,
     ) -> Self {
         Self {
-            pid: pid.clone(),
+            tid: pid.clone(),
             is_terminated: Default::default(),
             process: new_process.clone(),
             inner: UnsafeCell::new(ThreadInner {
@@ -632,4 +660,8 @@ pub struct TidAddress {
     pub set_tid_address: Option<usize>,
     /// Clear tid address
     pub clear_tid_address: Option<usize>,
+}
+
+pub fn current_have_signals() -> bool {
+    current_thread_uncheck().have_signals()
 }

@@ -7,14 +7,14 @@ use crate::task::processor::{current_process, current_thread};
 use crate::task::{exit_current, yield_task, INITPROC};
 use crate::timer::{TimeSpec, TimeoutFuture};
 use crate::utils::c_str_to_string;
-use crate::utils::checksum::calculate_checksum;
+// use crate::utils::checksum::calculate_checksum;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::future::Future;
 use core::ptr::null;
 use core::task::Poll;
 use core::time::Duration;
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace, warn};
 
 /// exit 语义，退出当前的线程。
 /// Simply set exit_code and change status to Zombie. More exiting works will de done by its parent.
@@ -42,7 +42,7 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
 
 pub fn sys_getpid() -> SyscallRet {
     trace!("[sys_getpid] enter");
-    Ok(current_thread().unwrap().getpid())
+    Ok(current_thread().unwrap().get_tid())
 }
 
 pub fn sys_getppid() -> SyscallRet {
@@ -75,12 +75,23 @@ pub fn sys_fork(stack: Option<usize>) -> SyscallRet {
 pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
     trace!("[sys_execve] enter");
 
-    let path = Path::from(c_str_to_string(path as *const u8));
+    let mut path = Path::from(c_str_to_string(path as *const u8));
     let mut args = args as *const usize;
     let mut envs = envs as *const usize;
 
     // 下面是手动处理输入的arg
     let mut args_vec: Vec<String> = Vec::new();
+
+    if path.to_string().ends_with(".sh") {
+        path = Path::from("/busybox".to_string());
+        args_vec.push("busybox".to_string());
+        args_vec.push("sh".to_string());
+    }
+    // else if path.to_string().ends_with("sleep") || path.to_string().ends_with("ls") {
+    //     path = Path::from("/busybox".to_string());
+    //     args_vec.push("busybox".to_string());
+    // }
+
     if args != null() {
         loop {
             if unsafe { *args == 0 } {
@@ -112,31 +123,12 @@ pub async fn sys_execve(path: usize, args: usize, envs: usize) -> SyscallRet {
 
     if let Ok(app_inode) = open_osinode(AT_FDCWD, &path, OpenFlags::RDONLY) {
         // app in fs
-        // debug!("[sys_execve] file size: {}", {
-        //     let app_file: Arc<dyn File> = app_inode.clone();
-        //     let inner = app_file.get_meta().inner.lock();
-        //     inner
-        //         .inode
-        //         .as_ref()
-        //         .unwrap()
-        //         .get_meta()
-        //         .inner
-        //         .lock()
-        //         .data_size
-        // });
         let all_data = app_inode.read_all().await;
-        debug!(
-            "[sys_exec] app data len: {}, checksum: {}",
-            all_data.len(),
-            calculate_checksum(all_data.as_slice())
-        );
-        // print_file(&all_data);
-        // for i in 0..all_data.len() {
-        //     if i % 35 == 0 {
-        //         println!("");
-        //     }
-        //     print!("{:02x} ", all_data[i]);
-        // }
+        // debug!(
+        //     "[sys_exec] app data len: {}, checksum: {}",
+        //     all_data.len(),
+        //     calculate_checksum(all_data.as_slice())
+        // );
         let current_process = current_process();
         current_process.exec(all_data.as_slice(), args_vec, envs_vec);
         Ok(0)
@@ -248,8 +240,6 @@ impl Future for WaitFuture {
                 exit_status_ptr.write_volatile((exit_code & 0xff) << 8);
             }
         }
-        // debug!("wait task pid is {} ", found_pid);
-        // debug!("exit code is {}", exit_code);
         return Poll::Ready(Ok(found_pid));
     }
 }
@@ -289,7 +279,7 @@ pub fn sys_clone(
         }
         Some(flag) => flag,
     };
-    debug!("[sys_clone] clone flags: {:?}", clone_flags);
+    // debug!("[sys_clone] clone flags: {:?}", clone_flags);
 
     // todo: 检查stack_ptr的是否可写
     let stack = match stack_ptr {
@@ -302,11 +292,11 @@ pub fn sys_clone(
 
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
-        debug!("[sys_clone] fork");
+        log::info!("[sys_clone] fork");
         sys_fork(stack)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone [create a new thread]
-        debug!("[sys_clone] create thread");
+        log::info!("[sys_clone] create thread");
         let new_pid = current_process().clone_thread(
             stack,
             tls_ptr,
@@ -323,7 +313,8 @@ pub fn sys_clone(
 bitflags! {
     /// Open file flags
     pub struct CloneFlags: u32 {
-        /// SIGCHLD 是一个信号，在UNIX和类UNIX操作系统中，当一个子进程改变了它的状态时，内核会向其父进程发送这个信号。这个信号可以用来通知父进程子进程已经终止或者停止了。父进程可以采取适当的行动，比如清理资源或者等待子进程的状态。
+        /// SIGCHLD 是一个信号，在UNIX和类UNIX操作系统中，当一个子进程改变了它的状态时，内核会向其父进程发送这个信号。
+        /// 这个信号可以用来通知父进程子进程已经终止或者停止了。父进程可以采取适当的行动，比如清理资源或者等待子进程的状态。
         /// 以下是SIGCHLD信号的一些常见用途：
         /// 子进程终止：当子进程结束运行时，无论是正常退出还是因为接收到信号而终止，操作系统都会向其父进程发送SIGCHLD信号。
         /// 资源清理：父进程可以处理SIGCHLD信号来执行清理工作，例如释放子进程可能已经使用的资源。
@@ -368,12 +359,12 @@ bitflags! {
 
 pub fn sys_set_tid_address(tidptr: *const usize) -> SyscallRet {
     trace!("[sys_set_tid_address] enter, tidptr: {:?}", tidptr);
-    warn!("[sys_set_tid_address] not fully implemented");
+    warn!("[sys_set_tid_address] might have cannot write segment error");
     // todo: 这里需要检查对应的是否是可写的，如果不可写，直接返回
 
     let thread = current_thread().unwrap();
     thread.get_inner_mut().tid_addr.clear_tid_address = Some(tidptr as usize);
-    Ok(thread.getpid())
+    Ok(thread.get_tid())
 }
 
 // pub fn sys_getuid() -> SyscallRet {
@@ -402,8 +393,7 @@ pub fn sys_getpgid(pid: i32) -> SyscallRet {
 
 pub fn sys_gettid() -> SyscallRet {
     trace!("[sys_gettid] enter");
-    warn!("[sys_gettid] not fully implemented");
-    sys_getpid()
+    Ok(current_thread().unwrap().get_tid())
 }
 
 // pub fn sys_sched_getaffinity() -> SyscallRet {

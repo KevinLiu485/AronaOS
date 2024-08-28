@@ -5,7 +5,9 @@ use crate::{mutex::SpinNoIrqLock, task::yield_task, utils::SyscallErr, AsyncResu
 
 use super::{File, FileMeta};
 
-const PIPE_BUFFER_SIZE: usize = 4096;
+// pub const PIPE_BUFFER_SIZE: usize = 101000;
+// pub const PIPE_BUFFER_SIZE: usize = 1024 * 16;
+pub const PIPE_BUFFER_SIZE: usize = 1024 * 4;
 
 pub struct Pipe {
     buffer: Arc<SpinNoIrqLock<PipeRingBuffer>>,
@@ -25,11 +27,11 @@ impl Pipe {
         (
             Arc::new(Self {
                 buffer: buffer.clone(),
-                meta: FileMeta::new_bare(true, false),
+                meta: FileMeta::new_bare(true, false, super::OSFileType::Pipe),
             }),
             Arc::new(Self {
                 buffer: buffer.clone(),
-                meta: FileMeta::new_bare(false, true),
+                meta: FileMeta::new_bare(false, true, super::OSFileType::Pipe),
             }),
         )
     }
@@ -46,11 +48,11 @@ impl Pipe {
         (
             Arc::new(Self {
                 buffer: buffer.clone(),
-                meta: FileMeta::new_bare(true, true),
+                meta: FileMeta::new_bare(true, true, super::OSFileType::SocketPair),
             }),
             Arc::new(Self {
                 buffer: buffer.clone(),
-                meta: FileMeta::new_bare(true, true),
+                meta: FileMeta::new_bare(true, true, super::OSFileType::SocketPair),
             }),
         )
     }
@@ -66,6 +68,7 @@ impl Pipe {
                 break;
             }
         }
+        log::debug!("[Pipe::read_inner] read_size = {}", read_size);
         read_size
     }
 
@@ -78,6 +81,7 @@ impl Pipe {
             }
             write_size += 1;
         }
+        log::debug!("[Pipe::write_inner] write_size = {}", write_size);
         write_size
     }
 }
@@ -94,6 +98,7 @@ impl File for Pipe {
                     return Ok(ret);
                 } else if self.buffer.lock().eof() {
                     // empty buffer and no writer, EOF
+                    log::debug!("[Pipe::read] EOF");
                     return Ok(0);
                 } else {
                     // empty buffer but writer exists, wait
@@ -108,6 +113,10 @@ impl File for Pipe {
         Box::pin(async move {
             if !self.meta.writable {
                 return Err(SyscallErr::EBADF.into());
+            }
+            // block on full buffer by default
+            while self.buffer.lock().full() {
+                yield_task().await;
             }
             Ok(self.write_inner(buf))
         })
@@ -169,5 +178,8 @@ impl PipeRingBuffer {
     fn eof(&self) -> bool {
         self.writer_count == 0
         // self.eof
+    }
+    fn full(&self) -> bool {
+        (self.write_pos + 1) % PIPE_BUFFER_SIZE == self.read_pos
     }
 }

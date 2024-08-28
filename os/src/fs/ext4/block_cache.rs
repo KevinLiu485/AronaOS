@@ -142,35 +142,6 @@ impl BlockCacheManager {
 impl ext4_rs::BlockDevice for BlockCacheManager {
     // read data from offset in byte, return a Vec<u8> with length of ext4_rs::BLOCK_SIZE(4096 B)
     fn read_offset(&self, offset: usize) -> Vec<u8> {
-        // let mut block_id = offset / VIRTIO_BLOCK_SIZE;
-        // let mut buf = vec![0u8; VIRTIO_BLOCK_SIZE];
-        // let mut ret = Vec::<u8>::new();
-        // let aligned = offset % VIRTIO_BLOCK_SIZE == 0;
-        // let times = if aligned {
-        //     ext4_rs::BLOCK_SIZE / VIRTIO_BLOCK_SIZE
-        // } else {
-        //     ext4_rs::BLOCK_SIZE / VIRTIO_BLOCK_SIZE + 1
-        // };
-        // ret.reserve(times * VIRTIO_BLOCK_SIZE);
-        // for _ in 0..times {
-        //     // self.0
-        //     //     .exclusive_access()
-        //     //     .read_block(block_id, &mut buf)
-        //     //     .expect("Error when reading VirtIOBlk");
-        //     let cache = self.get_block_cache(block_id);
-        //     cache.lock().read(0, |buf: &[u8; VIRTIO_BLOCK_SIZE]| {
-        //         ret.extend_from_slice(buf);
-        //     });
-        //     // todo!()
-        //     block_id += 1;
-        //     // ret.extend_from_slice(&buf);
-        // }
-        // if aligned {
-        //     ret
-        // } else {
-        //     ret[(offset % VIRTIO_BLOCK_SIZE)..(offset % VIRTIO_BLOCK_SIZE + ext4_rs::BLOCK_SIZE)]
-        //         .to_vec()
-        // }
         let mut block_id = offset / VIRTIO_BLOCK_SIZE;
         let mut ret = Vec::<u8>::with_capacity(ext4_rs::BLOCK_SIZE);
         let mut read_cnt = 0;
@@ -193,38 +164,16 @@ impl ext4_rs::BlockDevice for BlockCacheManager {
 
     // write all data to offset
     fn write_offset(&self, offset: usize, data: &[u8]) {
-        // todo!()
-        // let len = data.len();
-        // we cannot write half blocks
-        // assert!(offset % VIRTIO_BLOCK_SIZE == 0);
-        // assert!(len % VIRTIO_BLOCK_SIZE == 0);
-        // let mut block_id = offset / VIRTIO_BLOCK_SIZE;
-        // for i in 0..len / VIRTIO_BLOCK_SIZE {
-        //     self.0
-        //         .exclusive_access()
-        //         .write_block(
-        //             block_id,
-        //             &data[i * VIRTIO_BLOCK_SIZE..(i + 1) * VIRTIO_BLOCK_SIZE],
-        //         )
-        //         .expect("Error when writing VirtIOBlk");
-        //     block_id += 1;
-        // }
+        // log::debug!(
+        //     "[BlockCacheManager::write_offset] offset = {}, data.len() = {}",
+        //     offset,
+        //     data.len()
+        // );
         let mut block_id = offset / VIRTIO_BLOCK_SIZE;
-        // let mut ret = Vec::<u8>::with_capacity(ext4_rs::BLOCK_SIZE);
         let mut write_cnt = 0;
         let total_len = data.len();
         while write_cnt < total_len {
             let cache = self.get_block_cache(block_id);
-            // cache.lock().read(0, |buf: &[u8; VIRTIO_BLOCK_SIZE]| {
-            //     let start = if write_cnt == 0 {
-            //         offset % VIRTIO_BLOCK_SIZE
-            //     } else {
-            //         0
-            //     };
-            //     let end = core::cmp::min(VIRTIO_BLOCK_SIZE, ext4_rs::BLOCK_SIZE - write_cnt);
-            //     write_cnt += end - start;
-            //     ret.extend_from_slice(&buf[start..end]);
-            // });
             cache.lock().modify(0, |buf: &mut [u8; VIRTIO_BLOCK_SIZE]| {
                 let start = if write_cnt == 0 {
                     offset % VIRTIO_BLOCK_SIZE
@@ -243,27 +192,5 @@ impl ext4_rs::BlockDevice for BlockCacheManager {
 
 lazy_static! {
     /// The global block cache manager
-    // pub static ref BLOCK_CACHE_MANAGER: SpinNoIrqLock<BlockCacheManager> =
-    //     SpinNoIrqLock::new(BlockCacheManager::new(BLOCK_DEVICE.clone()));
     pub static ref EXT4_BLOCK_CACHE_MANAGER: Arc<BlockCacheManager> = Arc::new(BlockCacheManager::new(BLOCK_DEVICE.clone()));
 }
-// / Get the block cache corresponding to the given block id and block device
-// pub fn get_block_cache(
-//     block_id: usize,
-//     block_device: Arc<dyn BlockDevice>,
-// ) -> Arc<SpinNoIrqLock<BlockCache>> {
-//     BLOCK_CACHE_MANAGER
-//         .lock()
-//         .get_block_cache(block_id, block_device)
-// }
-// / Sync all block cache to block device
-// #[allow(unused)]
-// pub fn block_cache_sync_all() {
-//     // let manager = BLOCK_CACHE_MANAGER.lock();
-//     // for (_, cache) in manager.queue.iter() {
-//     //     cache.lock().sync();
-//     // }
-//     for (_, cache) in BLOCK_CACHE_MANAGER.queue.iter() {
-//         cache.lock().sync();
-//     }
-// }
