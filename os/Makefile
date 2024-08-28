@@ -24,7 +24,8 @@ KERNEL_BIN := $(KERNEL_ELF).bin
 
 # Filesystem image
 FS_DIR := ../fs-img-src
-FS_IMG_ROOT := $(FS_DIR)/splice
+# FS_IMG_ROOT := $(FS_DIR)/splice
+FS_IMG_ROOT := $(FS_DIR)/root-2024-part
 FS_IMG := $(FS_DIR)/fs.img
 
 # Configs
